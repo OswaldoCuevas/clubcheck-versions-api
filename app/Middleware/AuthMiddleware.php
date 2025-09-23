@@ -1,0 +1,98 @@
+<?php
+
+namespace Middleware;
+
+class AuthMiddleware
+{
+    /**
+     * Rutas públicas que no requieren autenticación
+     */
+    private static $publicRoutes = [
+        '/login',
+        '/api/version',
+        '/api/check-update',
+        '/api/download',
+        'version.json',
+        // Legacy compatibility
+        'login.php',
+        'api.php',
+        'check-update.php',
+        'download.php'
+    ];
+
+    /**
+     * Verificar si la ruta actual requiere autenticación
+     */
+    public static function requiresAuth()
+    {
+        $currentScript = basename($_SERVER['SCRIPT_NAME']);
+        $requestUri = $_SERVER['REQUEST_URI'];
+        
+        // Verificar si es una ruta pública
+        foreach (self::$publicRoutes as $route) {
+            if ($currentScript === $route || strpos($requestUri, $route) !== false) {
+                return false;
+            }
+        }
+        
+        // Verificar si es acceso directo a archivos de uploads
+        if (strpos($requestUri, '/uploads/') !== false) {
+            return false;
+        }
+        
+        return true;
+    }
+
+    /**
+     * Aplicar middleware de autenticación
+     */
+    public static function apply()
+    {
+        // Solo aplicar si la ruta requiere autenticación
+        if (!self::requiresAuth()) {
+            return;
+        }
+
+        // Incluir modelo de usuario si no está cargado
+        if (!class_exists('\Models\UserModel')) {
+            require_once __DIR__ . '/../Models/UserModel.php';
+        }
+
+        $userModel = new \Models\UserModel();
+        
+        // Si no está autenticado, redirigir al login
+        if (!$userModel->isAuthenticated()) {
+            // Guardar la URL actual para redirigir después del login
+            $_SESSION['redirect_after_login'] = $_SERVER['REQUEST_URI'];
+            
+            // Redirigir al login usando ruta relativa al proyecto
+            header('Location: /clubcheck/login');
+            exit;
+        }
+    }
+
+    /**
+     * Verificar permisos específicos
+     */
+    public static function requirePermission($permission)
+    {
+        if (!class_exists('\Models\UserModel')) {
+            require_once __DIR__ . '/../Models/UserModel.php';
+        }
+
+        $userModel = new \Models\UserModel();
+        
+        if (!$userModel->isAuthenticated()) {
+            $_SESSION['redirect_after_login'] = $_SERVER['REQUEST_URI'];
+            header('Location: /clubcheck/login');
+            exit;
+        }
+
+        if (!$userModel->hasPermission($permission)) {
+            // Redirigir a una página de error o al dashboard
+            $_SESSION['error_message'] = 'No tienes permisos para acceder a esta funcionalidad';
+            header('Location: /clubcheck/');
+            exit;
+        }
+    }
+}
