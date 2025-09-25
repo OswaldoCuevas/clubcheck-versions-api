@@ -112,6 +112,3 @@ releases/
 
 # Configuraciones locales del servidor
 # ===========================================
-.htaccess.local
-config.local.php
-settings.local.php
