@@ -7,7 +7,7 @@ return [
         'environment' => 'development', // development, production
         'debug' => true,
         'timezone' => 'America/Mexico_City',
-        'url' => 'http://localhost/clubcheck',
+        'url' => 'https://admin-apis.com/clubcheck',
     ],
     
     'paths' => [
