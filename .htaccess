@@ -1,1 +1,49 @@
 
+# ClubCheck - Configuración Apache
+
+RewriteEngine On
+
+# Configurar tipos MIME
+AddType application/json .json
+
+# Permitir acceso directo a archivos estáticos
+RewriteRule ^uploads/(.*)$ uploads/$1 [L]
+RewriteRule ^public/assets/(.*)$ public/assets/$1 [L]
+RewriteRule ^version\.json$ version.json [L]
+
+# Rutas limpias principales
+RewriteRule ^$ public/index.php [L]
+RewriteRule ^home/?$ public/index.php [L]
+
+# Rutas de autenticación
+RewriteRule ^login/?$ public/index.php [L]
+RewriteRule ^logout/?$ public/index.php [L]
+
+# Rutas administrativas
+RewriteRule ^admin/?$ public/index.php [L]
+
+# Rutas de herramientas
+RewriteRule ^password-generator/?$ public/index.php [L]
+
+# Rutas de API limpias
+RewriteRule ^api/version/?$ public/index.php [L]
+RewriteRule ^api/check-update/?$ public/index.php [L]
+RewriteRule ^api/download/?$ public/index.php [L]
+
+# Compatibilidad legacy (URLs antiguas redirigidas a API limpia)
+RewriteRule ^api\.php$ /clubcheck/api/version [R=301,L]
+RewriteRule ^check-update\.php$ /clubcheck/api/check-update [R=301,L]
+RewriteRule ^download\.php$ /clubcheck/api/download [R=301,L]
+
+# Bloquear acceso directo a archivos PHP (excepto public/)
+RewriteCond %{REQUEST_URI} !^/clubcheck/public/
+RewriteCond %{REQUEST_URI} \.php$
+RewriteRule ^.*$ - [F,L]
+
+# Bloquear acceso a directorios sensibles
+RewriteRule ^(app|config|routes|storage|legacy_backup)(/.*)?$ - [F,L]
+
+# Redirigir cualquier otra cosa al router principal
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ public/index.php [QSA,L]
