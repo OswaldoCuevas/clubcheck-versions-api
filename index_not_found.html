@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Acceso Restringido</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+            margin: 0;
+            padding: 2rem 1rem;
+        }
+
+        .content-wrapper {
+            text-align: center;
+            max-width: 700px;
+            width: 100%;
+            animation: fadeInUp 0.6s ease-out;
+            padding: 0 2rem;
+        }
+
+        @keyframes fadeInUp {
+            0% {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .icon {
+            font-size: 7rem;
+            color: #2c3e50;
+            margin-bottom: 1.5rem;
+            display: inline-block;
+            animation: fadeIn 0.8s ease-out 0.2s both;
+            opacity: 0.9;
+        }
+
+        @keyframes fadeIn {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+
+        h1 {
+            font-size: 4rem;
+            color: #1a1a1a;
+            margin-bottom: 1rem;
+            font-weight: 900;
+            letter-spacing: -2px;
+            animation: fadeIn 0.8s ease-out 0.4s both;
+            line-height: 1.1;
+        }
+
+        .message {
+            font-size: 1.8rem;
+            color: #4a4a4a;
+            line-height: 1.5;
+            margin-bottom: 0.8rem;
+            animation: fadeIn 0.8s ease-out 0.6s both;
+            font-weight: 400;
+            letter-spacing: -0.5px;
+        }
+
+        .additional-info {
+            font-size: 1.3rem;
+            color: #888;
+            line-height: 1.6;
+            margin-top: 0;
+            animation: fadeIn 0.8s ease-out 0.8s both;
+            font-weight: 300;
+        }
+
+        .warning-badge {
+            display: inline-block;
+            background: #000000;
+            color: #ffffff;
+            padding: 1.8rem 4rem;
+            border-radius: 100px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            margin-bottom: 3rem;
+            text-transform: uppercase;
+            letter-spacing: 6px;
+            animation: fadeIn 0.8s ease-out 0.1s both;
+            border: 2px solid #000000;
+            transition: all 0.3s ease;
+        }
+
+        .warning-badge:hover {
+            background: #ffffff;
+            color: #000000;
+            transform: translateY(-2px);
+        }
+
+        @media (max-width: 768px) {
+            .content-wrapper {
+                padding: 1rem;
+                margin: 1rem;
+                max-width: 95%;
+            }
+            
+            h1 {
+                font-size: 3rem;
+                letter-spacing: -1px;
+            }
+            
+            .icon {
+                font-size: 6rem;
+            }
+
+            .message {
+                font-size: 1.5rem;
+            }
+
+            .additional-info {
+                font-size: 1.2rem;
+            }
+
+            .warning-badge {
+                padding: 1.4rem 3rem;
+                font-size: 0.8rem;
+                letter-spacing: 4px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .content-wrapper {
+                max-width: 100%;
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 2.5rem;
+                letter-spacing: -1px;
+            }
+
+            .icon {
+                font-size: 5rem;
+            }
+
+            .message {
+                font-size: 1.3rem;
+            }
+
+            .warning-badge {
+                padding: 1.2rem 2rem;
+                font-size: 0.75rem;
+                letter-spacing: 3px;
+            }
+
+            .additional-info {
+                font-size: 1.1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="content-wrapper">
+        <div class="warning-badge">ACCESO RESTRINGIDO</div>
+         
+
+        <h1>Error 403</h1>
+
+        <p class="message">
+            Esta área está protegida.
+        </p>
+
+        <p class="additional-info">
+            Contacte al administrador si necesita acceso.
+        </p>
+    </div>
+
+    <script>
+        // Log del intento de acceso
+        console.log('Intento de acceso registrado:', new Date().toISOString());
+        
+        // Efecto de sacudida cuando se intenta hacer clic derecho
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            const content = document.querySelector('.content-wrapper');
+            content.style.animation = 'shake 0.3s ease-in-out';
+            
+            setTimeout(() => {
+                content.style.animation = '';
+            }, 300);
+        });
+
+        // Agregar keyframe de sacudida dinámicamente
+        const shakeKeyframes = `
+            @keyframes shake {
+                0%, 100% { transform: translateX(0); }
+                25% { transform: translateX(-5px); }
+                75% { transform: translateX(5px); }
+            }
+        `;
+        
+        const style = document.createElement('style');
+        style.textContent = shakeKeyframes;
+        document.head.appendChild(style);
+        
+        // Deshabilitar teclas de desarrollo
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I')) {
+                e.preventDefault();
+                
+                // Efecto visual de advertencia simple
+                const warning = document.createElement('div');
+                warning.innerHTML = '⚠️ Acción no permitida';
+                warning.style.cssText = `
+                    position: fixed;
+                    top: 30px;
+                    right: 30px;
+                    background: #e74c3c;
+                    color: white;
+                    padding: 15px 25px;
+                    border-radius: 25px;
+                    font-weight: bold;
+                    font-size: 1rem;
+                    z-index: 10000;
+                    box-shadow: 0 5px 15px rgba(231, 76, 60, 0.3);
+                `;
+                
+                document.body.appendChild(warning);
+                
+                setTimeout(() => {
+                    warning.remove();
+                }, 2000);
+            }
+        });
+    </script>
+</body>
+</html>
