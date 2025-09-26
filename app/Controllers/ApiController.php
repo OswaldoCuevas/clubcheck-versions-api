@@ -58,8 +58,9 @@ class ApiController extends Controller
             $decodedData['directUrl'] = $decodedData['url'] ?? ''; // URL directa al archivo
             
             // Verificar si el archivo existe físicamente
-            $fileName = "MyApp-{$decodedData['latestVersion']}.exe";
-            $filePath = __DIR__ . '/../../uploads/' . $fileName;
+            require_once __DIR__ . '/../Helpers/FileHelper.php';
+            $fileName = getAppFileName($decodedData['latestVersion']);
+            $filePath = findExistingAppFile($decodedData['latestVersion']) ?: (__DIR__ . '/../../uploads/' . $fileName);
             $decodedData['fileExists'] = file_exists($filePath);
             
             if ($decodedData['fileExists']) {
@@ -139,8 +140,9 @@ class ApiController extends Controller
                 $response['url'] = $versionData['url'] ?? '';
                 
                 // Información adicional del archivo
-                $fileName = "MyApp-{$serverVersion}.exe";
-                $filePath = __DIR__ . '/../../uploads/' . $fileName;
+                require_once __DIR__ . '/../Helpers/FileHelper.php';
+                $fileName = getAppFileName($serverVersion);
+                $filePath = findExistingAppFile($serverVersion) ?: (__DIR__ . '/../../uploads/' . $fileName);
                 if (file_exists($filePath)) {
                     $response['fileSize'] = filesize($filePath);
                     $response['checksum'] = hash_file('sha256', $filePath);
@@ -192,8 +194,9 @@ class ApiController extends Controller
         }
 
         // Construir la ruta del archivo de la última versión
-        $fileName = "MyApp-{$versionData['latestVersion']}.exe";
-        $filePath = __DIR__ . '/../../uploads/' . $fileName;
+        require_once __DIR__ . '/../Helpers/FileHelper.php';
+        $fileName = getAppFileName($versionData['latestVersion']);
+        $filePath = findExistingAppFile($versionData['latestVersion']) ?: (__DIR__ . '/../../uploads/' . $fileName);
 
         // Verificar que el archivo existe
         if (!file_exists($filePath)) {

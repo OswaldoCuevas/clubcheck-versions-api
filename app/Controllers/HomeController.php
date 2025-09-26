@@ -120,8 +120,9 @@ class HomeController extends Controller
             ];
         }
         
-        // Generar nombre del archivo
-        $fileName = "MyApp-{$version}.exe";
+        // Generar nombre del archivo usando helper
+        require_once __DIR__ . '/../Helpers/FileHelper.php';
+        $fileName = getAppFileName($version);
         $filePath = $this->uploadDir . $fileName;
         
         $isReplacement = false;
