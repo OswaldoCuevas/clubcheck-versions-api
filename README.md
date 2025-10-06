@@ -119,6 +119,174 @@ Este endpoint:
 - ✅ Maneja archivos grandes eficientemente
 - ✅ Incluye headers apropiados para descarga
 
+### Registro de clientes y tokens (aplicación de escritorio)
+
+El controlador `CustomersController` expone una API enfocada en registrar clientes, administrar sus tokens y coordinar el flujo de "esperar nuevo token" con la aplicación de escritorio.
+
+> **Importante:** Envía siempre encabezados `Content-Type: application/json` y un `User-Agent` válido para evitar bloqueos de Cloudflare.
+
+#### 1. Consultar un cliente por ID
+```http
+GET /clubcheck/api/customers/CLUB-001
+```
+
+Reemplaza `CLUB-001` por el ID real del cliente. También se admite la variante `GET /clubcheck/api/customers?customerId=CLUB-001` para compatibilidad con clientes anteriores.
+
+Si el cliente no existe se devuelve `404 Not Found`.
+
+**Respuesta:**
+```json
+{
+    "customer": {
+        "customerId": "CLUB-001",
+        "name": "Club House",
+        "email": "admin@clubhouse.mx",
+        "phone": "+52 55 1234 5678",
+        "deviceName": "POS-01",
+        "token": "abc123",
+        "isActive": true,
+        "waitingForToken": false,
+        "waitingSince": null,
+        "tokenUpdatedAt": 1699900000,
+        "lastSeen": 1699900500
+    }
+}
+```
+
+> **Nota:** Por motivos de seguridad no existe un endpoint público que devuelva todos los clientes. Usa el panel administrativo si necesitas una lista completa.
+
+#### 2. Registrar un nuevo cliente (solo si no existe)
+```http
+POST /clubcheck/api/customers/register
+Content-Type: application/json
+
+{
+    "customerId": "CLUB-001",
+    "name": "Club House",
+    "token": "abc123",
+    "email": "admin@clubhouse.mx",
+    "phone": "+52 55 1234 5678",
+    "deviceName": "POS-01"
+}
+```
+
+- Campos obligatorios: `customerId`, `name` y `token`.
+- Los campos `email`, `phone` y `deviceName` son opcionales; si se omiten se almacenan como `null`.
+- Si el `customerId` ya está registrado, la respuesta devolverá `found: true` y **no** modificará los datos existentes.
+- Cuando el registro es nuevo, responde con `201 Created`, `found: false` y los datos almacenados.
+
+**Respuesta cuando ya existe:**
+```json
+{
+    "found": true,
+    "registered": false,
+    "customer": {
+        "customerId": "CLUB-001",
+        "name": "Club House",
+        "email": "admin@clubhouse.mx",
+        "phone": "+52 55 1234 5678",
+        "deviceName": "POS-01",
+        "token": "abc123",
+        "isActive": true,
+        "waitingForToken": false
+    }
+}
+```
+
+#### 3. Crear o actualizar un cliente
+```http
+POST /clubcheck/api/customers/save
+Content-Type: application/json
+
+{
+    "customerId": "CLUB-001",
+    "name": "Club House",
+    "token": "abc123",
+    "deviceName": "POS-01",
+    "isActive": true
+}
+```
+
+El campo `customerId` es obligatorio. Puedes omitir `token` y `name` si solo deseas activar/desactivar un cliente (`isActive`). Los atributos no incluidos permanecen sin cambios.
+
+#### 4. Marcar que un cliente espera un nuevo token
+```http
+POST /clubcheck/api/customers/token/await
+Content-Type: application/json
+
+{
+    "customerId": "CLUB-001",
+    "waiting": true
+}
+```
+
+Cuando `waiting` es `true`, el registro guarda la marca `waitingForToken` junto con `waitingSince`. Usa `waiting: false` para cancelar la solicitud.
+
+**Respuesta:**
+```json
+{
+    "customerId": "CLUB-001",
+    "waitingForToken": true,
+    "waitingSince": 1699900600
+}
+```
+
+#### 5. Consultar el token actual de un cliente
+```http
+GET /clubcheck/api/customers/token?customerId=CLUB-001
+```
+
+**Respuesta:**
+```json
+{
+    "customerId": "CLUB-001",
+    "name": "Club House",
+    "token": "abc123",
+    "deviceName": "POS-01",
+    "isActive": true,
+    "waitingForToken": true,
+    "waitingSince": 1699900600,
+    "tokenUpdatedAt": 1699900000
+}
+```
+
+#### 6. Registrar un nuevo token (cliente de escritorio)
+```http
+POST /clubcheck/api/customers/token/register
+Content-Type: application/json
+
+{
+    "customerId": "CLUB-001",
+    "token": "new-token-from-app"
+}
+```
+
+El backend solo acepta la actualización si `waitingForToken` está activo. Si el administrador no marcó al cliente como "en espera", se devolverá `409 Conflict`:
+
+```json
+{
+    "error": "Customer is not waiting for a new token",
+    "waitingForToken": false
+}
+```
+
+Tras registrar el token exitosamente, el servicio limpia la marca `waitingForToken` y actualiza `tokenUpdatedAt`.
+
+#### Seguimiento de sesiones (opcional)
+
+Los endpoints bajo `/api/customers/sessions/*` siguen disponibles para que la app de escritorio envíe heartbeats (`start`, `heartbeat`, `end`, `active`). Aunque ya no se muestran en el panel principal, continúan actualizando los campos `lastSeen` y `metadata` del registro de clientes.
+
+### Panel administrativo y monitoreo
+
+- Después de iniciar sesión accedes al panel `/admin`, con accesos directos a gestión de versiones, herramientas y clientes.
+- La tarjeta **Clientes y tokens** abre `/admin/customers`, que muestra una tabla con nombre, ID, token actual, estado y marca de "esperando nuevo token".
+- Desde la tabla puedes:
+  - Crear o editar clientes (nombre, token opcional, estado activo).
+  - Marcar o cancelar la espera de un token con un clic, lo que habilita a la app para registrarlo.
+  - Registrar manualmente un token (útil para pruebas o cuando el cliente no puede enviarlo automáticamente).
+  - Copiar el token vigente al portapapeles y activar/desactivar clientes rápidamente.
+- El listado se puede refrescar bajo demanda con el botón **Actualizar**, y cada fila muestra metadatos útiles como la última vez que se actualizó el token o se recibió actividad desde la app de escritorio.
+
 ## 🔒 Seguridad
 
 - **Validación de archivos**: Solo permite archivos .exe

@@ -43,11 +43,41 @@ try {
         '/api/version',
         '/api/check-update', 
         '/api/download',
-        '/uploads'  // Permitir acceso a archivos de uploads
+        '/uploads',  // Permitir acceso a archivos de uploads
+        '/api/customers/sessions/start',
+        '/api/customers/sessions/heartbeat',
+        '/api/customers/sessions/end',
+        '/api/customers/sessions/active',
+        '/api/customers',
+        '/api/customers/save',
+        '/api/customers/token',
+        '/api/customers/token/register',
+        '/api/customers/token/await'
     ];
 
+    $isPublicRoute = in_array($requestUri, $publicRoutes);
+
+    if (!$isPublicRoute) {
+        $apiPrefixes = [
+            '/api/customers/sessions',
+            '/api/customers'
+        ];
+
+        foreach ($apiPrefixes as $prefix) {
+            if (strpos($requestUri, $prefix) === 0) {
+                $isPublicRoute = true;
+                break;
+            }
+        }
+    }
+
+    // Permitir solicitudes OPTIONS para CORS sin autenticación
+    if (!$isPublicRoute && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+        $isPublicRoute = true;
+    }
+
     // Aplicar middleware de autenticación solo si no es ruta pública
-    if (!in_array($requestUri, $publicRoutes)) {
+    if (!$isPublicRoute) {
         require_once __DIR__ . '/../app/Middleware/AuthMiddleware.php';
         Middleware\AuthMiddleware::apply();
     }

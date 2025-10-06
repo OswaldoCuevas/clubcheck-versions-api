@@ -1,0 +1,31 @@
+{
+    "customers": {
+        "CLUB-001": {
+            "customerId": "CLUB-001",
+            "name": "Club House",
+            "email": null,
+            "phone": "6131210267",
+            "token": "abc123",
+            "isActive": true,
+            "waitingForToken": false,
+            "tokenUpdatedAt": 1759723082,
+            "waitingSince": null,
+            "createdAt": 1759723082,
+            "updatedAt": 1759723082
+        },
+        "cus_TAdluTTY1IaxkF": {
+            "customerId": "cus_TAdluTTY1IaxkF",
+            "name": "Cliente ClubCheck",
+            "email": null,
+            "phone": null,
+            "deviceName": "OSWALDOCRACK",
+            "token": "WoAbJYps0iTd8+xicMoQfnO3EcoCJwaAjW48eT9Hg8A=",
+            "isActive": true,
+            "waitingForToken": false,
+            "tokenUpdatedAt": 1759730487,
+            "waitingSince": null,
+            "createdAt": 1759728333,
+            "updatedAt": 1759730487
+        }
+    }
+}

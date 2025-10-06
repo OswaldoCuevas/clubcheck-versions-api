@@ -275,8 +275,23 @@ class UserModel extends Model
             return [];
         }
 
-        $data = $this->loadJsonFile($this->loginAttemptsFile);
-        return $data ?? [];
+        try {
+            $data = $this->loadJsonFile($this->loginAttemptsFile);
+            
+            // Si el archivo está corrupto o vacío, recrear con estructura vacía
+            if ($data === null) {
+                error_log("Archivo login_attempts.json corrupto o vacío, recreando...");
+                $this->saveLoginAttempts([]);
+                return [];
+            }
+            
+            return is_array($data) ? $data : [];
+        } catch (\Exception $e) {
+            // Si hay cualquier error, recrear el archivo
+            error_log("Error al leer login_attempts.json: " . $e->getMessage() . " - Recreando archivo...");
+            $this->saveLoginAttempts([]);
+            return [];
+        }
     }
 
     /**
@@ -284,7 +299,38 @@ class UserModel extends Model
      */
     private function saveLoginAttempts($attempts)
     {
+        // Asegurar que el directorio existe
+        $dir = dirname($this->loginAttemptsFile);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        
         $this->saveJsonFile($this->loginAttemptsFile, $attempts);
+    }
+
+    /**
+     * Verificar y reparar el archivo de intentos de login si está corrupto
+     */
+    public function repairLoginAttemptsFile()
+    {
+        if (!file_exists($this->loginAttemptsFile)) {
+            $this->saveLoginAttempts([]);
+            return true;
+        }
+
+        $content = file_get_contents($this->loginAttemptsFile);
+        if (empty(trim($content)) || json_decode($content, true) === null) {
+            // Hacer backup del archivo corrupto antes de reparar
+            $backupFile = $this->loginAttemptsFile . '.backup.' . time();
+            copy($this->loginAttemptsFile, $backupFile);
+            
+            // Recrear el archivo
+            $this->saveLoginAttempts([]);
+            error_log("Archivo login_attempts.json reparado. Backup guardado en: $backupFile");
+            return true;
+        }
+
+        return false; // No necesitaba reparación
     }
 
     /**

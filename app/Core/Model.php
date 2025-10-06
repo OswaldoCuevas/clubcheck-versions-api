@@ -90,10 +90,20 @@ class Model
         }
         
         $content = file_get_contents($filepath);
+        
+        // Verificar que el contenido no esté vacío
+        if (empty(trim($content))) {
+            return null; // Retornar null para contenido vacío
+        }
+        
         $data = json_decode($content, true);
         
         if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new \Exception("Error al decodificar JSON: " . json_last_error_msg());
+            // Log del error para debug
+            error_log("JSON Error en archivo $filepath: " . json_last_error_msg() . " - Contenido: " . substr($content, 0, 200));
+            
+            // En lugar de lanzar excepción, retornar null y permitir manejo graceful
+            return null;
         }
         
         return $data;

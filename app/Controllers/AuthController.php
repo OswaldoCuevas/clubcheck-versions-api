@@ -12,7 +12,7 @@ class AuthController extends Controller
     {
         // Si ya está autenticado, redirigir
         if ($this->userModel->isAuthenticated()) {
-            $this->redirect('/');
+            $this->redirect('/admin');
         }
 
         $error = '';
@@ -33,7 +33,7 @@ class AuthController extends Controller
                 } else {
                     if ($this->userModel->authenticate($username, $password, $rememberMe)) {
                         // Redirigir después del login exitoso
-                        $redirect = $_SESSION['redirect_after_login'] ?? '/';
+                        $redirect = $_SESSION['redirect_after_login'] ?? '/admin';
                         unset($_SESSION['redirect_after_login']);
                         $this->redirect($redirect);
                     } else {

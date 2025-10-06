@@ -6,6 +6,7 @@ class Router
 {
     private $routes = [];
     private $currentRoute = null;
+    private $routeParams = [];
 
     public function get($uri, $controller, $method = 'index')
     {
@@ -24,11 +25,28 @@ class Router
 
     private function addRoute($method, $uri, $controller, $action)
     {
+        $normalizedUri = rtrim($uri, '/');
+        if ($normalizedUri === '') {
+            $normalizedUri = '/';
+        }
+
+        $paramNames = [];
+        $pattern = preg_replace_callback('/:([a-zA-Z_][a-zA-Z0-9_]*)/', function ($matches) use (&$paramNames) {
+            $paramNames[] = $matches[1];
+            return '(?P<' . $matches[1] . '>[^/]+)';
+        }, $normalizedUri);
+
+        $hasParams = !empty($paramNames);
+        $regex = $hasParams ? '#^' . $pattern . '$#' : null;
+
         $this->routes[] = [
             'method' => $method,
-            'uri' => $uri,
+            'uri' => $normalizedUri,
             'controller' => $controller,
-            'action' => $action
+            'action' => $action,
+            'hasParams' => $hasParams,
+            'regex' => $regex,
+            'paramNames' => $paramNames,
         ];
     }
 
@@ -39,6 +57,8 @@ class Router
 
         // Debug
         error_log("Router Debug - Method: $requestMethod, URI: $requestUri");
+
+        $this->routeParams = [];
 
         foreach ($this->routes as $route) {
             if ($this->matchRoute($route, $requestMethod, $requestUri)) {
@@ -86,12 +106,21 @@ class Router
         }
 
         // Verificar URI exacta o con parámetros
-        $routeUri = rtrim($route['uri'], '/');
-        if (empty($routeUri)) {
-            $routeUri = '/';
+        $routeUri = $route['uri'];
+
+        if (!$route['hasParams']) {
+            return $requestUri === $routeUri;
         }
 
-        return $requestUri === $routeUri;
+        if ($route['regex'] && preg_match($route['regex'], $requestUri, $matches)) {
+            $this->routeParams = [];
+            foreach ($route['paramNames'] as $name) {
+                $this->routeParams[] = $matches[$name] ?? null;
+            }
+            return true;
+        }
+
+        return false;
     }
 
     private function callController($route)
@@ -109,7 +138,7 @@ class Router
             throw new \Exception("Method {$method} not found in {$controllerClass}");
         }
 
-        return $controller->$method();
+        return call_user_func_array([$controller, $method], $this->routeParams);
     }
 
     public function getCurrentRoute()

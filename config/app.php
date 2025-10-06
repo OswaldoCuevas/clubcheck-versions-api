@@ -7,7 +7,7 @@ return [
         'environment' => 'development', // development, production
         'debug' => true,
         'timezone' => 'America/Mexico_City',
-        'url' => 'https://admin-apis.com/clubcheck',
+        'url' => 'http://localhost/clubcheck',
     ],
     
     'paths' => [
@@ -22,6 +22,12 @@ return [
         'max_upload_size' => 500 * 1024 * 1024, // 500MB
         'allowed_extensions' => ['exe'],
         'app_name_pattern' => 'ClubCheck.exe',
+    ],
+
+    'customerSessions' => [
+        'heartbeat_interval' => 60, // segundos entre heartbeats esperados
+        'grace_period' => 180, // tiempo máximo sin heartbeat antes de marcar desconectado
+        'max_metadata_size' => 2048, // bytes para metadata opcional
     ],
     
     'security' => [

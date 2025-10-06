@@ -12,6 +12,16 @@ class AuthMiddleware
         '/api/version',
         '/api/check-update',
         '/api/download',
+        '/api/customers/sessions/start',
+        '/api/customers/sessions/heartbeat',
+        '/api/customers/sessions/end',
+    '/api/customers/sessions/active',
+    '/api/customers',
+    '/api/customers/save',
+    '/api/customers/register',
+    '/api/customers/token',
+    '/api/customers/token/register',
+    '/api/customers/token/await',
         'version.json',
         // Legacy compatibility
         'login.php',
@@ -29,10 +39,25 @@ class AuthMiddleware
         $requestUri = $_SERVER['REQUEST_URI'];
         
         // Verificar si es una ruta pública
+        $publicPrefixes = [
+            '/api/customers/sessions',
+            '/api/customers'
+        ];
+
         foreach (self::$publicRoutes as $route) {
             if ($currentScript === $route || strpos($requestUri, $route) !== false) {
                 return false;
             }
+        }
+
+        foreach ($publicPrefixes as $prefix) {
+            if (strpos($requestUri, $prefix) === 0) {
+                return false;
+            }
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            return false;
         }
         
         // Verificar si es acceso directo a archivos de uploads

@@ -1,0 +1,174 @@
+{
+    "sessions": {
+        "4f1c51cab5ca8ed1891a67762afb4e0c": {
+            "sessionId": "4f1c51cab5ca8ed1891a67762afb4e0c",
+            "customerId": "CUST-00123",
+            "deviceId": "POS-FrontDesk-07",
+            "appVersion": "2.4.1",
+            "ipAddress": "127.0.0.1",
+            "metadata": {
+                "os": "Windows 11 Pro",
+                "operator": "L. Martínez",
+                "workstationLocation": "Lobby kiosk"
+            },
+            "startedAt": 1759702280,
+            "lastSeen": 1759702280,
+            "status": "inactive",
+            "endedAt": 1759703077,
+            "endedReason": "timeout"
+        },
+        "a121bbbb2dc6958ef1c20d605fbfd023": {
+            "sessionId": "a121bbbb2dc6958ef1c20d605fbfd023",
+            "customerId": "CUST-00123",
+            "deviceId": "POS-FrontDesk-07",
+            "appVersion": "2.4.1",
+            "ipAddress": "127.0.0.1",
+            "metadata": {
+                "os": "Windows 11 Pro",
+                "operator": "L. Martínez",
+                "workstationLocation": "Lobby kiosk"
+            },
+            "startedAt": 1759703124,
+            "lastSeen": 1759703124,
+            "status": "inactive",
+            "endedAt": 1759703312,
+            "endedReason": "timeout"
+        },
+        "8fa500bdd6deef9c0b4f93f4ca02eaac": {
+            "sessionId": "8fa500bdd6deef9c0b4f93f4ca02eaac",
+            "customerId": "CUST-00123",
+            "deviceId": "POS-FrontDesk-07",
+            "appVersion": "2.4.1",
+            "ipAddress": "127.0.0.1",
+            "metadata": {
+                "os": "Windows 11 Pro",
+                "operator": "L. Martínez",
+                "workstationLocation": "Lobby kiosk"
+            },
+            "startedAt": 1759703174,
+            "lastSeen": 1759703174,
+            "status": "inactive",
+            "endedAt": 1759703372,
+            "endedReason": "timeout"
+        },
+        "db36154c9ece9771aa325e06d2e9a392": {
+            "sessionId": "db36154c9ece9771aa325e06d2e9a392",
+            "customerId": "CUST-00123",
+            "deviceId": "POS-FrontDesk-07",
+            "appVersion": "2.4.1",
+            "ipAddress": "127.0.0.1",
+            "metadata": {
+                "os": "Windows 11 Pro",
+                "operator": "L. Martínez",
+                "workstationLocation": "Lobby kiosk"
+            },
+            "startedAt": 1759703508,
+            "lastSeen": 1759703508,
+            "status": "inactive",
+            "endedAt": 1759703696,
+            "endedReason": "timeout"
+        },
+        "822dc11e3eb722ca459a07c50a766360": {
+            "sessionId": "822dc11e3eb722ca459a07c50a766360",
+            "customerId": "CUST-00123",
+            "deviceId": "POS-FrontDesk-07",
+            "appVersion": "2.4.1",
+            "ipAddress": "127.0.0.1",
+            "metadata": {
+                "os": "Windows 11 Pro",
+                "operator": "L. Martínez",
+                "workstationLocation": "Lobby kiosk"
+            },
+            "startedAt": 1759703909,
+            "lastSeen": 1759703909,
+            "status": "inactive",
+            "endedAt": 1759704094,
+            "endedReason": "timeout"
+        },
+        "2f6b654b396148a0fd62924b3557c3a8": {
+            "sessionId": "2f6b654b396148a0fd62924b3557c3a8",
+            "customerId": "CUST-00123",
+            "deviceId": "POS-FrontDesk-07",
+            "appVersion": "2.4.1",
+            "ipAddress": "127.0.0.1",
+            "metadata": {
+                "os": "Windows 11 Pro",
+                "operator": "L. Martínez",
+                "workstationLocation": "Lobby kiosk"
+            },
+            "startedAt": 1759703917,
+            "lastSeen": 1759704132,
+            "status": "inactive",
+            "endedAt": 1759704320,
+            "endedReason": "timeout"
+        },
+        "731cd92530739b58e24228545f3f3ffa": {
+            "sessionId": "731cd92530739b58e24228545f3f3ffa",
+            "customerId": "CUST-00123",
+            "deviceId": "POS-FrontDesk-07",
+            "appVersion": "2.4.1",
+            "ipAddress": "127.0.0.1",
+            "metadata": {
+                "os": "Windows 11 Pro",
+                "operator": "L. Martínez",
+                "workstationLocation": "Lobby kiosk"
+            },
+            "startedAt": 1759704184,
+            "lastSeen": 1759704184,
+            "status": "inactive",
+            "endedAt": 1759704365,
+            "endedReason": "timeout"
+        },
+        "b0ab4d502ed6ebde91a1aced818cb2b0": {
+            "sessionId": "b0ab4d502ed6ebde91a1aced818cb2b0",
+            "customerId": "CUST-00123",
+            "deviceId": "POS-FrontDesk-07",
+            "appVersion": "2.4.1",
+            "ipAddress": "127.0.0.1",
+            "metadata": {
+                "os": "Windows 11 Pro",
+                "operator": "L. Martínez",
+                "workstationLocation": "Lobby kiosk"
+            },
+            "startedAt": 1759704186,
+            "lastSeen": 1759704186,
+            "status": "inactive",
+            "endedAt": 1759704369,
+            "endedReason": "timeout"
+        },
+        "db7328768324f51e75bc0de9b5a809b9": {
+            "sessionId": "db7328768324f51e75bc0de9b5a809b9",
+            "customerId": "CUST-00123",
+            "deviceId": "POS-FrontDesk-07",
+            "appVersion": "2.4.1",
+            "ipAddress": "127.0.0.1",
+            "metadata": {
+                "os": "Windows 11 Pro",
+                "operator": "L. Martínez",
+                "workstationLocation": "Lobby kiosk"
+            },
+            "startedAt": 1759704516,
+            "lastSeen": 1759704516,
+            "status": "inactive",
+            "endedAt": 1759704697,
+            "endedReason": "timeout"
+        },
+        "ce0019383a0a721aa38ae62badba5c63": {
+            "sessionId": "ce0019383a0a721aa38ae62badba5c63",
+            "customerId": "CUST-00123",
+            "deviceId": "POS-FrontDesk-07",
+            "appVersion": "2.4.1",
+            "ipAddress": "127.0.0.1",
+            "metadata": {
+                "os": "Windows 11 Pro",
+                "operator": "L. Martínez",
+                "workstationLocation": "Lobby kiosk"
+            },
+            "startedAt": 1759704710,
+            "lastSeen": 1759704710,
+            "status": "inactive",
+            "endedAt": 1759704891,
+            "endedReason": "timeout"
+        }
+    }
+}
