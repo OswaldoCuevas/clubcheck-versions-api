@@ -13,6 +13,9 @@ ob_start();
                     <p class="text-muted mb-0">Gestiona los tokens y el estado de cada cliente de escritorio.</p>
                 </div>
                 <div class="d-flex gap-2">
+                     <a href="<?= app_url('/admin') ?>" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Volver al panel
+                    </a>
                     <button type="button" class="btn btn-outline-secondary" id="refreshCustomers">
                         <i class="fas fa-rotate"></i>
                         Actualizar

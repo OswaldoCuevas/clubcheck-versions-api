@@ -2,6 +2,10 @@
 
 namespace Middleware;
 
+use Core\UrlHelper;
+
+require_once __DIR__ . '/../Core/UrlHelper.php';
+
 class AuthMiddleware
 {
     /**
@@ -87,11 +91,11 @@ class AuthMiddleware
         
         // Si no está autenticado, redirigir al login
         if (!$userModel->isAuthenticated()) {
-            // Guardar la URL actual para redirigir después del login
-            $_SESSION['redirect_after_login'] = $_SERVER['REQUEST_URI'];
-            
-            // Redirigir al login usando ruta relativa al proyecto
-            header('Location: /clubcheck/login');
+            // Guardar la URL actual (sin base path) para redirigir después del login
+            $_SESSION['redirect_after_login'] = UrlHelper::getCurrentPath();
+
+            // Redirigir al login normalizado
+            header('Location: ' . UrlHelper::url('/login'));
             exit;
         }
     }
@@ -108,15 +112,15 @@ class AuthMiddleware
         $userModel = new \Models\UserModel();
         
         if (!$userModel->isAuthenticated()) {
-            $_SESSION['redirect_after_login'] = $_SERVER['REQUEST_URI'];
-            header('Location: /clubcheck/login');
+            $_SESSION['redirect_after_login'] = UrlHelper::getCurrentPath();
+            header('Location: ' . UrlHelper::url('/login'));
             exit;
         }
 
         if (!$userModel->hasPermission($permission)) {
             // Redirigir a una página de error o al dashboard
             $_SESSION['error_message'] = 'No tienes permisos para acceder a esta funcionalidad';
-            header('Location: /clubcheck/');
+            header('Location: ' . UrlHelper::url('/'));
             exit;
         }
     }
