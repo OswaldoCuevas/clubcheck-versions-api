@@ -8,43 +8,16 @@ use Core\Model;
 
 class CustomerSessionModel extends Model
 {
-    private string $sessionFile;
     private int $defaultHeartbeatGrace = 180; // segundos
 
     protected function initialize()
     {
-        $this->sessionFile = __DIR__ . '/../../storage/customer_sessions.json';
-        $directory = dirname($this->sessionFile);
-
-        if (!is_dir($directory)) {
-            mkdir($directory, 0755, true);
-        }
-
-        if (!file_exists($this->sessionFile)) {
-            $this->saveJsonFile($this->sessionFile, [
-                'sessions' => []
-            ]);
-        }
+        // No additional setup required when using database storage.
     }
 
-    private function loadSessions(): array
+    private function now(): string
     {
-        $data = $this->loadJsonFile($this->sessionFile);
-
-        if (!is_array($data)) {
-            $data = ['sessions' => []];
-        }
-
-        if (!isset($data['sessions']) || !is_array($data['sessions'])) {
-            $data['sessions'] = [];
-        }
-
-        return $data;
-    }
-
-    private function saveSessions(array $data): void
-    {
-        $this->saveJsonFile($this->sessionFile, $data);
+        return date('Y-m-d H:i:s');
     }
 
     private function generateSessionId(): string
@@ -52,169 +25,255 @@ class CustomerSessionModel extends Model
         return bin2hex(random_bytes(16));
     }
 
-    public function startSession(array $payload): array
+    private function toTimestamp(?string $value): ?int
     {
-        $data = $this->loadSessions();
-        $sessionId = $this->generateSessionId();
-        $now = time();
+        if ($value === null) {
+            return null;
+        }
 
+        $time = strtotime($value);
+
+        return $time === false ? null : $time;
+    }
+
+    private function decodeMetadata(?string $json): array
+    {
+        if ($json === null || $json === '') {
+            return [];
+        }
+
+        $decoded = json_decode($json, true);
+
+        return json_last_error() === JSON_ERROR_NONE ? (array) $decoded : [];
+    }
+
+    private function encodeMetadata(?array $metadata): ?string
+    {
+        if ($metadata === null) {
+            return null;
+        }
+
+        $json = json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        return json_last_error() === JSON_ERROR_NONE ? $json : null;
+    }
+
+    private function hydrateSession(array $row, ?int $graceSeconds = null): array
+    {
         $session = [
-            'sessionId' => $sessionId,
-            'customerId' => $payload['customerId'] ?? null,
-            'deviceId' => $payload['deviceId'] ?? null,
-            'appVersion' => $payload['appVersion'] ?? null,
-            'ipAddress' => $payload['ipAddress'] ?? ($_SERVER['REMOTE_ADDR'] ?? null),
-            'metadata' => $payload['metadata'] ?? [],
-            'startedAt' => $now,
-            'lastSeen' => $now,
-            'status' => 'active'
+            'sessionId' => $row['Id'],
+            'customerId' => $row['CustomerId'],
+            'deviceId' => $row['DeviceId'],
+            'appVersion' => $row['AppVersion'],
+            'ipAddress' => $row['IpAddress'],
+            'metadata' => $this->decodeMetadata($row['Metadata'] ?? null),
+            'status' => $row['Status'],
+            'startedAt' => $this->toTimestamp($row['StartedAt'] ?? null),
+            'lastSeen' => $this->toTimestamp($row['LastSeen'] ?? null),
+            'endedAt' => $this->toTimestamp($row['EndedAt'] ?? null),
+            'endedReason' => $row['EndedReason'] ?? null,
         ];
 
-        $data['sessions'][$sessionId] = $session;
-        $this->saveSessions($data);
+        if ($graceSeconds !== null && $session['lastSeen'] !== null) {
+            $session['isExpired'] = (time() - $session['lastSeen']) > $graceSeconds;
+        }
 
         return $session;
+    }
+
+    public function startSession(array $payload): array
+    {
+        $sessionId = $this->generateSessionId();
+        $now = $this->now();
+
+        $metadata = isset($payload['metadata']) && is_array($payload['metadata']) ? $payload['metadata'] : null;
+
+        $this->db->insert('CustomerSessions', [
+            'Id' => $sessionId,
+            'CustomerId' => $payload['customerId'],
+            'DeviceId' => $payload['deviceId'] ?? null,
+            'AppVersion' => $payload['appVersion'] ?? null,
+            'IpAddress' => $payload['ipAddress'] ?? ($_SERVER['REMOTE_ADDR'] ?? null),
+            'Metadata' => $this->encodeMetadata($metadata),
+            'Status' => 'active',
+            'StartedAt' => $now,
+            'LastSeen' => $now,
+            'CreatedAt' => $now,
+            'UpdatedAt' => $now,
+        ]);
+
+        if (!empty($payload['customerId'])) {
+            $this->db->update(
+                'Customers',
+                ['LastSeen' => $now, 'UpdatedAt' => $now],
+                'Id = ?',
+                [$payload['customerId']]
+            );
+        }
+
+        $row = $this->db->fetchOne('SELECT * FROM CustomerSessions WHERE Id = ?', [$sessionId]);
+
+        if ($row === null) {
+            $row = [
+                'Id' => $sessionId,
+                'CustomerId' => $payload['customerId'],
+                'DeviceId' => $payload['deviceId'] ?? null,
+                'AppVersion' => $payload['appVersion'] ?? null,
+                'IpAddress' => $payload['ipAddress'] ?? ($_SERVER['REMOTE_ADDR'] ?? null),
+                'Metadata' => $this->encodeMetadata($metadata),
+                'Status' => 'active',
+                'StartedAt' => $now,
+                'LastSeen' => $now,
+                'EndedAt' => null,
+                'EndedReason' => null,
+            ];
+        }
+
+        return $this->hydrateSession($row, $this->defaultHeartbeatGrace);
     }
 
     public function findActiveSession(string $customerId, ?string $deviceId = null, int $graceSeconds = null): ?array
     {
-        $data = $this->loadSessions();
-        $now = time();
         $grace = $graceSeconds ?? $this->defaultHeartbeatGrace;
 
-        foreach ($data['sessions'] as $session) {
-            $sessionCustomer = $session['customerId'] ?? null;
-            $sessionDevice = $session['deviceId'] ?? null;
-            $status = $session['status'] ?? 'inactive';
-            $lastSeen = $session['lastSeen'] ?? 0;
+        $conditions = ['CustomerId = ?', 'Status = ?'];
+        $params = [$customerId, 'active'];
 
-            if ($sessionCustomer !== $customerId) {
-                continue;
-            }
-
-            if ($deviceId !== null && $sessionDevice !== $deviceId) {
-                continue;
-            }
-
-            if ($status !== 'active') {
-                continue;
-            }
-
-            if (($now - $lastSeen) > $grace) {
-                continue;
-            }
-
-            return $session;
+        if ($deviceId !== null) {
+            $conditions[] = 'DeviceId = ?';
+            $params[] = $deviceId;
         }
 
-        return null;
+        $conditions[] = 'LastSeen >= DATE_SUB(NOW(), INTERVAL ? SECOND)';
+        $params[] = $grace;
+
+        $sql = sprintf(
+            'SELECT * FROM CustomerSessions WHERE %s ORDER BY LastSeen DESC LIMIT 1',
+            implode(' AND ', $conditions)
+        );
+
+        $row = $this->db->fetchOne($sql, $params);
+
+        return $row ? $this->hydrateSession($row, $grace) : null;
     }
 
     public function heartbeat(string $sessionId, array $updates = []): ?array
     {
-        $data = $this->loadSessions();
+        $row = $this->db->fetchOne('SELECT * FROM CustomerSessions WHERE Id = ?', [$sessionId]);
 
-        if (!isset($data['sessions'][$sessionId])) {
+        if ($row === null) {
             return null;
         }
 
-        $session = $data['sessions'][$sessionId];
-        $session['lastSeen'] = time();
-        $session['status'] = 'active';
+        $update = [
+            'LastSeen' => $this->now(),
+            'Status' => 'active',
+            'UpdatedAt' => $this->now(),
+        ];
 
         if (isset($updates['metadata']) && is_array($updates['metadata'])) {
-            $session['metadata'] = array_merge($session['metadata'] ?? [], $updates['metadata']);
+            $currentMetadata = $this->decodeMetadata($row['Metadata'] ?? null);
+            $update['Metadata'] = $this->encodeMetadata(array_merge($currentMetadata, $updates['metadata']));
         }
 
         if (isset($updates['appVersion'])) {
-            $session['appVersion'] = $updates['appVersion'];
+            $update['AppVersion'] = $updates['appVersion'];
         }
 
         if (isset($updates['ipAddress'])) {
-            $session['ipAddress'] = $updates['ipAddress'];
+            $update['IpAddress'] = $updates['ipAddress'];
         }
 
-        $data['sessions'][$sessionId] = $session;
-        $this->saveSessions($data);
+        $this->db->update('CustomerSessions', $update, 'Id = ?', [$sessionId]);
 
-        return $session;
+        if (!empty($row['CustomerId'])) {
+            $this->db->update(
+                'Customers',
+                ['LastSeen' => $update['LastSeen'], 'UpdatedAt' => $update['UpdatedAt']],
+                'Id = ?',
+                [$row['CustomerId']]
+            );
+        }
+
+        $updated = $this->db->fetchOne('SELECT * FROM CustomerSessions WHERE Id = ?', [$sessionId]);
+
+        return $updated ? $this->hydrateSession($updated, $this->defaultHeartbeatGrace) : null;
     }
 
     public function endSession(string $sessionId, string $reason = 'disconnected'): bool
     {
-        $data = $this->loadSessions();
+        $row = $this->db->fetchOne('SELECT * FROM CustomerSessions WHERE Id = ?', [$sessionId]);
 
-        if (!isset($data['sessions'][$sessionId])) {
+        if ($row === null) {
             return false;
         }
 
-        $session = $data['sessions'][$sessionId];
-        $session['status'] = 'inactive';
-        $session['endedAt'] = time();
-        $session['endedReason'] = $reason;
-
-        $data['sessions'][$sessionId] = $session;
-        $this->saveSessions($data);
+        $this->db->update(
+            'CustomerSessions',
+            [
+                'Status' => 'inactive',
+                'EndedAt' => $this->now(),
+                'EndedReason' => $reason,
+                'UpdatedAt' => $this->now(),
+            ],
+            'Id = ?',
+            [$sessionId]
+        );
 
         return true;
     }
 
     public function purgeExpired(int $graceSeconds = null): int
     {
-        $data = $this->loadSessions();
         $grace = $graceSeconds ?? $this->defaultHeartbeatGrace;
-        $now = time();
-        $changes = 0;
 
-        foreach ($data['sessions'] as $sessionId => $session) {
-            $lastSeen = $session['lastSeen'] ?? 0;
-            $status = $session['status'] ?? 'active';
+        $sql = 'UPDATE CustomerSessions
+                SET Status = "inactive",
+                    EndedAt = NOW(),
+                    EndedReason = "timeout",
+                    UpdatedAt = NOW()
+                WHERE Status = "active" AND LastSeen < DATE_SUB(NOW(), INTERVAL ? SECOND)';
 
-            if ($status === 'active' && ($now - $lastSeen) > $grace) {
-                $data['sessions'][$sessionId]['status'] = 'inactive';
-                $data['sessions'][$sessionId]['endedAt'] = $now;
-                $data['sessions'][$sessionId]['endedReason'] = 'timeout';
-                $changes++;
-            }
-        }
+        $this->db->execute_query($sql, [$grace]);
 
-        if ($changes > 0) {
-            $this->saveSessions($data);
-        }
-
-        return $changes;
+        return $this->db->affected_rows;
     }
 
     public function getSession(string $sessionId): ?array
     {
-        $data = $this->loadSessions();
-        return $data['sessions'][$sessionId] ?? null;
+        $row = $this->db->fetchOne('SELECT * FROM CustomerSessions WHERE Id = ?', [$sessionId]);
+
+        return $row ? $this->hydrateSession($row, $this->defaultHeartbeatGrace) : null;
     }
 
     public function getSessions(array $filters = [], int $graceSeconds = null): array
     {
-        $data = $this->loadSessions();
         $grace = $graceSeconds ?? $this->defaultHeartbeatGrace;
-        $now = time();
 
-        $sessions = array_map(function ($session) use ($now, $grace) {
-            $lastSeen = $session['lastSeen'] ?? 0;
-            $session['isExpired'] = ($now - $lastSeen) > $grace;
-            return $session;
-        }, $data['sessions']);
+        $conditions = [];
+        $params = [];
 
-        if (!empty($filters)) {
-            $sessions = array_filter($sessions, function ($session) use ($filters) {
-                foreach ($filters as $key => $value) {
-                    if (!isset($session[$key]) || $session[$key] != $value) {
-                        return false;
-                    }
-                }
-                return true;
-            });
+        foreach ($filters as $column => $value) {
+            $conditions[] = sprintf('%s = ?', $this->mapFilterColumn($column));
+            $params[] = $value;
         }
 
-        // Reindex array
-        return array_values($sessions);
+        $whereClause = empty($conditions) ? '' : 'WHERE ' . implode(' AND ', $conditions);
+
+        $sql = sprintf('SELECT * FROM CustomerSessions %s ORDER BY LastSeen DESC', $whereClause);
+
+        $rows = $this->db->fetchAll($sql, $params);
+
+        return array_map(fn ($row) => $this->hydrateSession($row, $grace), $rows);
+    }
+
+    private function mapFilterColumn(string $key): string
+    {
+        return match ($key) {
+            'customerId' => 'CustomerId',
+            'deviceId' => 'DeviceId',
+            'status' => 'Status',
+            default => $key,
+        };
     }
 }

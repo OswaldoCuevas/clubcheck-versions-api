@@ -6,12 +6,20 @@ class Model
 {
     protected $data = [];
     protected $errors = [];
+    protected static $connection;
+    protected $db;
     
     /**
      * Constructor
      */
     public function __construct()
     {
+        if (!isset(self::$connection)) {
+            require_once __DIR__ . '/../../utils/database.php';
+            self::$connection = new \Database();
+        }
+
+        $this->db = self::$connection;
         $this->initialize();
     }
     

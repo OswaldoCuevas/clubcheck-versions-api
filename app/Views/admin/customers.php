@@ -71,8 +71,8 @@ ob_start();
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="customerId" class="form-label">ID de cliente</label>
-                        <input type="text" class="form-control" id="customerId" required>
-                        <div class="form-text">Ejemplo: CLUB-001</div>
+                        <input type="text" class="form-control" id="customerId">
+                        <div class="form-text">Déjalo vacío para generar un identificador automático.</div>
                     </div>
                     <div class="mb-3">
                         <label for="customerName" class="form-label">Nombre del cliente</label>
@@ -82,6 +82,16 @@ ob_start();
                         <label for="customerDeviceName" class="form-label">Nombre del dispositivo</label>
                         <input type="text" class="form-control" id="customerDeviceName" placeholder="Ejemplo: POS-01" autocomplete="off">
                         <div class="form-text">Identifica la terminal o estación donde está instalado el escritorio.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="customerBillingId" class="form-label">ID de facturación</label>
+                        <input type="text" class="form-control" id="customerBillingId" placeholder="Ejemplo: FACT-001" autocomplete="off">
+                        <div class="form-text">Identificador usado en sistemas de facturación o cobranza.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="customerPlanCode" class="form-label">Plan contratado</label>
+                        <input type="text" class="form-control" id="customerPlanCode" placeholder="Ejemplo: PREMIUM-2025" maxlength="50" autocomplete="off">
+                        <div class="form-text">Código del plan vigente; se puede dejar vacío para clientes sin plan asignado.</div>
                     </div>
                     <div class="mb-3">
                         <label for="customerToken" class="form-label">Token actual (opcional)</label>
@@ -152,6 +162,8 @@ ob_start();
     const customerIdInput = document.getElementById('customerId');
     const customerNameInput = document.getElementById('customerName');
     const customerDeviceInput = document.getElementById('customerDeviceName');
+    const customerBillingInput = document.getElementById('customerBillingId');
+    const customerPlanInput = document.getElementById('customerPlanCode');
     const customerTokenInput = document.getElementById('customerToken');
     const customerActiveInput = document.getElementById('customerActive');
     const customerModalLabel = document.getElementById('customerModalLabel');
@@ -247,12 +259,16 @@ ob_start();
             const lastToken = customer.tokenUpdatedAt ? `Token ${escapeHtml(relativeTime(customer.tokenUpdatedAt))}` : '';
             const updates = [lastSeen, lastToken].filter(Boolean).join(' · ');
             const deviceDisplay = customer.deviceName ? customer.deviceName : 'Sin dispositivo';
+            const billingDisplay = customer.billingId ? customer.billingId : '';
+            const planDisplay = customer.planCode ? customer.planCode : '';
 
             return `
                 <tr data-customer-id="${escapeHtml(customer.customerId)}">
                     <td>
                         <div class="fw-semibold">${escapeHtml(customer.name || '—')}</div>
                         <div class="text-muted small">ID: ${escapeHtml(customer.customerId)}</div>
+                        ${billingDisplay ? `<div class="text-muted small">Facturación: ${escapeHtml(billingDisplay)}</div>` : ''}
+                        ${planDisplay ? `<div class="text-muted small">Plan: ${escapeHtml(planDisplay)}</div>` : ''}
                         <div class="text-muted small">Equipo: ${escapeHtml(deviceDisplay)}</div>
                     </td>
                     <td>
@@ -339,7 +355,14 @@ ob_start();
                 throw new Error(payload.error || 'No se pudo guardar el cliente');
             }
 
-            pushAlert('success', payload.status === 'created' ? 'Cliente creado correctamente' : 'Cliente actualizado');
+            const created = (payload.status === 'created');
+            let message = created ? 'Cliente creado correctamente.' : 'Cliente actualizado.';
+
+            if (payload.accessKey) {
+                message += ' AccessKey: ' + payload.accessKey + ' (guárdala, no se volverá a mostrar).';
+            }
+
+            pushAlert('success', message);
             if (customerModal) {
                 customerModal.hide();
             }
@@ -460,6 +483,12 @@ ob_start();
         if (customerDeviceInput) {
             customerDeviceInput.value = '';
         }
+        if (customerBillingInput) {
+            customerBillingInput.value = '';
+        }
+        if (customerPlanInput) {
+            customerPlanInput.value = '';
+        }
         customerTokenInput.value = '';
         customerActiveInput.checked = true;
     }
@@ -474,6 +503,12 @@ ob_start();
         if (customerDeviceInput) {
             customerDeviceInput.value = customer.deviceName || '';
         }
+        if (customerBillingInput) {
+            customerBillingInput.value = customer.billingId || '';
+        }
+        if (customerPlanInput) {
+            customerPlanInput.value = customer.planCode || '';
+        }
         customerTokenInput.value = customer.token || '';
         customerActiveInput.checked = customer.isActive !== false;
         if (customerModal) {
@@ -487,22 +522,37 @@ ob_start();
             const customerId = customerIdInput.value.trim();
             const name = customerNameInput.value.trim();
             const deviceName = customerDeviceInput ? customerDeviceInput.value.trim() : '';
+            const billingId = customerBillingInput ? customerBillingInput.value.trim() : '';
+            const planCode = customerPlanInput ? customerPlanInput.value.trim() : '';
             const token = customerTokenInput.value.trim();
             const isActive = customerActiveInput.checked;
 
-            if (!customerId) {
-                pushAlert('warning', 'El ID del cliente es obligatorio');
+            const isEditing = customerIdInput.hasAttribute('disabled');
+
+            if (isEditing && !customerId) {
+                pushAlert('warning', 'El ID del cliente es obligatorio al editar');
                 return;
             }
 
             const payload = {
-                customerId,
                 name: name || null,
                 isActive
             };
 
+            if (customerId) {
+                payload.customerId = customerId;
+            }
+
             if (customerDeviceInput) {
                 payload.deviceName = deviceName || null;
+            }
+
+            if (customerBillingInput) {
+                payload.billingId = billingId || null;
+            }
+
+            if (customerPlanInput) {
+                payload.planCode = planCode || null;
             }
 
             if (token) {

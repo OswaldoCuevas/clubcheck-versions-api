@@ -25,6 +25,9 @@ $router->any('/api/customers/sessions/end', 'CustomersController', 'endSession')
 $router->any('/api/customers/sessions/active', 'CustomersController', 'activeSessions');
 $router->any('/api/customers/save', 'CustomersController', 'saveCustomer');
 $router->any('/api/customers/register', 'CustomersController', 'registerCustomer');
+$router->any('/api/customers/login', 'CustomersController', 'loginCustomer');
+$router->any('/api/customers/validate', 'CustomersController', 'validateCustomer');
+$router->any('/api/customers', 'CustomersController', 'patchCustomer');
 $router->any('/api/customers/:customerId', 'CustomersController', 'getCustomer');
 $router->any('/api/customers/token', 'CustomersController', 'customerToken');
 $router->any('/api/customers/token/register', 'CustomersController', 'registerToken');

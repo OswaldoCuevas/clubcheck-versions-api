@@ -6,6 +6,13 @@ ini_set('display_errors', 1);
 // Inicializar sesión
 session_start();
 
+// Cargar variables de entorno desde .env si existe
+$envLoaderPath = __DIR__ . '/../config/env_loader.php';
+if (file_exists($envLoaderPath)) {
+    require_once $envLoaderPath;
+    EnvLoader::load(__DIR__ . '/../.env');
+}
+
 // Incluir sistema de configuración
 require_once __DIR__ . '/../config/bootstrap.php';
 

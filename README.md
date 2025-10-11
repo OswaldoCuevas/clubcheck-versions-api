@@ -36,6 +36,16 @@ clubcheck/
    - `hash`
    - `fileinfo`
 
+## ⚙️ Configuración de variables de entorno
+
+La aplicación carga automáticamente un archivo `.env` ubicado en la raíz del proyecto. Para configurarlo:
+
+1. Duplica el archivo `.env.example` y renómbralo a `.env`.
+2. Edita los valores según tu entorno (secreto para `ACCESS_KEY_SECRET` y credenciales de base de datos `DB_*`).
+3. Asegúrate de que el archivo no se incluya en el control de versiones.
+
+> El secreto `ACCESS_KEY_SECRET` se usa para generar y hashear las AccessKey entregadas a los clientes; genera un valor largo y aleatorio. Si las variables ya existen en el entorno del servidor, prevalecerán sobre las definidas en `.env`.
+
 ## 📖 Uso
 
 ### Interfaz Web

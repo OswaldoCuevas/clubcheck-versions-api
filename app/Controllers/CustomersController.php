@@ -53,7 +53,7 @@ class CustomersController extends Controller
 
         if (json_last_error() !== JSON_ERROR_NONE) {
             $this->respond([
-                'error' => 'Invalid JSON payload',
+                'error' => 'Carga JSON inválida',
                 'message' => json_last_error_msg()
             ], 400);
         }
@@ -69,8 +69,8 @@ class CustomersController extends Controller
 
         if (!is_array($metadata)) {
             $this->respond([
-                'error' => 'Invalid metadata format',
-                'message' => 'Metadata must be an object'
+                'error' => 'Formato de metadatos inválido',
+                'message' => 'Metadata debe ser un objeto'
             ], 422);
         }
 
@@ -79,10 +79,97 @@ class CustomersController extends Controller
 
         if (strlen($encoded) > $maxSize) {
             $this->respond([
-                'error' => 'Metadata too large',
-                'message' => "Metadata payload exceeds {$maxSize} bytes"
+                'error' => 'Metadatos demasiado grandes',
+                'message' => "El contenido de metadata excede {$maxSize} bytes"
             ], 413);
         }
+    }
+
+    private function normalizePrivacyAcceptancePayload($value, bool $required): ?array
+    {
+        if ($value === null) {
+            if ($required) {
+                $this->respond([
+                    'error' => 'Debes enviar el objeto privacyAcceptance con la aceptación de privacidad'
+                ], 422);
+            }
+
+            return null;
+        }
+
+        if (!is_array($value)) {
+            $this->respond([
+                'error' => 'El campo privacyAcceptance debe ser un objeto con los datos de aceptación'
+            ], 422);
+        }
+
+        $documentVersion = isset($value['documentVersion']) ? trim((string) $value['documentVersion']) : '';
+        if ($documentVersion === '') {
+            $this->respond([
+                'error' => 'Debes indicar la versión del documento de privacidad (documentVersion)'
+            ], 422);
+        }
+        if (mb_strlen($documentVersion) > 50) {
+            $this->respond([
+                'error' => 'documentVersion no puede superar los 50 caracteres'
+            ], 422);
+        }
+
+        $documentUrl = isset($value['documentUrl']) ? trim((string) $value['documentUrl']) : '';
+        if ($documentUrl === '') {
+            $this->respond([
+                'error' => 'Debes indicar la URL del documento aceptado (documentUrl)'
+            ], 422);
+        }
+        if (mb_strlen($documentUrl) > 255) {
+            $this->respond([
+                'error' => 'documentUrl no puede superar los 255 caracteres'
+            ], 422);
+        }
+
+        $ipAddress = isset($value['ipAddress']) ? trim((string) $value['ipAddress']) : '';
+        if ($ipAddress === '') {
+            $this->respond([
+                'error' => 'Debes indicar la dirección IP del aceptante (ipAddress)'
+            ], 422);
+        }
+        if (filter_var($ipAddress, FILTER_VALIDATE_IP) === false) {
+            $this->respond([
+                'error' => 'La dirección IP proporcionada no es válida'
+            ], 422);
+        }
+
+        $acceptedAtRaw = $value['acceptedAt'] ?? null;
+        if ($acceptedAtRaw === null || $acceptedAtRaw === '') {
+            $acceptedAt = date('Y-m-d H:i:s');
+        } elseif (is_numeric($acceptedAtRaw)) {
+            $timestamp = (int) $acceptedAtRaw;
+            $acceptedAt = date('Y-m-d H:i:s', $timestamp);
+        } else {
+            $timestamp = strtotime((string) $acceptedAtRaw);
+            if ($timestamp === false) {
+                $this->respond([
+                    'error' => 'El campo acceptedAt debe ser una fecha válida'
+                ], 422);
+            }
+            $acceptedAt = date('Y-m-d H:i:s', $timestamp);
+        }
+
+        $userAgent = isset($value['userAgent']) ? trim((string) $value['userAgent']) : null;
+        if ($userAgent !== null && $userAgent === '') {
+            $userAgent = null;
+        }
+        if ($userAgent !== null && mb_strlen($userAgent) > 255) {
+            $userAgent = mb_substr($userAgent, 0, 255);
+        }
+
+        return [
+            'documentVersion' => $documentVersion,
+            'documentUrl' => $documentUrl,
+            'ipAddress' => $ipAddress,
+            'acceptedAt' => $acceptedAt,
+            'userAgent' => $userAgent,
+        ];
     }
 
     public function startSession()
@@ -92,7 +179,7 @@ class CustomersController extends Controller
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Method not allowed'], 405);
+            $this->respond(['error' => 'Método no permitido'], 405);
         }
 
         $payload = $this->getJsonBody();
@@ -102,7 +189,7 @@ class CustomersController extends Controller
 
         if (empty($customerId)) {
             $this->respond([
-                'error' => 'customerId is required'
+                'error' => 'El campo customerId es obligatorio'
             ], 422);
         }
 
@@ -165,7 +252,7 @@ class CustomersController extends Controller
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Method not allowed'], 405);
+            $this->respond(['error' => 'Método no permitido'], 405);
         }
 
         $payload = $this->getJsonBody();
@@ -173,7 +260,7 @@ class CustomersController extends Controller
 
         if (empty($sessionId)) {
             $this->respond([
-                'error' => 'sessionId is required'
+                'error' => 'El campo sessionId es obligatorio'
             ], 422);
         }
 
@@ -187,7 +274,7 @@ class CustomersController extends Controller
 
         if (!$session) {
             $this->respond([
-                'error' => 'Session not found or expired'
+                'error' => 'Sesión no encontrada o expirada'
             ], 404);
         }
 
@@ -209,7 +296,7 @@ class CustomersController extends Controller
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Method not allowed'], 405);
+            $this->respond(['error' => 'Método no permitido'], 405);
         }
 
         $payload = $this->getJsonBody();
@@ -217,7 +304,7 @@ class CustomersController extends Controller
 
         if (empty($sessionId)) {
             $this->respond([
-                'error' => 'sessionId is required'
+                'error' => 'El campo sessionId es obligatorio'
             ], 422);
         }
 
@@ -225,7 +312,7 @@ class CustomersController extends Controller
 
         if (!$ended) {
             $this->respond([
-                'error' => 'Session not found'
+                'error' => 'Sesión no encontrada'
             ], 404);
         }
 
@@ -242,7 +329,7 @@ class CustomersController extends Controller
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->respond(['error' => 'Method not allowed'], 405);
+            $this->respond(['error' => 'Método no permitido'], 405);
         }
 
         $this->sessionModel->purgeExpired($this->sessionConfig['grace_period'] ?? 180);
@@ -269,7 +356,7 @@ class CustomersController extends Controller
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->respond(['error' => 'Method not allowed'], 405);
+            $this->respond(['error' => 'Método no permitido'], 405);
         }
 
         if ($customerId === null) {
@@ -280,7 +367,7 @@ class CustomersController extends Controller
 
         if ($customerId === '') {
             $this->respond([
-                'error' => 'customerId is required'
+                'error' => 'El campo customerId es obligatorio'
             ], 422);
         }
 
@@ -288,7 +375,7 @@ class CustomersController extends Controller
 
         if (!$customer) {
             $this->respond([
-                'error' => 'Customer not found'
+                'error' => 'Cliente no encontrado'
             ], 404);
         }
 
@@ -304,21 +391,16 @@ class CustomersController extends Controller
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Method not allowed'], 405);
+            $this->respond(['error' => 'Método no permitido'], 405);
         }
 
-        $payload = $this->getJsonBody();
-        $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
+    $payload = $this->getJsonBody();
+    $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
 
-        if ($customerId === '') {
-            $this->respond([
-                'error' => 'customerId is required'
-            ], 422);
-        }
-
-        $existing = $this->customerRegistry->getCustomer($customerId);
+    $existing = $customerId !== '' ? $this->customerRegistry->getCustomer($customerId) : null;
 
         $attributes = [];
+    $privacyAcceptanceInput = array_key_exists('privacyAcceptance', $payload) ? $payload['privacyAcceptance'] : null;
 
         if (array_key_exists('name', $payload)) {
             $attributes['name'] = $payload['name'] !== null ? trim((string) $payload['name']) : null;
@@ -330,7 +412,7 @@ class CustomersController extends Controller
                 $email = trim((string) $email);
                 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
                     $this->respond([
-                        'error' => 'Invalid email format'
+                        'error' => 'Formato de correo inválido'
                     ], 422);
                 }
             } else {
@@ -349,8 +431,32 @@ class CustomersController extends Controller
             $attributes['deviceName'] = $deviceName !== null ? trim((string) $deviceName) : null;
         }
 
+        if (array_key_exists('billingId', $payload)) {
+            $billingId = $payload['billingId'];
+            if ($billingId !== null) {
+                $billingId = trim((string) $billingId);
+            }
+            $attributes['billingId'] = $billingId === '' ? null : $billingId;
+        }
+
+        if (array_key_exists('planCode', $payload)) {
+            $planCode = $payload['planCode'];
+            if ($planCode !== null && $planCode !== '') {
+                $planCode = trim((string) $planCode);
+                if (mb_strlen($planCode) > 50) {
+                    $this->respond([
+                        'error' => 'El PlanCode debe tener máximo 50 caracteres'
+                    ], 422);
+                }
+            } else {
+                $planCode = null;
+            }
+            $attributes['planCode'] = $planCode;
+        }
+
         if (array_key_exists('token', $payload)) {
-            $attributes['token'] = $payload['token'];
+            $token = $payload['token'];
+            $attributes['token'] = $token !== null ? trim((string) $token) : null;
         }
 
         if (array_key_exists('isActive', $payload)) {
@@ -359,17 +465,78 @@ class CustomersController extends Controller
 
         if (empty($attributes)) {
             $this->respond([
-                'error' => 'No attributes provided'
+                'error' => 'No se enviaron atributos'
             ], 422);
         }
 
-        $customer = $this->customerRegistry->upsertCustomer($customerId, $attributes);
-        $statusCode = $existing ? 200 : 201;
+        if ($existing === null) {
+            if (!array_key_exists('name', $attributes) || $attributes['name'] === null || $attributes['name'] === '') {
+                $this->respond([
+                    'error' => 'El nombre es obligatorio al crear un cliente'
+                ], 422);
+            }
 
+            $privacyAcceptance = $this->normalizePrivacyAcceptancePayload($privacyAcceptanceInput, true);
+
+            try {
+                $result = $this->customerRegistry->registerCustomerIfAbsent([
+                    'customerId' => $customerId !== '' ? $customerId : null,
+                    'name' => $attributes['name'],
+                    'billingId' => $attributes['billingId'] ?? null,
+                    'planCode' => $attributes['planCode'] ?? null,
+                    'email' => $attributes['email'] ?? null,
+                    'phone' => $attributes['phone'] ?? null,
+                    'deviceName' => $attributes['deviceName'] ?? null,
+                    'token' => $attributes['token'] ?? null,
+                    'isActive' => $attributes['isActive'] ?? true,
+                    'privacyAcceptance' => $privacyAcceptance,
+                ]);
+            } catch (\RuntimeException $e) {
+                if ($e->getMessage() === 'email_already_registered') {
+                    $this->respond([
+                        'error' => 'El correo ya está registrado para otro cliente',
+                        'code' => 'email_conflict',
+                    ], 409);
+                }
+
+                if ($e->getMessage() === 'access_key_secret_missing') {
+                    $this->respond([
+                        'error' => 'No se pudo generar la AccessKey. Falta configurar ACCESS_KEY_SECRET.',
+                        'code' => 'access_key_generation_failed',
+                    ], 500);
+                }
+
+                throw $e;
+            }
+
+            $response = [
+                'status' => $result['found'] ? 'updated' : 'created',
+                'customer' => $result['customer'],
+            ];
+
+            if (isset($result['accessKey'])) {
+                $response['accessKey'] = $result['accessKey'];
+            }
+
+            $this->respond($response, $result['found'] ? 200 : 201);
+        }
+
+        try {
+            $customer = $this->customerRegistry->upsertCustomer($customerId, $attributes);
+        } catch (\RuntimeException $e) {
+            if ($e->getMessage() === 'email_already_registered') {
+                $this->respond([
+                    'error' => 'El correo ya está registrado para otro cliente',
+                    'code' => 'email_conflict',
+                ], 409);
+            }
+
+            throw $e;
+        }
         $this->respond([
-            'status' => $existing ? 'updated' : 'created',
+            'status' => 'updated',
             'customer' => $customer,
-        ], $statusCode);
+        ], 200);
     }
 
     public function registerCustomer()
@@ -379,7 +546,7 @@ class CustomersController extends Controller
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Method not allowed'], 405);
+            $this->respond(['error' => 'Método no permitido'], 405);
         }
 
         $payload = $this->getJsonBody();
@@ -387,33 +554,68 @@ class CustomersController extends Controller
         $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
         $name = isset($payload['name']) ? trim((string) $payload['name']) : '';
         $email = isset($payload['email']) ? trim((string) $payload['email']) : '';
+        $billingId = array_key_exists('billingId', $payload) ? trim((string) $payload['billingId']) : null;
+        $planCode = array_key_exists('planCode', $payload) ? trim((string) $payload['planCode']) : null;
         $phone = array_key_exists('phone', $payload) ? trim((string) $payload['phone']) : null;
         $deviceName = array_key_exists('deviceName', $payload) ? trim((string) $payload['deviceName']) : null;
         $token = isset($payload['token']) ? trim((string) $payload['token']) : '';
+        $privacyAcceptanceInput = array_key_exists('privacyAcceptance', $payload) ? $payload['privacyAcceptance'] : null;
 
-        if ($customerId === '' || $name === '' || $token === '') {
+        if ($name === '' || $token === '') {
             $this->respond([
-                'error' => 'customerId, name and token are required'
+                'error' => 'El nombre y el token son obligatorios'
             ], 422);
         }
 
         if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $this->respond([
-                'error' => 'Invalid email format'
+                'error' => 'Formato de correo inválido'
             ], 422);
         }
 
+        if ($planCode !== null && $planCode !== '') {
+            if (mb_strlen($planCode) > 50) {
+                $this->respond([
+                    'error' => 'El PlanCode debe tener máximo 50 caracteres'
+                ], 422);
+            }
+        }
+
+        $planCode = ($planCode === '') ? null : $planCode;
+
         $phone = $phone !== null && $phone !== '' ? $phone : null;
         $deviceName = $deviceName !== null && $deviceName !== '' ? $deviceName : null;
+        $privacyAcceptance = $this->normalizePrivacyAcceptancePayload($privacyAcceptanceInput, true);
 
-        $result = $this->customerRegistry->registerCustomerIfAbsent([
-            'customerId' => $customerId,
-            'name' => $name,
-            'email' => $email !== '' ? $email : null,
-            'phone' => $phone,
-            'deviceName' => $deviceName,
-            'token' => $token,
-        ]);
+        try {
+            $result = $this->customerRegistry->registerCustomerIfAbsent([
+                'customerId' => $customerId,
+                'name' => $name,
+                'billingId' => $billingId !== '' ? $billingId : null,
+                'planCode' => $planCode,
+                'email' => $email !== '' ? $email : null,
+                'phone' => $phone,
+                'deviceName' => $deviceName,
+                'token' => $token,
+                'privacyAcceptance' => $privacyAcceptance,
+            ]);
+        } catch (\RuntimeException $e) {
+            if ($e->getMessage() === 'email_already_registered') {
+                $this->respond([
+                    'error' => 'El correo ya está registrado para otro cliente',
+                    'code' => 'email_conflict',
+                ], 409);
+            }
+
+            if ($e->getMessage() === 'access_key_secret_missing') {
+                $this->respond([
+                    'error' => 'No se pudo generar la AccessKey. Falta configurar ACCESS_KEY_SECRET.',
+                    'code' => 'access_key_generation_failed',
+                ], 500);
+            }
+
+            throw $e;
+        }
 
         if ($result['found'] === true) {
             $this->respond([
@@ -427,7 +629,268 @@ class CustomersController extends Controller
             'found' => false,
             'registered' => true,
             'customer' => $result['customer'],
+            'accessKey' => $result['accessKey'] ?? null,
         ], 201);
+    }
+
+    public function loginCustomer()
+    {
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->respond(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->respond(['error' => 'Método no permitido'], 405);
+        }
+
+        $payload = $this->getJsonBody();
+
+        $email = isset($payload['email']) ? trim((string) $payload['email']) : '';
+        $accessKey = isset($payload['accessKey']) ? trim((string) $payload['accessKey']) : '';
+        $deviceName = array_key_exists('deviceName', $payload) ? trim((string) $payload['deviceName']) : '';
+        $token = isset($payload['token']) ? trim((string) $payload['token']) : '';
+
+        if ($email === '' || $accessKey === '' || $deviceName === '' || $token === '') {
+            $this->respond([
+                'error' => 'Debes proporcionar email, accessKey, deviceName y token'
+            ], 422);
+        }
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $this->respond([
+                'error' => 'Formato de correo inválido'
+            ], 422);
+        }
+
+        $ipAddress = $_SERVER['REMOTE_ADDR'] ?? null;
+
+        try {
+            $customer = $this->customerRegistry->loginWithAccessKey($email, $accessKey, $deviceName, $ipAddress, $token);
+        } catch (\InvalidArgumentException $e) {
+            $this->respond([
+                'error' => 'Debes proporcionar email y accessKey válidos'
+            ], 422);
+        } catch (\RuntimeException $e) {
+            $message = $e->getMessage();
+
+            if ($message === 'too_many_attempts') {
+                $this->respond([
+                    'error' => 'Demasiados intentos fallidos. Intenta nuevamente en una hora.'
+                ], 429);
+            }
+
+            if ($message === 'invalid_credentials') {
+                $this->respond([
+                    'error' => 'Credenciales inválidas'
+                ], 401);
+            }
+
+            if ($message === 'customer_not_waiting') {
+                $this->respond([
+                    'error' => 'El cliente no está esperando un nuevo token'
+                ], 409);
+            }
+
+            if ($message === 'access_key_secret_missing') {
+                $this->respond([
+                    'error' => 'No se puede validar la AccessKey. Falta configurar ACCESS_KEY_SECRET.'
+                ], 500);
+            }
+
+            throw $e;
+        }
+
+        $this->respond([
+            'status' => 'success',
+            'customer' => [
+                'customerId' => $customer['customerId'],
+                'name' => $customer['name'],
+                'phone' => $customer['phone'],
+                'email' => $customer['email'],
+                'billingId' => $customer['billingId'],
+                'token' => $customer['token'],
+            ],
+        ]);
+    }
+
+    public function patchCustomer()
+    {
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->respond(['status' => 'ok']);
+        }
+
+        $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        if (!in_array($method, ['POST', 'PATCH'], true)) {
+            $this->respond(['error' => 'Método no permitido'], 405);
+        }
+
+        $payload = $this->getJsonBody();
+
+        $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
+        if ($customerId === '') {
+            $this->respond([
+                'error' => 'El campo customerId es obligatorio'
+            ], 422);
+        }
+
+        $attributes = [];
+
+        if (array_key_exists('planCode', $payload)) {
+            $planCode = $payload['planCode'];
+            if ($planCode !== null && $planCode !== '') {
+                $planCode = trim((string) $planCode);
+                if (mb_strlen($planCode) > 50) {
+                    $this->respond([
+                        'error' => 'El PlanCode debe tener máximo 50 caracteres'
+                    ], 422);
+                }
+            } else {
+                $planCode = null;
+            }
+            $attributes['planCode'] = $planCode;
+        }
+
+        if (array_key_exists('name', $payload)) {
+            $name = $payload['name'];
+            if ($name !== null) {
+                $name = trim((string) $name);
+            }
+
+            if ($name === null || $name === '') {
+                $this->respond([
+                    'error' => 'El nombre no puede estar vacío'
+                ], 422);
+            }
+
+            $attributes['name'] = $name;
+        }
+
+        if (array_key_exists('email', $payload)) {
+            $email = $payload['email'];
+            if ($email !== null && $email !== '') {
+                $email = trim((string) $email);
+                if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    $this->respond([
+                        'error' => 'Formato de correo inválido'
+                    ], 422);
+                }
+            } else {
+                $email = null;
+            }
+
+            $attributes['email'] = $email;
+        }
+
+        if (array_key_exists('phone', $payload)) {
+            $phone = $payload['phone'];
+            if ($phone !== null) {
+                $phone = trim((string) $phone);
+            }
+            $attributes['phone'] = ($phone === null || $phone === '') ? null : $phone;
+        }
+
+        if (empty($attributes)) {
+            $this->respond([
+                'error' => 'Debes proporcionar al menos un atributo para actualizar'
+            ], 422);
+        }
+
+        $customer = $this->customerRegistry->patchCustomerAttributes($customerId, $attributes);
+
+        if ($customer === null) {
+            $this->respond([
+                'error' => 'Cliente no encontrado'
+            ], 404);
+        }
+
+        $this->respond([
+            'status' => 'updated',
+            'customer' => $customer,
+        ]);
+    }
+
+    public function validateCustomer()
+    {
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->respond(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->respond(['error' => 'Método no permitido'], 405);
+        }
+
+        $payload = $this->getJsonBody();
+
+        $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
+        $name = isset($payload['name']) ? trim((string) $payload['name']) : '';
+        $email = isset($payload['email']) ? trim((string) $payload['email']) : '';
+        $billingId = array_key_exists('billingId', $payload) ? trim((string) $payload['billingId']) : null;
+        $planCode = array_key_exists('planCode', $payload) ? trim((string) $payload['planCode']) : null;
+        $phone = array_key_exists('phone', $payload) ? trim((string) $payload['phone']) : null;
+        $deviceName = array_key_exists('deviceName', $payload) ? trim((string) $payload['deviceName']) : null;
+        $token = isset($payload['token']) ? trim((string) $payload['token']) : '';
+        $privacyAcceptanceInput = array_key_exists('privacyAcceptance', $payload) ? $payload['privacyAcceptance'] : null;
+
+        if ($name === '' || $token === '') {
+            $this->respond([
+                'error' => 'El nombre y el token son obligatorios'
+            ], 422);
+        }
+
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $this->respond([
+                'error' => 'Formato de correo inválido'
+            ], 422);
+        }
+
+        if ($planCode !== null && $planCode !== '') {
+            if (mb_strlen($planCode) > 50) {
+                $this->respond([
+                    'error' => 'El PlanCode debe tener máximo 50 caracteres'
+                ], 422);
+            }
+        }
+
+        $phone = $phone !== null && $phone !== '' ? $phone : null;
+        $deviceName = $deviceName !== null && $deviceName !== '' ? $deviceName : null;
+        $normalizedBillingId = $billingId !== null && $billingId !== '' ? $billingId : null;
+        $normalizedEmail = $email !== '' ? $email : null;
+        $normalizedPlanCode = ($planCode !== null && $planCode !== '') ? $planCode : null;
+
+        $existing = null;
+        if ($customerId !== '') {
+            $existing = $this->customerRegistry->getCustomer($customerId);
+        }
+
+        if ($existing === null) {
+            $emailAvailable = $this->customerRegistry->isEmailAvailable($normalizedEmail);
+            if (!$emailAvailable) {
+                $this->respond([
+                    'error' => 'El correo ya está registrado para otro cliente',
+                    'code' => 'email_conflict',
+                ], 409);
+            }
+        }
+
+        $privacyAcceptance = $this->normalizePrivacyAcceptancePayload($privacyAcceptanceInput, $existing === null);
+
+        $this->respond([
+            'valid' => true,
+            'found' => $existing !== null,
+            'customerId' => $existing['customerId'] ?? ($customerId !== '' ? $customerId : null),
+            'normalized' => [
+                'customerId' => $existing['customerId'] ?? ($customerId !== '' ? $customerId : null),
+                'name' => $name,
+                'billingId' => $existing['billingId'] ?? $normalizedBillingId,
+                'planCode' => $existing['planCode'] ?? $normalizedPlanCode,
+                'email' => $normalizedEmail,
+                'phone' => $phone,
+                'deviceName' => $deviceName,
+                'token' => $token,
+                'privacyAcceptance' => $privacyAcceptance,
+            ],
+            'customer' => $existing,
+        ]);
     }
 
     public function awaitToken()
@@ -437,7 +900,7 @@ class CustomersController extends Controller
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Method not allowed'], 405);
+            $this->respond(['error' => 'Método no permitido'], 405);
         }
 
         $payload = $this->getJsonBody();
@@ -445,7 +908,7 @@ class CustomersController extends Controller
 
         if ($customerId === '') {
             $this->respond([
-                'error' => 'customerId is required'
+                'error' => 'El campo customerId es obligatorio'
             ], 422);
         }
 
@@ -455,12 +918,14 @@ class CustomersController extends Controller
 
         if (!$customer) {
             $this->respond([
-                'error' => 'Customer not found'
+                'error' => 'Cliente no encontrado'
             ], 404);
         }
 
         $this->respond([
             'customerId' => $customer['customerId'],
+            'billingId' => $customer['billingId'] ?? null,
+            'planCode' => $customer['planCode'] ?? null,
             'waitingForToken' => $customer['waitingForToken'],
             'waitingSince' => $customer['waitingSince'],
         ]);
@@ -473,14 +938,14 @@ class CustomersController extends Controller
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->respond(['error' => 'Method not allowed'], 405);
+            $this->respond(['error' => 'Método no permitido'], 405);
         }
 
         $customerId = isset($_GET['customerId']) ? trim((string) $_GET['customerId']) : '';
 
         if ($customerId === '') {
             $this->respond([
-                'error' => 'customerId is required'
+                'error' => 'El campo customerId es obligatorio'
             ], 422);
         }
 
@@ -488,13 +953,15 @@ class CustomersController extends Controller
 
         if (!$customer) {
             $this->respond([
-                'error' => 'Customer not found'
+                'error' => 'Cliente no encontrado'
             ], 404);
         }
 
         $this->respond([
             'customerId' => $customer['customerId'],
             'name' => $customer['name'],
+            'billingId' => $customer['billingId'] ?? null,
+            'planCode' => $customer['planCode'] ?? null,
             'token' => $customer['token'] ?? null,
             'waitingForToken' => $customer['waitingForToken'] ?? false,
             'isActive' => $customer['isActive'] ?? true,
@@ -510,7 +977,7 @@ class CustomersController extends Controller
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Method not allowed'], 405);
+            $this->respond(['error' => 'Método no permitido'], 405);
         }
 
         $payload = $this->getJsonBody();
@@ -520,7 +987,7 @@ class CustomersController extends Controller
 
         if ($customerId === '' || $token === '') {
             $this->respond([
-                'error' => 'customerId and token are required'
+                'error' => 'Los campos customerId y token son obligatorios'
             ], 422);
         }
 
@@ -532,13 +999,13 @@ class CustomersController extends Controller
 
         if ($result['status'] === 'not_found') {
             $this->respond([
-                'error' => 'Customer not found'
+                'error' => 'Cliente no encontrado'
             ], 404);
         }
 
         if ($result['status'] === 'not_waiting') {
             $this->respond([
-                'error' => 'Customer is not waiting for a new token',
+                'error' => 'El cliente no está esperando un nuevo token',
                 'waitingForToken' => $result['customer']['waitingForToken'] ?? false,
             ], 409);
         }

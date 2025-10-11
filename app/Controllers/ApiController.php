@@ -22,7 +22,7 @@ class ApiController extends Controller
         if (!file_exists($versionFile)) {
             http_response_code(404);
             echo json_encode([
-                'error' => 'Version file not found',
+                'error' => 'Archivo de versión no encontrado',
                 'message' => 'No hay información de versiones disponible'
             ]);
             exit;
@@ -35,7 +35,7 @@ class ApiController extends Controller
         if ($decodedData === null) {
             http_response_code(500);
             echo json_encode([
-                'error' => 'Invalid JSON format',
+                'error' => 'Formato JSON inválido',
                 'message' => 'El archivo de versión está corrupto'
             ]);
             exit;
@@ -87,7 +87,7 @@ class ApiController extends Controller
         if (!file_exists($versionFile)) {
             http_response_code(404);
             echo json_encode([
-                'error' => 'Version file not found',
+                'error' => 'Archivo de versión no encontrado',
                 'hasUpdate' => false,
                 'message' => 'No hay información de versiones disponible'
             ]);
@@ -100,7 +100,7 @@ class ApiController extends Controller
         if ($versionData === null) {
             http_response_code(500);
             echo json_encode([
-                'error' => 'Invalid JSON format',
+                'error' => 'Formato JSON inválido',
                 'hasUpdate' => false,
                 'message' => 'El archivo de versión está corrupto'
             ]);
@@ -163,7 +163,7 @@ class ApiController extends Controller
             http_response_code(404);
             header('Content-Type: application/json');
             echo json_encode([
-                'error' => 'Version file not found',
+                'error' => 'Archivo de versión no encontrado',
                 'message' => 'No hay información de versiones disponible'
             ]);
             exit;
@@ -176,7 +176,7 @@ class ApiController extends Controller
             http_response_code(500);
             header('Content-Type: application/json');
             echo json_encode([
-                'error' => 'Invalid JSON format',
+                'error' => 'Formato JSON inválido',
                 'message' => 'El archivo de versión está corrupto'
             ]);
             exit;
@@ -187,7 +187,7 @@ class ApiController extends Controller
             http_response_code(404);
             header('Content-Type: application/json');
             echo json_encode([
-                'error' => 'No version available',
+                'error' => 'No hay versión disponible',
                 'message' => 'No hay versiones disponibles para descargar'
             ]);
             exit;
@@ -203,7 +203,7 @@ class ApiController extends Controller
             http_response_code(404);
             header('Content-Type: application/json');
             echo json_encode([
-                'error' => 'File not found',
+                'error' => 'Archivo no encontrado',
                 'message' => 'El archivo ejecutable no existe en el servidor',
                 'expectedFile' => $fileName,
                 'version' => $versionData['latestVersion']
@@ -251,7 +251,7 @@ class ApiController extends Controller
             if ($handle === false) {
                 http_response_code(500);
                 header('Content-Type: application/json');
-                echo json_encode(['error' => 'Cannot read file']);
+                echo json_encode(['error' => 'No se puede leer el archivo']);
                 exit;
             }
 

@@ -9,76 +9,91 @@ use Core\Model;
 
 class UserModel extends Model
 {
-    private $users;
-    private $authConfig;
-    private $permissions;
-    private $loginAttemptsFile;
+    private array $authConfig = [];
 
     protected function initialize()
     {
-        $userConfig = require __DIR__ . '/../../config/users.php';
-        $this->users = $userConfig['users'];
-        $this->authConfig = $userConfig['auth'];
-        $this->permissions = $userConfig['permissions'];
-        $this->loginAttemptsFile = __DIR__ . '/../../storage/login_attempts.json';
+        $authConfigPath = __DIR__ . '/../../config/auth.php';
+
+        if (file_exists($authConfigPath)) {
+            $this->authConfig = require $authConfigPath;
+        }
+
+        $this->authConfig += [
+            'session_name' => 'clubcheck_session',
+            'remember_me_duration' => 30 * 24 * 60 * 60,
+            'max_login_attempts' => 5,
+            'lockout_duration' => 15 * 60,
+            'password_min_length' => 8,
+            'session_lifetime' => 7200,
+        ];
+
+        if (!headers_sent() && session_status() === PHP_SESSION_NONE && !empty($this->authConfig['session_name'])) {
+            session_name($this->authConfig['session_name']);
+        }
     }
 
-    /**
-     * Autenticar usuario
-     */
     public function authenticate($username, $password, $rememberMe = false)
     {
-        // Verificar intentos de login
+        $username = trim((string) $username);
+
+        if ($username === '' || $password === '') {
+            $this->errors['login'][] = 'Credenciales incorrectas';
+            return false;
+        }
+
         if ($this->isLockedOut($username)) {
             $this->errors['login'][] = 'Cuenta bloqueada por intentos fallidos. Intenta más tarde.';
             return false;
         }
 
-        // Buscar usuario
         $user = $this->findUser($username);
-        
+
         if (!$user) {
-            $this->recordFailedAttempt($username);
+            $this->recordLoginAttempt($username, false);
             $this->errors['login'][] = 'Credenciales incorrectas';
             return false;
         }
 
-        // Verificar contraseña
-        if (!password_verify($password, $user['password'])) {
-            $this->recordFailedAttempt($username);
+        if (!password_verify($password, $user['PasswordHash'])) {
+            $this->recordLoginAttempt($username, false);
             $this->errors['login'][] = 'Credenciales incorrectas';
             return false;
         }
 
-        // Verificar si el usuario está activo
-        if (!$user['active']) {
+        if (!(bool) $user['IsActive']) {
             $this->errors['login'][] = 'Cuenta desactivada';
             return false;
         }
 
-        // Login exitoso
         $this->clearFailedAttempts($username);
+        $this->recordLoginAttempt($username, true);
+
         $this->createSession($user, $rememberMe);
-        
+        $this->updateLastLogin((int) $user['Id']);
+
         $this->log("Usuario {$username} inició sesión", 'info');
-        
+
         return true;
     }
 
-    /**
-     * Crear sesión de usuario
-     */
-    private function createSession($user, $rememberMe = false)
+    private function createSession(array $user, bool $rememberMe): void
     {
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
 
+        $roles = $this->getUserRoles((int) $user['Id']);
+        $permissions = $this->getPermissionsForUser((int) $user['Id']);
+
         $_SESSION['user'] = [
-            'username' => $user['username'],
-            'role' => $user['role'],
-            'name' => $user['name'],
-            'email' => $user['email'],
+            'id' => (int) $user['Id'],
+            'username' => $user['Username'],
+            'role' => $roles[0] ?? null,
+            'roles' => $roles,
+            'permissions' => $permissions,
+            'name' => $user['Name'],
+            'email' => $user['Email'],
             'login_time' => time(),
             'last_activity' => time(),
         ];
@@ -86,19 +101,19 @@ class UserModel extends Model
         $_SESSION['authenticated'] = true;
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 
-        // Remember me cookie
         if ($rememberMe) {
             $token = bin2hex(random_bytes(32));
             setcookie('remember_token', $token, time() + $this->authConfig['remember_me_duration'], '/');
-            
-            // En producción, guardar este token en base de datos asociado al usuario
-            $_SESSION['remember_token'] = $token;
+
+            $this->db->update(
+                'Users',
+                ['RememberToken' => $token, 'UpdatedAt' => date('Y-m-d H:i:s')],
+                'Id = ?',
+                [(int) $user['Id']]
+            );
         }
     }
 
-    /**
-     * Verificar si el usuario está autenticado
-     */
     public function isAuthenticated()
     {
         if (session_status() === PHP_SESSION_NONE) {
@@ -109,40 +124,39 @@ class UserModel extends Model
             return false;
         }
 
-        // Verificar timeout de sesión
         $lastActivity = $_SESSION['user']['last_activity'] ?? 0;
-        $sessionLifetime = 7200; // 2 horas por defecto
-        
+        $sessionLifetime = (int) ($this->authConfig['session_lifetime'] ?? 7200);
+
         if (time() - $lastActivity > $sessionLifetime) {
             $this->logout();
             return false;
         }
 
-        // Actualizar última actividad
         $_SESSION['user']['last_activity'] = time();
-        
+
         return true;
     }
 
-    /**
-     * Verificar permisos del usuario
-     */
     public function hasPermission($permission)
     {
         if (!$this->isAuthenticated()) {
             return false;
         }
 
-        $userRole = $_SESSION['user']['role'] ?? '';
-        $userConfig = require __DIR__ . '/../../config/users.php';
-        $permissions = $userConfig['permissions'][$userRole] ?? [];
+        $permission = (string) $permission;
 
-        return in_array($permission, $permissions);
+        $permissions = $_SESSION['user']['permissions'] ?? [];
+
+        if (in_array($permission, $permissions, true)) {
+            return true;
+        }
+
+        $permissions = $this->getPermissionsForUser((int) ($_SESSION['user']['id'] ?? 0));
+        $_SESSION['user']['permissions'] = $permissions;
+
+        return in_array($permission, $permissions, true);
     }
 
-    /**
-     * Obtener usuario actual
-     */
     public function getCurrentUser()
     {
         if (!$this->isAuthenticated()) {
@@ -152,32 +166,30 @@ class UserModel extends Model
         return $_SESSION['user'];
     }
 
-    /**
-     * Cerrar sesión
-     */
     public function logout()
     {
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
 
-        $username = $_SESSION['user']['username'] ?? 'unknown';
-        
-        // Limpiar cookies
+        $userId = $_SESSION['user']['id'] ?? null;
+
+        if ($userId !== null) {
+            $this->db->update('Users', ['RememberToken' => null, 'UpdatedAt' => date('Y-m-d H:i:s')], 'Id = ?', [$userId]);
+        }
+
         if (isset($_COOKIE['remember_token'])) {
             setcookie('remember_token', '', time() - 3600, '/');
         }
 
-        // Destruir sesión
+        $username = $_SESSION['user']['username'] ?? 'unknown';
+
         session_unset();
         session_destroy();
 
         $this->log("Usuario {$username} cerró sesión", 'info');
     }
 
-    /**
-     * Generar token CSRF
-     */
     public function getCsrfToken()
     {
         if (session_status() === PHP_SESSION_NONE) {
@@ -191,9 +203,6 @@ class UserModel extends Model
         return $_SESSION['csrf_token'];
     }
 
-    /**
-     * Validar token CSRF
-     */
     public function validateCsrfToken($token)
     {
         if (session_status() === PHP_SESSION_NONE) {
@@ -201,141 +210,104 @@ class UserModel extends Model
         }
 
         $sessionToken = $_SESSION['csrf_token'] ?? '';
-        return hash_equals($sessionToken, $token);
+
+        return hash_equals($sessionToken, (string) $token);
     }
 
-    /**
-     * Buscar usuario por username
-     */
-    private function findUser($username)
+    private function findUser(string $username): ?array
     {
-        return $this->users[$username] ?? null;
+        $sql = 'SELECT * FROM Users WHERE Username = ? LIMIT 1';
+
+        return $this->db->fetchOne($sql, [$username]);
     }
 
-    /**
-     * Verificar si está bloqueado por intentos fallidos
-     */
-    private function isLockedOut($username)
+    private function updateLastLogin(int $userId): void
     {
-        $attempts = $this->getLoginAttempts();
-        $userAttempts = $attempts[$username] ?? [];
+        $this->db->update('Users', ['LastLoginAt' => date('Y-m-d H:i:s'), 'UpdatedAt' => date('Y-m-d H:i:s')], 'Id = ?', [$userId]);
+    }
 
-        if (empty($userAttempts)) {
+    private function getUserRoles(int $userId): array
+    {
+        $sql = 'SELECT r.Name FROM Roles r
+                INNER JOIN UserRoles ur ON ur.RoleId = r.Id
+                WHERE ur.UserId = ?';
+
+        $rows = $this->db->fetchAll($sql, [$userId]);
+
+        return array_values(array_unique(array_map(fn ($row) => $row['Name'], $rows)));
+    }
+
+    private function getPermissionsForUser(int $userId): array
+    {
+        if ($userId <= 0) {
+            return [];
+        }
+
+        $sql = 'SELECT DISTINCT p.Name
+                FROM Permissions p
+                INNER JOIN RolePermissions rp ON rp.PermissionId = p.Id
+                INNER JOIN UserRoles ur ON ur.RoleId = rp.RoleId
+                WHERE ur.UserId = ?';
+
+        $rows = $this->db->fetchAll($sql, [$userId]);
+
+        return array_values(array_unique(array_map(fn ($row) => $row['Name'], $rows)));
+    }
+
+    private function isLockedOut(string $username): bool
+    {
+        $maxAttempts = (int) $this->authConfig['max_login_attempts'];
+        $lockoutDuration = (int) $this->authConfig['lockout_duration'];
+
+        $sql = 'SELECT OccurredAt FROM LoginAttempts
+                WHERE Username = ? AND WasSuccessful = 0
+                ORDER BY OccurredAt DESC
+                LIMIT ?';
+
+        $rows = $this->db->fetchAll($sql, [$username, $maxAttempts]);
+
+        if (count($rows) < $maxAttempts) {
             return false;
         }
 
-        $lastAttempt = end($userAttempts);
-        $lockoutDuration = $this->authConfig['lockout_duration'];
-        
-        if (count($userAttempts) >= $this->authConfig['max_login_attempts']) {
-            return (time() - $lastAttempt) < $lockoutDuration;
+        $latest = $rows[0]['OccurredAt'] ?? null;
+
+        if ($latest === null) {
+            return false;
         }
 
+        $lastAttempt = strtotime($latest);
+
+        if ($lastAttempt === false) {
+            return false;
+        }
+
+        return (time() - $lastAttempt) < $lockoutDuration;
+    }
+
+    private function recordLoginAttempt(string $username, bool $success): void
+    {
+        $this->db->insert('LoginAttempts', [
+            'Username' => $username,
+            'WasSuccessful' => $success ? 1 : 0,
+            'IpAddress' => $_SERVER['REMOTE_ADDR'] ?? null,
+            'UserAgent' => $_SERVER['HTTP_USER_AGENT'] ?? null,
+            'OccurredAt' => date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    private function clearFailedAttempts(string $username): void
+    {
+        $sql = 'DELETE FROM LoginAttempts WHERE Username = ? AND WasSuccessful = 0';
+        $this->db->execute_query($sql, [$username]);
+    }
+
+    public function repairLoginAttemptsFile(): bool
+    {
+        // Ya no se usa almacenamiento en archivo; nada que reparar.
         return false;
     }
 
-    /**
-     * Registrar intento fallido
-     */
-    private function recordFailedAttempt($username)
-    {
-        $attempts = $this->getLoginAttempts();
-        
-        if (!isset($attempts[$username])) {
-            $attempts[$username] = [];
-        }
-
-        $attempts[$username][] = time();
-
-        // Mantener solo los últimos intentos
-        $maxAttempts = $this->authConfig['max_login_attempts'];
-        if (count($attempts[$username]) > $maxAttempts) {
-            $attempts[$username] = array_slice($attempts[$username], -$maxAttempts);
-        }
-
-        $this->saveLoginAttempts($attempts);
-    }
-
-    /**
-     * Limpiar intentos fallidos
-     */
-    private function clearFailedAttempts($username)
-    {
-        $attempts = $this->getLoginAttempts();
-        unset($attempts[$username]);
-        $this->saveLoginAttempts($attempts);
-    }
-
-    /**
-     * Obtener intentos de login
-     */
-    private function getLoginAttempts()
-    {
-        if (!file_exists($this->loginAttemptsFile)) {
-            return [];
-        }
-
-        try {
-            $data = $this->loadJsonFile($this->loginAttemptsFile);
-            
-            // Si el archivo está corrupto o vacío, recrear con estructura vacía
-            if ($data === null) {
-                error_log("Archivo login_attempts.json corrupto o vacío, recreando...");
-                $this->saveLoginAttempts([]);
-                return [];
-            }
-            
-            return is_array($data) ? $data : [];
-        } catch (\Exception $e) {
-            // Si hay cualquier error, recrear el archivo
-            error_log("Error al leer login_attempts.json: " . $e->getMessage() . " - Recreando archivo...");
-            $this->saveLoginAttempts([]);
-            return [];
-        }
-    }
-
-    /**
-     * Guardar intentos de login
-     */
-    private function saveLoginAttempts($attempts)
-    {
-        // Asegurar que el directorio existe
-        $dir = dirname($this->loginAttemptsFile);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-        
-        $this->saveJsonFile($this->loginAttemptsFile, $attempts);
-    }
-
-    /**
-     * Verificar y reparar el archivo de intentos de login si está corrupto
-     */
-    public function repairLoginAttemptsFile()
-    {
-        if (!file_exists($this->loginAttemptsFile)) {
-            $this->saveLoginAttempts([]);
-            return true;
-        }
-
-        $content = file_get_contents($this->loginAttemptsFile);
-        if (empty(trim($content)) || json_decode($content, true) === null) {
-            // Hacer backup del archivo corrupto antes de reparar
-            $backupFile = $this->loginAttemptsFile . '.backup.' . time();
-            copy($this->loginAttemptsFile, $backupFile);
-            
-            // Recrear el archivo
-            $this->saveLoginAttempts([]);
-            error_log("Archivo login_attempts.json reparado. Backup guardado en: $backupFile");
-            return true;
-        }
-
-        return false; // No necesitaba reparación
-    }
-
-    /**
-     * Cambiar contraseña (para futuras implementaciones)
-     */
     public function changePassword($currentPassword, $newPassword)
     {
         if (!$this->isAuthenticated()) {
@@ -346,7 +318,7 @@ class UserModel extends Model
         $user = $this->getCurrentUser();
         $userData = $this->findUser($user['username']);
 
-        if (!password_verify($currentPassword, $userData['password'])) {
+        if (!$userData || !password_verify($currentPassword, $userData['PasswordHash'])) {
             $this->errors['password'][] = 'Contraseña actual incorrecta';
             return false;
         }
@@ -356,10 +328,15 @@ class UserModel extends Model
             return false;
         }
 
-        // En producción, actualizar en base de datos
-        // Por ahora solo logueamos el cambio
+        $hash = password_hash($newPassword, PASSWORD_BCRYPT);
+
+        $this->db->update('Users', [
+            'PasswordHash' => $hash,
+            'UpdatedAt' => date('Y-m-d H:i:s'),
+        ], 'Id = ?', [$userData['Id']]);
+
         $this->log("Usuario {$user['username']} cambió su contraseña", 'info');
-        
+
         return true;
     }
 }
