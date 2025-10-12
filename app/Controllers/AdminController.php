@@ -184,6 +184,106 @@ class AdminController extends Controller
                     ],
                     [
                         'method' => 'POST',
+                        'path' => '/api/customers/desktop/pull',
+                        'description' => 'Descarga los registros sincronizables del cliente indicado agrupados por bulk.',
+                        'requestExample' => [
+                            'customerApiId' => 'CLUB-001',
+                        ],
+                        'responseExample' => [
+                            'customerApiId' => 'CLUB-001',
+                            'bulks' => [
+                                'users' => [
+                                    [
+                                        'UserId' => 1,
+                                        'Fullname' => 'Juan Pérez',
+                                        'PhoneNumber' => '555-000-1234',
+                                        'CustomerApiId' => 'CLUB-001',
+                                        'Uuid' => 'a1111111-2222-3333-4444-555555555555',
+                                    ],
+                                ],
+                                'subscriptions' => [],
+                                'attendances' => [],
+                                'administrators' => [],
+                                'sendEmailsAdmin' => [],
+                                'historyOperations' => [],
+                                'infoMySubscription' => [],
+                                'whatsapp' => [],
+                                'appSettings' => [],
+                                'sentMessages' => [],
+                            ],
+                        ],
+                        'notes' => [
+                            'customerApiId es obligatorio y debe existir en la base de datos.',
+                            'Cada bulk se entrega como un arreglo independiente; si no hay datos, el arreglo se devuelve vacío.',
+                        ],
+                    ],
+                    [
+                        'method' => 'POST',
+                        'path' => '/api/customers/desktop/push',
+                        'description' => 'Recibe cambios por bulk (insert/update) y responde el estatus por UUID.',
+                        'requestExample' => [
+                            'customerApiId' => 'CLUB-001',
+                            'bulks' => [
+                                'users' => [
+                                    [
+                                        'UserId' => 1,
+                                        'Fullname' => 'Juan Pérez',
+                                        'PhoneNumber' => '555-000-1234',
+                                        'Removed' => 0,
+                                        'Uuid' => 'a1111111-2222-3333-4444-555555555555',
+                                    ],
+                                ],
+                                'subscriptions' => [],
+                                'attendances' => [],
+                                'administrators' => [],
+                                'sendEmailsAdmin' => [],
+                                'historyOperations' => [],
+                                'infoMySubscription' => [],
+                                'whatsapp' => [],
+                                'appSettings' => [
+                                    [
+                                        'SettingId' => 1,
+                                        'EnableLimitNotifications' => 1,
+                                        'LimitDays' => 3,
+                                        'Uuid' => 'f4444444-5555-6666-7777-888888888888',
+                                    ],
+                                ],
+                                'sentMessages' => [],
+                            ],
+                        ],
+                        'responseExample' => [
+                            'customerApiId' => 'CLUB-001',
+                            'bulks' => [
+                                'users' => [
+                                    [
+                                        'uuid' => 'a1111111-2222-3333-4444-555555555555',
+                                        'success' => true,
+                                    ],
+                                ],
+                                'appSettings' => [
+                                    [
+                                        'uuid' => 'f4444444-5555-6666-7777-888888888888',
+                                        'success' => true,
+                                    ],
+                                ],
+                                'subscriptions' => [],
+                                'attendances' => [],
+                                'administrators' => [],
+                                'sendEmailsAdmin' => [],
+                                'historyOperations' => [],
+                                'infoMySubscription' => [],
+                                'whatsapp' => [],
+                                'sentMessages' => [],
+                            ],
+                        ],
+                        'notes' => [
+                            'Cada registro debe incluir su UUID; si ya existe se actualiza, de lo contrario se inserta.',
+                            'Si ocurre un error en un registro individual, el proceso continúa y ese UUID se marca con success=false.',
+                            'Los bulks deben enviarse como arreglos, incluso si están vacíos.',
+                        ],
+                    ],
+                    [
+                        'method' => 'POST',
                         'path' => '/api/customers/save',
                         'description' => 'Crea o actualiza atributos de un cliente.',
                         'requestExample' => [

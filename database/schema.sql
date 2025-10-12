@@ -201,6 +201,188 @@ CREATE TABLE IF NOT EXISTS `AppVersions` (
   UNIQUE KEY `uk_AppVersions_Name` (`Name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ------------------------------------------------------------
+-- Table copies migrated from legacy SQLite schema
+-- ------------------------------------------------------------
+
+-- ------------------------------------------------------------
+-- Table copies migrated from legacy SQLite schema
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `usersdesktop` (
+  `UserId` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `Fullname` VARCHAR(160) NOT NULL,
+  `PhoneNumber` VARCHAR(40) NOT NULL,
+  `PhoneNumberEmergency` VARCHAR(40) NULL,
+  `Gender` VARCHAR(20) NULL,
+  `FingerPrint` LONGBLOB NULL,
+  `BirthDate` DATE NOT NULL,
+  `Code` VARCHAR(60) NULL,
+  `Removed` TINYINT(1) NOT NULL DEFAULT 0,
+  `CustomerApiId` VARCHAR(64) NULL,
+  `Uuid` CHAR(36) NOT NULL DEFAULT (UUID()),
+  PRIMARY KEY (`UserId`),
+  UNIQUE KEY `uk_users_uuid` (`Uuid`),
+  KEY `idx_users_customer_api` (`CustomerApiId`),
+  CONSTRAINT `fk_users_customer_api` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `subscriptionsdesktop` (
+  `SubscriptionId` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `StartDate` DATETIME NOT NULL,
+  `EndingDate` DATETIME NOT NULL,
+  `Removed` TINYINT(1) NOT NULL DEFAULT 0,
+  `UserId` BIGINT UNSIGNED NOT NULL,
+  `Sync` TINYINT(1) NOT NULL DEFAULT 0,
+  `Payment` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  `Warning` TINYINT(1) NOT NULL DEFAULT 0,
+  `Finished` TINYINT(1) NOT NULL DEFAULT 0,
+  `Registered` TINYINT(1) NOT NULL DEFAULT 0,
+  `CustomerApiId` VARCHAR(64) NULL,
+  `Uuid` CHAR(36) NOT NULL DEFAULT (UUID()),
+  PRIMARY KEY (`SubscriptionId`),
+  KEY `idx_subscriptions_user` (`UserId`),
+  UNIQUE KEY `uk_subscriptions_uuid` (`Uuid`),
+  KEY `idx_subscriptions_customer_api` (`CustomerApiId`),
+  CONSTRAINT `fk_subscriptions_user` FOREIGN KEY (`UserId`) REFERENCES `usersdesktop`(`UserId`) ON DELETE CASCADE,
+  CONSTRAINT `fk_subscriptions_customer_api` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `attendancesdesktop` (
+  `AttendanceId` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `CheckIn` DATETIME NOT NULL,
+  `Removed` TINYINT(1) NOT NULL DEFAULT 0,
+  `UserId` BIGINT UNSIGNED NOT NULL,
+  `Active` TINYINT(1) NOT NULL,
+  `CustomerApiId` VARCHAR(64) NULL,
+  `Uuid` CHAR(36) NOT NULL DEFAULT (UUID()),
+  PRIMARY KEY (`AttendanceId`),
+  KEY `idx_attendances_user` (`UserId`),
+  UNIQUE KEY `uk_attendances_uuid` (`Uuid`),
+  KEY `idx_attendances_customer_api` (`CustomerApiId`),
+  CONSTRAINT `fk_attendances_user` FOREIGN KEY (`UserId`) REFERENCES `usersdesktop`(`UserId`) ON DELETE CASCADE,
+  CONSTRAINT `fk_attendances_customer_api` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `administratorsdesktop` (
+  `AdminId` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `Username` VARCHAR(80) NOT NULL,
+  `Password` VARCHAR(255) NOT NULL,
+  `Email` VARCHAR(160) NOT NULL DEFAULT '',
+  `PhoneNumber` VARCHAR(40) NOT NULL DEFAULT '',
+  `FingerPrint` LONGBLOB NULL,
+  `Manager` TINYINT(1) NOT NULL DEFAULT 0,
+  `Removed` TINYINT(1) NOT NULL DEFAULT 0,
+  `EmailConfirmed` TINYINT(1) NOT NULL DEFAULT 0,
+  `EmailConfirmedOn` DATETIME NULL,
+  `CustomerApiId` VARCHAR(64) NULL,
+  `Uuid` CHAR(36) NOT NULL DEFAULT (UUID()),
+  PRIMARY KEY (`AdminId`),
+  UNIQUE KEY `uk_administrators_username` (`Username`),
+  UNIQUE KEY `uk_administrators_uuid` (`Uuid`),
+  KEY `idx_administrators_customer_api` (`CustomerApiId`),
+  CONSTRAINT `fk_administrators_customer_api` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `sendemailsadmindesktop` (
+  `SendId` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `AdminId` BIGINT UNSIGNED NOT NULL,
+  `Email` VARCHAR(160) NOT NULL,
+  `Code` VARCHAR(64) NOT NULL,
+  `Type` TINYINT(1) NOT NULL,
+  `SendOn` DATETIME NOT NULL,
+  `ExpiresOn` DATETIME NULL,
+  `Confirmed` TINYINT(1) NOT NULL DEFAULT 0,
+  `ConfirmedOn` DATETIME NULL,
+  `CustomerApiId` VARCHAR(64) NULL,
+  `Uuid` CHAR(36) NOT NULL DEFAULT (UUID()),
+  PRIMARY KEY (`SendId`),
+  KEY `idx_send_emails_admin_admin` (`AdminId`),
+  UNIQUE KEY `uk_send_emails_admin_uuid` (`Uuid`),
+  KEY `idx_send_emails_admin_customer_api` (`CustomerApiId`),
+  CONSTRAINT `fk_send_emails_admin_admin` FOREIGN KEY (`AdminId`) REFERENCES `administratorsdesktop`(`AdminId`) ON DELETE CASCADE,
+  CONSTRAINT `fk_send_emails_admin_customer_api` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `historyoperationsdesktop` (
+  `HistoryId` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `Operation` VARCHAR(160) NOT NULL,
+  `DatetimeOperation` DATETIME NOT NULL,
+  `Removed` TINYINT(1) NOT NULL DEFAULT 0,
+  `AdminId` BIGINT UNSIGNED NOT NULL,
+  `CustomerApiId` VARCHAR(64) NULL,
+  `Uuid` CHAR(36) NOT NULL DEFAULT (UUID()),
+  PRIMARY KEY (`HistoryId`),
+  KEY `idx_history_operations_admin` (`AdminId`),
+  UNIQUE KEY `uk_history_operations_uuid` (`Uuid`),
+  KEY `idx_history_operations_customer_api` (`CustomerApiId`),
+  CONSTRAINT `fk_history_operations_admin` FOREIGN KEY (`AdminId`) REFERENCES `administratorsdesktop`(`AdminId`) ON DELETE CASCADE,
+  CONSTRAINT `fk_history_operations_customer_api` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `infomysubscriptiondesktop` (
+  `CustomerId` VARCHAR(64) NULL,
+  `CustomerApiId` VARCHAR(64) NULL,
+  `SubscriptionId` VARCHAR(64) NULL,
+  `Token` VARCHAR(255) NULL,
+  `Trial` TINYINT(1) NOT NULL DEFAULT 0,
+  `UrlWhatsapp` VARCHAR(255) NOT NULL DEFAULT '',
+  `TokenWhatsapp` VARCHAR(255) NOT NULL DEFAULT '',
+  `Uuid` CHAR(36) NOT NULL DEFAULT (UUID()),
+  UNIQUE KEY `uk_info_my_subscription_uuid` (`Uuid`),
+  KEY `idx_info_my_subscription_customer_api` (`CustomerApiId`),
+  CONSTRAINT `fk_info_my_subscription_customer_api` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `whatsappdesktop` (
+  `WhatsAppId` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `SubscriptionId` BIGINT UNSIGNED NOT NULL,
+  `Warning` TINYINT(1) NOT NULL DEFAULT 0,
+  `Finalized` TINYINT(1) NOT NULL DEFAULT 0,
+  `CustomerApiId` VARCHAR(64) NULL,
+  `Uuid` CHAR(36) NOT NULL DEFAULT (UUID()),
+  PRIMARY KEY (`WhatsAppId`),
+  KEY `idx_whatsapp_subscription` (`SubscriptionId`),
+  UNIQUE KEY `uk_whatsapp_uuid` (`Uuid`),
+  KEY `idx_whatsapp_customer_api` (`CustomerApiId`),
+  CONSTRAINT `fk_whatsapp_subscription` FOREIGN KEY (`SubscriptionId`) REFERENCES `subscriptionsdesktop`(`SubscriptionId`) ON DELETE CASCADE,
+  CONSTRAINT `fk_whatsapp_customer_api` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `appsettingsdesktop` (
+  `SettingId` INT UNSIGNED NOT NULL,
+  `EnableLimitNotifications` TINYINT(1) NOT NULL DEFAULT 1,
+  `LimitDays` INT NOT NULL DEFAULT 3,
+  `EnablePostExpirationNotifications` TINYINT(1) NOT NULL DEFAULT 1,
+  `MessageTemplate` VARCHAR(1000) NOT NULL DEFAULT '',
+  `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `UpdatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `CustomerApiId` VARCHAR(64) NULL,
+  `Uuid` CHAR(36) NOT NULL DEFAULT (UUID()),
+  PRIMARY KEY (`SettingId`),
+  UNIQUE KEY `uk_app_settings_uuid` (`Uuid`),
+  KEY `idx_app_settings_customer_api` (`CustomerApiId`),
+  CONSTRAINT `fk_app_settings_customer_api` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `sentmessagesdesktop` (
+  `SentMessageId` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `UserId` BIGINT UNSIGNED NULL,
+  `PhoneNumber` VARCHAR(40) NULL,
+  `Message` VARCHAR(500) NOT NULL,
+  `SentDay` DATE NOT NULL,
+  `SentHour` TIME NOT NULL,
+  `Successful` TINYINT(1) NOT NULL DEFAULT 0,
+  `ErrorMessage` VARCHAR(255) NULL,
+  `CustomerApiId` VARCHAR(64) NULL,
+  `Uuid` CHAR(36) NOT NULL DEFAULT (UUID()),
+  PRIMARY KEY (`SentMessageId`),
+  KEY `idx_sent_messages_user` (`UserId`),
+  UNIQUE KEY `uk_sent_messages_uuid` (`Uuid`),
+  KEY `idx_sent_messages_customer_api` (`CustomerApiId`),
+  CONSTRAINT `fk_sent_messages_user` FOREIGN KEY (`UserId`) REFERENCES `usersdesktop`(`UserId`) ON DELETE SET NULL,
+  CONSTRAINT `fk_sent_messages_customer_api` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Optional: seed base permissions, roles, and default users
 INSERT INTO `Roles` (`Name`, `DisplayName`, `Description`) VALUES
   ('administrator', 'Administrador', 'Acceso total al panel administrativo'),

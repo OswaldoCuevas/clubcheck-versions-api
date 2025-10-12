@@ -5,16 +5,37 @@ namespace Controllers;
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Models/CustomerSessionModel.php';
 require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
+require_once __DIR__ . '/../Models/UsersDesktopModel.php';
+require_once __DIR__ . '/../Models/SubscriptionsDesktopModel.php';
+require_once __DIR__ . '/../Models/AttendancesDesktopModel.php';
+require_once __DIR__ . '/../Models/AdministratorsDesktopModel.php';
+require_once __DIR__ . '/../Models/SendEmailsAdminDesktopModel.php';
+require_once __DIR__ . '/../Models/HistoryOperationsDesktopModel.php';
+require_once __DIR__ . '/../Models/InfoMySubscriptionDesktopModel.php';
+require_once __DIR__ . '/../Models/WhatsAppDesktopModel.php';
+require_once __DIR__ . '/../Models/AppSettingsDesktopModel.php';
+require_once __DIR__ . '/../Models/SentMessagesDesktopModel.php';
 
 use Core\Controller;
 use Models\CustomerRegistryModel;
 use Models\CustomerSessionModel;
+use Models\UsersDesktopModel;
+use Models\SubscriptionsDesktopModel;
+use Models\AttendancesDesktopModel;
+use Models\AdministratorsDesktopModel;
+use Models\SendEmailsAdminDesktopModel;
+use Models\HistoryOperationsDesktopModel;
+use Models\InfoMySubscriptionDesktopModel;
+use Models\WhatsAppDesktopModel;
+use Models\AppSettingsDesktopModel;
+use Models\SentMessagesDesktopModel;
 
 class CustomersController extends Controller
 {
     private CustomerSessionModel $sessionModel;
     private CustomerRegistryModel $customerRegistry;
     private array $sessionConfig;
+    private array $desktopModels;
 
     public function __construct()
     {
@@ -27,6 +48,23 @@ class CustomersController extends Controller
             'heartbeat_interval' => 60,
             'grace_period' => 180,
             'max_metadata_size' => 2048,
+        ];
+        $this->desktopModels = $this->createDesktopModels();
+    }
+
+    private function createDesktopModels(): array
+    {
+        return [
+            'users' => new UsersDesktopModel(),
+            'subscriptions' => new SubscriptionsDesktopModel(),
+            'attendances' => new AttendancesDesktopModel(),
+            'administrators' => new AdministratorsDesktopModel(),
+            'sendEmailsAdmin' => new SendEmailsAdminDesktopModel(),
+            'historyOperations' => new HistoryOperationsDesktopModel(),
+            'infoMySubscription' => new InfoMySubscriptionDesktopModel(),
+            'whatsapp' => new WhatsAppDesktopModel(),
+            'appSettings' => new AppSettingsDesktopModel(),
+            'sentMessages' => new SentMessagesDesktopModel(),
         ];
     }
 
@@ -381,6 +419,92 @@ class CustomersController extends Controller
 
         $this->respond([
             'customer' => $customer,
+        ]);
+    }
+
+    public function pullDesktop()
+    {
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->respond(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->respond(['error' => 'Método no permitido'], 405);
+        }
+
+        $payload = $this->getJsonBody();
+        $customerApiId = isset($payload['customerApiId']) ? trim((string) $payload['customerApiId']) : '';
+
+        if ($customerApiId === '' && isset($payload['customerIdApi'])) {
+            $customerApiId = trim((string) $payload['customerIdApi']);
+        }
+
+        if ($customerApiId === '') {
+            $this->respond([
+                'error' => 'El campo customerApiId es obligatorio'
+            ], 422);
+        }
+
+        $bulks = [];
+
+        foreach ($this->desktopModels as $bulk => $model) {
+            $bulks[$bulk] = $model->pull($customerApiId);
+        }
+
+        $this->respond([
+            'customerApiId' => $customerApiId,
+            'bulks' => $bulks,
+        ]);
+    }
+
+    public function pushDesktop()
+    {
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->respond(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->respond(['error' => 'Método no permitido'], 405);
+        }
+
+        $payload = $this->getJsonBody();
+        $customerApiId = isset($payload['customerApiId']) ? trim((string) $payload['customerApiId']) : '';
+
+        if ($customerApiId === '' && isset($payload['customerIdApi'])) {
+            $customerApiId = trim((string) $payload['customerIdApi']);
+        }
+
+        if ($customerApiId === '') {
+            $this->respond([
+                'error' => 'El campo customerApiId es obligatorio'
+            ], 422);
+        }
+
+        $bulksPayload = $payload['bulks'] ?? $payload['data'] ?? null;
+
+        if ($bulksPayload === null || !is_array($bulksPayload)) {
+            $this->respond([
+                'error' => 'Debes enviar el objeto bulks con la información a sincronizar'
+            ], 422);
+        }
+
+        $results = [];
+
+        foreach ($this->desktopModels as $bulk => $model) {
+            $records = $bulksPayload[$bulk] ?? [];
+
+            if (!is_array($records)) {
+                $this->respond([
+                    'error' => sprintf('El bulk %s debe ser un arreglo de registros', $bulk)
+                ], 422);
+            }
+
+            $results[$bulk] = $model->push($customerApiId, $records);
+        }
+
+        $this->respond([
+            'customerApiId' => $customerApiId,
+            'bulks' => $results,
         ]);
     }
 

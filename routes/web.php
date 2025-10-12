@@ -32,6 +32,8 @@ $router->any('/api/customers/:customerId', 'CustomersController', 'getCustomer')
 $router->any('/api/customers/token', 'CustomersController', 'customerToken');
 $router->any('/api/customers/token/register', 'CustomersController', 'registerToken');
 $router->any('/api/customers/token/await', 'CustomersController', 'awaitToken');
+$router->any('/api/customers/desktop/pull', 'CustomersController', 'pullDesktop');
+$router->any('/api/customers/desktop/push', 'CustomersController', 'pushDesktop');
 
 // Rutas administrativas
 $router->any('/admin', 'AdminController', 'index');
