@@ -7,9 +7,9 @@ require_once __DIR__ . '/BaseDesktopSyncModel.php';
 class AppSettingsDesktopModel extends BaseDesktopSyncModel
 {
     protected string $table = 'appsettingsdesktop';
-    protected string $primaryKey = 'SettingId';
+    protected string $primaryKey = 'Id';
     protected array $columns = [
-        'SettingId',
+        'Id',
         'EnableLimitNotifications',
         'LimitDays',
         'EnablePostExpirationNotifications',
@@ -19,8 +19,17 @@ class AppSettingsDesktopModel extends BaseDesktopSyncModel
         'CustomerApiId',
         'Uuid',
     ];
-    protected array $nullableColumns = ['CustomerApiId'];
+    protected array $nullableColumns = [
+        'EnableLimitNotifications',
+        'LimitDays',
+        'EnablePostExpirationNotifications',
+        'MessageTemplate',
+        'CreatedAt',
+        'UpdatedAt',
+        'CustomerApiId',
+        'Uuid',
+    ];
     protected array $booleanColumns = ['EnableLimitNotifications', 'EnablePostExpirationNotifications'];
     protected bool $autoIncrement = false;
-    protected ?string $orderBy = 'SettingId';
+    protected ?string $orderBy = 'Id';
 }

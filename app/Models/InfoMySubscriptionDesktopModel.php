@@ -7,8 +7,10 @@ require_once __DIR__ . '/BaseDesktopSyncModel.php';
 class InfoMySubscriptionDesktopModel extends BaseDesktopSyncModel
 {
     protected string $table = 'infomysubscriptiondesktop';
-    protected string $primaryKey = 'Uuid';
+    protected string $primaryKey = 'Id';
+    protected bool $autoIncrement = false;
     protected array $columns = [
+        'Id',
         'CustomerId',
         'CustomerApiId',
         'SubscriptionId',
@@ -16,17 +18,16 @@ class InfoMySubscriptionDesktopModel extends BaseDesktopSyncModel
         'Trial',
         'UrlWhatsapp',
         'TokenWhatsapp',
-        'Uuid',
     ];
     protected array $nullableColumns = [
         'CustomerId',
         'CustomerApiId',
         'SubscriptionId',
         'Token',
+        'Trial',
         'UrlWhatsapp',
         'TokenWhatsapp',
     ];
     protected array $booleanColumns = ['Trial'];
-    protected bool $autoIncrement = false;
-    protected ?string $orderBy = 'Uuid';
+    protected ?string $orderBy = 'Id';
 }

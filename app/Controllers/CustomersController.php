@@ -15,6 +15,16 @@ require_once __DIR__ . '/../Models/InfoMySubscriptionDesktopModel.php';
 require_once __DIR__ . '/../Models/WhatsAppDesktopModel.php';
 require_once __DIR__ . '/../Models/AppSettingsDesktopModel.php';
 require_once __DIR__ . '/../Models/SentMessagesDesktopModel.php';
+require_once __DIR__ . '/../Models/ProductDesktopModel.php';
+require_once __DIR__ . '/../Models/ProductPriceDesktopModel.php';
+require_once __DIR__ . '/../Models/ProductStockDesktopModel.php';
+require_once __DIR__ . '/../Models/CashRegisterDesktopModel.php';
+require_once __DIR__ . '/../Models/SaleTicketDesktopModel.php';
+require_once __DIR__ . '/../Models/SaleTicketItemDesktopModel.php';
+require_once __DIR__ . '/../Models/SubscriptionPeriodDesktopModel.php';
+require_once __DIR__ . '/../Models/SyncStatusDesktopModel.php';
+require_once __DIR__ . '/../Models/MigrationsDesktopModel.php';
+require_once __DIR__ . '/../Models/BarcodeLookupCacheDesktopModel.php';
 
 use Core\Controller;
 use Models\CustomerRegistryModel;
@@ -29,6 +39,16 @@ use Models\InfoMySubscriptionDesktopModel;
 use Models\WhatsAppDesktopModel;
 use Models\AppSettingsDesktopModel;
 use Models\SentMessagesDesktopModel;
+use Models\ProductDesktopModel;
+use Models\ProductPriceDesktopModel;
+use Models\ProductStockDesktopModel;
+use Models\CashRegisterDesktopModel;
+use Models\SaleTicketDesktopModel;
+use Models\SaleTicketItemDesktopModel;
+use Models\SubscriptionPeriodDesktopModel;
+use Models\SyncStatusDesktopModel;
+use Models\MigrationsDesktopModel;
+use Models\BarcodeLookupCacheDesktopModel;
 
 class CustomersController extends Controller
 {
@@ -65,6 +85,16 @@ class CustomersController extends Controller
             'whatsapp' => new WhatsAppDesktopModel(),
             'appSettings' => new AppSettingsDesktopModel(),
             'sentMessages' => new SentMessagesDesktopModel(),
+            'products' => new ProductDesktopModel(),
+            'productPrices' => new ProductPriceDesktopModel(),
+            'productStock' => new ProductStockDesktopModel(),
+            'cashRegisters' => new CashRegisterDesktopModel(),
+            'saleTickets' => new SaleTicketDesktopModel(),
+            'saleTicketItems' => new SaleTicketItemDesktopModel(),
+            'subscriptionPeriods' => new SubscriptionPeriodDesktopModel(),
+            'syncStatus' => new SyncStatusDesktopModel(),
+            'migrations' => new MigrationsDesktopModel(),
+            'barcodeLookupCache' => new BarcodeLookupCacheDesktopModel(),
         ];
     }
 
@@ -208,6 +238,36 @@ class CustomersController extends Controller
             'acceptedAt' => $acceptedAt,
             'userAgent' => $userAgent,
         ];
+    }
+
+    private function normalizeSyncFlag($value, string $field): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_int($value)) {
+            if ($value === 0 || $value === 1) {
+                return (bool) $value;
+            }
+        }
+
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+            if (in_array($normalized, ['1', 'true', 'yes', 'on'], true)) {
+                return true;
+            }
+
+            if (in_array($normalized, ['0', 'false', 'no', 'off'], true)) {
+                return false;
+            }
+        }
+
+        $this->respond([
+            'error' => sprintf('El campo %s debe ser booleano (true/false, 1/0)', $field)
+        ], 422);
+
+        return false;
     }
 
     public function startSession()
@@ -445,10 +505,33 @@ class CustomersController extends Controller
             ], 422);
         }
 
+        $includeRemoved = false;
+        if (array_key_exists('includeRemoved', $payload)) {
+            $includeRemoved = $this->normalizeSyncFlag($payload['includeRemoved'], 'includeRemoved');
+        }
+
+        $includeRemovedByBulk = [];
+        if (array_key_exists('includeRemovedByBulk', $payload)) {
+            $bulkFlags = $payload['includeRemovedByBulk'];
+            if (!is_array($bulkFlags)) {
+                $this->respond([
+                    'error' => 'El campo includeRemovedByBulk debe ser un objeto con banderas por bulk'
+                ], 422);
+            }
+
+            foreach ($bulkFlags as $bulkName => $flagValue) {
+                $includeRemovedByBulk[$bulkName] = $this->normalizeSyncFlag(
+                    $flagValue,
+                    sprintf('includeRemovedByBulk.%s', $bulkName)
+                );
+            }
+        }
+
         $bulks = [];
 
         foreach ($this->desktopModels as $bulk => $model) {
-            $bulks[$bulk] = $model->pull($customerApiId);
+            $includeFlag = $includeRemovedByBulk[$bulk] ?? $includeRemoved;
+            $bulks[$bulk] = $model->pull($customerApiId, $includeFlag);
         }
 
         $this->respond([

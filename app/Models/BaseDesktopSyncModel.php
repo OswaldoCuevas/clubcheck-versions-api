@@ -15,13 +15,14 @@ abstract class BaseDesktopSyncModel extends Model
     protected array $booleanColumns = [];
     protected bool $autoIncrement = true;
     protected ?string $orderBy = null;
+    protected ?string $softDeleteColumn = null;
 
     protected function initialize()
     {
         // No se requiere inicialización adicional.
     }
 
-    public function pull(string $customerApiId): array
+    public function pull(string $customerApiId, bool $includeRemoved = false): array
     {
         $customerApiId = trim($customerApiId);
 
@@ -29,10 +30,23 @@ abstract class BaseDesktopSyncModel extends Model
             return [];
         }
 
-        $orderColumn = $this->orderBy ?? $this->primaryKey ?? 'Uuid';
-        $sql = sprintf('SELECT * FROM %s WHERE CustomerApiId = ? ORDER BY %s ASC', $this->table, $orderColumn);
+        $orderColumn = $this->orderBy ?? $this->primaryKey;
 
-        return $this->db->fetchAll($sql, [$customerApiId]);
+        $conditions = ['CustomerApiId = ?'];
+        $params = [$customerApiId];
+
+        if ($this->shouldFilterSoftDeleted($includeRemoved)) {
+            $conditions[] = sprintf('%s = 0', $this->softDeleteColumn);
+        }
+
+        $sql = sprintf(
+            'SELECT * FROM %s WHERE %s ORDER BY %s ASC',
+            $this->table,
+            implode(' AND ', $conditions),
+            $orderColumn
+        );
+
+    return $this->db->fetchAll($sql, $params);
     }
 
     public function push(string $customerApiId, array $records): array
@@ -41,23 +55,23 @@ abstract class BaseDesktopSyncModel extends Model
         $results = [];
 
         foreach ($records as $record) {
-            $uuid = $this->normalizeUuid($record['Uuid'] ?? null);
+            $primaryValue = $this->normalizePrimaryKey($record[$this->primaryKey] ?? null);
             $result = [
-                'uuid' => $uuid,
+                'id' => $primaryValue,
                 'success' => false,
             ];
 
-            if ($customerApiId === '' || $uuid === null) {
+            if ($customerApiId === '' || $primaryValue === null) {
                 $results[] = $result;
                 continue;
             }
 
             try {
-                if ($this->recordExists($uuid)) {
+                if ($this->recordExists($primaryValue)) {
                     $updateData = $this->prepareUpdate($record, $customerApiId);
 
                     if (!empty($updateData)) {
-                        $this->db->update($this->table, $updateData, 'Uuid = ?', [$uuid]);
+                        $this->db->update($this->table, $updateData, sprintf('%s = ?', $this->primaryKey), [$primaryValue]);
                     }
                 } else {
                     $insertData = $this->prepareInsert($record, $customerApiId);
@@ -75,11 +89,11 @@ abstract class BaseDesktopSyncModel extends Model
         return $results;
     }
 
-    protected function recordExists(string $uuid): bool
+    protected function recordExists(string $primaryValue): bool
     {
         $row = $this->db->fetchOne(
-            sprintf('SELECT %s FROM %s WHERE Uuid = ? LIMIT 1', $this->primaryKey, $this->table),
-            [$uuid]
+            sprintf('SELECT %s FROM %s WHERE %s = ? LIMIT 1', $this->primaryKey, $this->table, $this->primaryKey),
+            [$primaryValue]
         );
 
         return $row !== null;
@@ -88,10 +102,6 @@ abstract class BaseDesktopSyncModel extends Model
     protected function prepareInsert(array $record, string $customerApiId): array
     {
         $data = $this->filterColumns($record, $customerApiId, true);
-
-        if (!isset($data['Uuid']) && isset($record['Uuid'])) {
-            $data['Uuid'] = $this->normalizeUuid($record['Uuid']);
-        }
 
         if ($this->autoIncrement
             && isset($data[$this->primaryKey])
@@ -107,7 +117,6 @@ abstract class BaseDesktopSyncModel extends Model
         $data = $this->filterColumns($record, $customerApiId, false);
 
         unset($data[$this->primaryKey]);
-        unset($data['Uuid']);
 
         return $data;
     }
@@ -141,6 +150,15 @@ abstract class BaseDesktopSyncModel extends Model
             $filtered['CustomerApiId'] = $customerApiId;
         }
 
+        if (
+            $forInsert
+            && $this->softDeleteColumn !== null
+            && in_array($this->softDeleteColumn, $this->columns, true)
+            && !array_key_exists($this->softDeleteColumn, $filtered)
+        ) {
+            $filtered[$this->softDeleteColumn] = 0;
+        }
+
         return $filtered;
     }
 
@@ -172,19 +190,32 @@ abstract class BaseDesktopSyncModel extends Model
         return $value;
     }
 
-    protected function normalizeUuid($uuid): ?string
+    protected function normalizePrimaryKey($value): ?string
     {
-        if ($uuid === null) {
+        if ($value === null) {
             return null;
         }
 
-        $uuid = trim((string) $uuid);
+        $normalized = trim((string) $value);
 
-        return $uuid === '' ? null : $uuid;
+        return $normalized === '' ? null : $normalized;
     }
 
     protected function isNullable(string $column): bool
     {
         return in_array($column, $this->nullableColumns, true);
+    }
+
+    protected function shouldFilterSoftDeleted(bool $includeRemoved): bool
+    {
+        if ($this->softDeleteColumn === null) {
+            return false;
+        }
+
+        if ($includeRemoved) {
+            return false;
+        }
+
+        return in_array($this->softDeleteColumn, $this->columns, true);
     }
 }

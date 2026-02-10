@@ -7,17 +7,24 @@ require_once __DIR__ . '/BaseDesktopSyncModel.php';
 class HistoryOperationsDesktopModel extends BaseDesktopSyncModel
 {
     protected string $table = 'historyoperationsdesktop';
-    protected string $primaryKey = 'HistoryId';
+    protected string $primaryKey = 'Id';
+    protected bool $autoIncrement = false;
     protected array $columns = [
-        'HistoryId',
+        'Id',
         'Operation',
         'DatetimeOperation',
         'Removed',
         'AdminId',
         'CustomerApiId',
-        'Uuid',
     ];
-    protected array $nullableColumns = ['CustomerApiId'];
+    protected array $nullableColumns = [
+        'Operation',
+        'DatetimeOperation',
+        'Removed',
+        'AdminId',
+        'CustomerApiId',
+    ];
     protected array $booleanColumns = ['Removed'];
+    protected ?string $softDeleteColumn = 'Removed';
     protected ?string $orderBy = 'DatetimeOperation';
 }

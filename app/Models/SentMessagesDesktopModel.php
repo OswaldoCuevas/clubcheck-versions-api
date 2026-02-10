@@ -7,9 +7,10 @@ require_once __DIR__ . '/BaseDesktopSyncModel.php';
 class SentMessagesDesktopModel extends BaseDesktopSyncModel
 {
     protected string $table = 'sentmessagesdesktop';
-    protected string $primaryKey = 'SentMessageId';
+    protected string $primaryKey = 'Id';
+    protected bool $autoIncrement = false;
     protected array $columns = [
-        'SentMessageId',
+        'Id',
         'UserId',
         'PhoneNumber',
         'Message',
@@ -18,11 +19,14 @@ class SentMessagesDesktopModel extends BaseDesktopSyncModel
         'Successful',
         'ErrorMessage',
         'CustomerApiId',
-        'Uuid',
     ];
     protected array $nullableColumns = [
         'UserId',
         'PhoneNumber',
+        'Message',
+        'SentDay',
+        'SentHour',
+        'Successful',
         'ErrorMessage',
         'CustomerApiId',
     ];

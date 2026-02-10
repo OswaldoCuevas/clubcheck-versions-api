@@ -188,17 +188,17 @@ class AdminController extends Controller
                         'description' => 'Descarga los registros sincronizables del cliente indicado agrupados por bulk.',
                         'requestExample' => [
                             'customerApiId' => 'CLUB-001',
+                            'includeRemoved' => false,
                         ],
                         'responseExample' => [
                             'customerApiId' => 'CLUB-001',
                             'bulks' => [
                                 'users' => [
                                     [
-                                        'UserId' => 1,
+                                        'Id' => '11111111-2222-3333-4444-555555555555',
                                         'Fullname' => 'Juan Pérez',
                                         'PhoneNumber' => '555-000-1234',
                                         'CustomerApiId' => 'CLUB-001',
-                                        'Uuid' => 'a1111111-2222-3333-4444-555555555555',
                                     ],
                                 ],
                                 'subscriptions' => [],
@@ -210,11 +210,23 @@ class AdminController extends Controller
                                 'whatsapp' => [],
                                 'appSettings' => [],
                                 'sentMessages' => [],
+                                'products' => [],
+                                'productPrices' => [],
+                                'productStock' => [],
+                                'cashRegisters' => [],
+                                'saleTickets' => [],
+                                'saleTicketItems' => [],
+                                'subscriptionPeriods' => [],
+                                'syncStatus' => [],
+                                'migrations' => [],
+                                'barcodeLookupCache' => [],
                             ],
                         ],
                         'notes' => [
                             'customerApiId es obligatorio y debe existir en la base de datos.',
                             'Cada bulk se entrega como un arreglo independiente; si no hay datos, el arreglo se devuelve vacío.',
+                            'Por defecto solo se devuelven registros con Removed = 0; puedes enviar includeRemoved=true para todos los bulks o includeRemovedByBulk con banderas individuales para obtener también los removidos.',
+                            'Bulks disponibles: users, subscriptions, attendances, administrators, sendEmailsAdmin, historyOperations, infoMySubscription, whatsapp, appSettings, sentMessages, products, productPrices, productStock, cashRegisters, saleTickets, saleTicketItems, subscriptionPeriods, syncStatus, migrations, barcodeLookupCache.',
                         ],
                     ],
                     [
@@ -226,11 +238,10 @@ class AdminController extends Controller
                             'bulks' => [
                                 'users' => [
                                     [
-                                        'UserId' => 1,
+                                        'Id' => '11111111-2222-3333-4444-555555555555',
                                         'Fullname' => 'Juan Pérez',
                                         'PhoneNumber' => '555-000-1234',
                                         'Removed' => 0,
-                                        'Uuid' => 'a1111111-2222-3333-4444-555555555555',
                                     ],
                                 ],
                                 'subscriptions' => [],
@@ -242,13 +253,30 @@ class AdminController extends Controller
                                 'whatsapp' => [],
                                 'appSettings' => [
                                     [
-                                        'SettingId' => 1,
+                                        'Id' => '22222222-3333-4444-5555-666666666666',
                                         'EnableLimitNotifications' => 1,
                                         'LimitDays' => 3,
-                                        'Uuid' => 'f4444444-5555-6666-7777-888888888888',
                                     ],
                                 ],
                                 'sentMessages' => [],
+                                'products' => [
+                                    [
+                                        'Id' => '33333333-4444-5555-6666-777777777777',
+                                        'Code' => 'PROD-001',
+                                        'Name' => 'Membresía Mensual',
+                                        'Active' => 1,
+                                        'IsDeleted' => 0,
+                                    ],
+                                ],
+                                'productPrices' => [],
+                                'productStock' => [],
+                                'cashRegisters' => [],
+                                'saleTickets' => [],
+                                'saleTicketItems' => [],
+                                'subscriptionPeriods' => [],
+                                'syncStatus' => [],
+                                'migrations' => [],
+                                'barcodeLookupCache' => [],
                             ],
                         ],
                         'responseExample' => [
@@ -256,13 +284,19 @@ class AdminController extends Controller
                             'bulks' => [
                                 'users' => [
                                     [
-                                        'uuid' => 'a1111111-2222-3333-4444-555555555555',
+                                        'id' => '11111111-2222-3333-4444-555555555555',
                                         'success' => true,
                                     ],
                                 ],
                                 'appSettings' => [
                                     [
-                                        'uuid' => 'f4444444-5555-6666-7777-888888888888',
+                                        'id' => '22222222-3333-4444-5555-666666666666',
+                                        'success' => true,
+                                    ],
+                                ],
+                                'products' => [
+                                    [
+                                        'id' => '33333333-4444-5555-6666-777777777777',
                                         'success' => true,
                                     ],
                                 ],
@@ -274,12 +308,23 @@ class AdminController extends Controller
                                 'infoMySubscription' => [],
                                 'whatsapp' => [],
                                 'sentMessages' => [],
+                                'productPrices' => [],
+                                'productStock' => [],
+                                'cashRegisters' => [],
+                                'saleTickets' => [],
+                                'saleTicketItems' => [],
+                                'subscriptionPeriods' => [],
+                                'syncStatus' => [],
+                                'migrations' => [],
+                                'barcodeLookupCache' => [],
                             ],
                         ],
                         'notes' => [
                             'Cada registro debe incluir su UUID; si ya existe se actualiza, de lo contrario se inserta.',
                             'Si ocurre un error en un registro individual, el proceso continúa y ese UUID se marca con success=false.',
                             'Los bulks deben enviarse como arreglos, incluso si están vacíos.',
+                            'Los modelos con Removed o IsDeleted aceptan 0/1 o true/false para realizar borrados lógicos desde el push.',
+                            'Bulks disponibles: users, subscriptions, attendances, administrators, sendEmailsAdmin, historyOperations, infoMySubscription, whatsapp, appSettings, sentMessages, products, productPrices, productStock, cashRegisters, saleTickets, saleTicketItems, subscriptionPeriods, syncStatus, migrations, barcodeLookupCache.',
                         ],
                     ],
                     [
