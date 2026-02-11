@@ -39,6 +39,7 @@ $router->any('/api/customers/desktop/push', 'CustomersController', 'pushDesktop'
 $router->any('/admin', 'AdminController', 'index');
 $router->get('/admin/customers', 'AdminController', 'customers');
 $router->get('/admin/api/customers', 'AdminController', 'customersJson');
+$router->post('/admin/api/customers/regenerate-access-key', 'AdminController', 'regenerateAccessKey');
 $router->get('/admin/api-docs', 'AdminController', 'apiDocs');
 
 // Rutas de herramientas

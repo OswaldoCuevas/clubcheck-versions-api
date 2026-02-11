@@ -766,4 +766,40 @@ class CustomerRegistryModel extends Model
 
         return $this->getCustomer($customerId);
     }
+
+    public function regenerateAccessKey(string $customerId): ?array
+    {
+        $customerId = $this->normaliseCustomerId($customerId);
+
+        if ($customerId === '') {
+            return null;
+        }
+
+        $row = $this->findRawCustomer($customerId);
+
+        if ($row === null) {
+            return null;
+        }
+
+        $accessKey = null;
+        $accessKeyHash = null;
+
+        do {
+            $accessKey = $this->generateAccessKey();
+            $accessKeyHash = $this->hashAccessKey($accessKey);
+        } while ($this->accessKeyHashExists($accessKeyHash));
+
+        $update = [
+            'AccessKeyHash' => $accessKeyHash,
+            'UpdatedAt' => $this->now(),
+        ];
+
+        $this->db->update('Customers', $update, 'Id = ?', [$customerId]);
+
+        return [
+            'customerId' => $customerId,
+            'accessKey' => $accessKey,
+            'customer' => $this->getCustomer($customerId),
+        ];
+    }
 }

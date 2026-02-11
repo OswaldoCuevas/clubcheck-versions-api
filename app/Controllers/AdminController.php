@@ -65,6 +65,40 @@ class AdminController extends Controller
         ]);
     }
 
+    public function regenerateAccessKey()
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
+
+        if ($customerId === '') {
+            $this->json(['error' => 'customerId es obligatorio'], 422);
+        }
+
+        $registry = new CustomerRegistryModel();
+        $result = $registry->regenerateAccessKey($customerId);
+
+        if (!$result) {
+            $this->json(['error' => 'Cliente no encontrado'], 404);
+        }
+
+        $this->json([
+            'status' => 'regenerated',
+            'customerId' => $result['customerId'],
+            'accessKey' => $result['accessKey'],
+            'customer' => $result['customer'],
+        ]);
+    }
+
     public function apiDocs()
     {
         $this->requirePermission('admin_access');

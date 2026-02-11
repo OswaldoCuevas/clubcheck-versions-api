@@ -59,6 +59,47 @@ ob_start();
     </div>
 </div>
 
+<!-- Modal: Mostrar Access Key -->
+<div class="modal fade" id="accessKeyModal" tabindex="-1" aria-labelledby="accessKeyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="accessKeyModalLabel">
+                    <i class="fas fa-key me-2"></i>Access Key Generado
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning mb-3">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>¡Importante!</strong> Guarda este Access Key ahora. No se volverá a mostrar en texto plano.
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Cliente:</label>
+                    <div id="accessKeyCustomerName" class="text-muted"></div>
+                    <small id="accessKeyCustomerId" class="text-muted"></small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Access Key:</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control font-monospace fs-5 fw-bold text-primary" id="accessKeyValue" readonly>
+                        <button class="btn btn-outline-secondary" type="button" id="copyAccessKeyBtn">
+                            <i class="fas fa-copy"></i> Copiar
+                        </button>
+                    </div>
+                </div>
+                <div class="alert alert-info mb-0">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Comparte este Access Key con el cliente para que pueda conectar su aplicación de escritorio.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Entendido</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal: Crear/Editar cliente -->
 <div class="modal fade" id="customerModal" tabindex="-1" aria-labelledby="customerModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -121,6 +162,7 @@ $endpointsJson = json_encode([
     'save' => app_url('/api/customers/save'),
     'await' => app_url('/api/customers/token/await'),
     'register' => app_url('/api/customers/token/register'),
+    'regenerateAccessKey' => app_url('/admin/api/customers/regenerate-access-key'),
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
 $customStyles = <<<CSS
@@ -167,6 +209,13 @@ ob_start();
     const customerTokenInput = document.getElementById('customerToken');
     const customerActiveInput = document.getElementById('customerActive');
     const customerModalLabel = document.getElementById('customerModalLabel');
+
+    const accessKeyModalEl = document.getElementById('accessKeyModal');
+    const accessKeyModal = accessKeyModalEl ? new bootstrap.Modal(accessKeyModalEl) : null;
+    const accessKeyValue = document.getElementById('accessKeyValue');
+    const accessKeyCustomerName = document.getElementById('accessKeyCustomerName');
+    const accessKeyCustomerId = document.getElementById('accessKeyCustomerId');
+    const copyAccessKeyBtn = document.getElementById('copyAccessKeyBtn');
 
     function escapeHtml(value) {
         if (value === null || value === undefined) {
@@ -290,6 +339,9 @@ ob_start();
                         <div class="btn-group action-buttons" role="group">
                             <button type="button" class="btn btn-sm btn-outline-primary" data-action="edit" title="Editar cliente">
                                 <i class="fas fa-pen"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-info" data-action="regenerate-access-key" title="Generar nuevo Access Key">
+                                <i class="fas fa-key"></i>
                             </button>
                             <button type="button" class="btn btn-sm ${waiting ? 'btn-outline-secondary' : 'btn-outline-success'}" data-action="await" data-waiting="${waiting ? '0' : '1'}" title="${waiting ? 'Cancelar espera' : 'Solicitar nuevo token'}">
                                 <i class="${waiting ? 'fas fa-ban' : 'fas fa-rotate'}"></i>
@@ -455,6 +507,53 @@ ob_start();
         });
     }
 
+    async function regenerateAccessKey(customer) {
+        const confirmed = window.confirm(
+            `¿Estás seguro de generar un nuevo Access Key para ${customer.name || customer.customerId}?\n\n` +
+            'El Access Key anterior quedará inválido y el cliente deberá usar el nuevo para conectarse.'
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            const response = await fetch(endpoints.regenerateAccessKey, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ customerId: customer.customerId })
+            });
+
+            const payload = await response.json();
+
+            if (!response.ok) {
+                throw new Error(payload.error || 'No se pudo regenerar el Access Key');
+            }
+
+            if (accessKeyValue) {
+                accessKeyValue.value = payload.accessKey;
+            }
+            if (accessKeyCustomerName) {
+                accessKeyCustomerName.textContent = payload.customer.name || 'Sin nombre';
+            }
+            if (accessKeyCustomerId) {
+                accessKeyCustomerId.textContent = 'ID: ' + payload.customer.customerId;
+            }
+
+            if (accessKeyModal) {
+                accessKeyModal.show();
+            }
+
+            await fetchCustomers();
+        } catch (error) {
+            console.error(error);
+            pushAlert('danger', error.message || 'Error al regenerar el Access Key');
+        }
+    }
+
     function copyToken(token) {
         if (!token) {
             pushAlert('warning', 'No hay token para copiar');
@@ -588,6 +687,9 @@ ob_start();
                 case 'edit':
                     openEditModal(customer);
                     break;
+                case 'regenerate-access-key':
+                    regenerateAccessKey(customer);
+                    break;
                 case 'await': {
                     const waiting = button.getAttribute('data-waiting') === '1';
                     setWaitingForToken(customerId, waiting);
@@ -616,6 +718,32 @@ ob_start();
             if (customerModal) {
                 customerModal.show();
             }
+        });
+    }
+
+    if (copyAccessKeyBtn) {
+        copyAccessKeyBtn.addEventListener('click', () => {
+            const value = accessKeyValue ? accessKeyValue.value : '';
+            if (!value) {
+                return;
+            }
+
+            if (!navigator.clipboard) {
+                accessKeyValue.select();
+                document.execCommand('copy');
+                pushAlert('success', 'Access Key copiado');
+                return;
+            }
+
+            navigator.clipboard.writeText(value).then(() => {
+                pushAlert('success', 'Access Key copiado al portapapeles');
+                copyAccessKeyBtn.innerHTML = '<i class="fas fa-check"></i> Copiado';
+                setTimeout(() => {
+                    copyAccessKeyBtn.innerHTML = '<i class="fas fa-copy"></i> Copiar';
+                }, 2000);
+            }).catch(() => {
+                pushAlert('danger', 'No se pudo copiar el Access Key');
+            });
         });
     }
 
