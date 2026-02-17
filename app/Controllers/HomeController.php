@@ -90,67 +90,21 @@ class HomeController extends Controller
 
     private function processUpload()
     {
-        // Log completo de POST para debugging
-        $logFile = __DIR__ . '/../../storage/logs/app.log';
-        $timestamp = date('Y-m-d H:i:s');
-        
-        // Capturar datos RAW del POST
-        $rawPost = file_get_contents('php://input');
-        $contentType = $_SERVER['CONTENT_TYPE'] ?? 'NOT_SET';
-        $contentLength = $_SERVER['CONTENT_LENGTH'] ?? 'NOT_SET';
-        $requestMethod = $_SERVER['REQUEST_METHOD'] ?? 'NOT_SET';
-        
-        // Logs que Apache capturará
-        trigger_error("DEBUG - Request Method: $requestMethod", E_USER_WARNING);
-        trigger_error("DEBUG - Content-Type: $contentType", E_USER_WARNING);
-        trigger_error("DEBUG - Content-Length: $contentLength", E_USER_WARNING);
-        trigger_error("DEBUG - POST completo: " . json_encode($_POST), E_USER_WARNING);
-        trigger_error("DEBUG - FILES keys: " . json_encode(array_keys($_FILES)), E_USER_WARNING);
-        trigger_error("DEBUG - RAW POST length: " . strlen($rawPost), E_USER_WARNING);
-        
-        // También loguear en app.log para facilitar revisión
-        file_put_contents($logFile, "[$timestamp] [debug] Request Method: $requestMethod" . PHP_EOL, FILE_APPEND);
-        file_put_contents($logFile, "[$timestamp] [debug] Content-Type: $contentType" . PHP_EOL, FILE_APPEND);
-        file_put_contents($logFile, "[$timestamp] [debug] Content-Length: $contentLength" . PHP_EOL, FILE_APPEND);
-        file_put_contents($logFile, "[$timestamp] [debug] POST: " . json_encode($_POST) . PHP_EOL, FILE_APPEND);
-        file_put_contents($logFile, "[$timestamp] [debug] FILES keys: " . json_encode(array_keys($_FILES)) . PHP_EOL, FILE_APPEND);
-        file_put_contents($logFile, "[$timestamp] [debug] RAW POST exists: " . (strlen($rawPost) > 0 ? 'YES' : 'NO') . " Length: " . strlen($rawPost) . PHP_EOL, FILE_APPEND);
-        
         $version = trim($_POST['version'] ?? '');
         $mandatory = isset($_POST['mandatory']);
         $releaseNotes = trim($_POST['releaseNotes'] ?? '');
         
-        // Log para debugging que Apache capturará
-        trigger_error("DEBUG - Versión recibida: [$version] Longitud: " . strlen($version) . " Hex: " . bin2hex($version), E_USER_WARNING);
-        file_put_contents($logFile, "[$timestamp] [debug] Versión: [$version] Longitud: " . strlen($version) . " Hex: " . bin2hex($version) . PHP_EOL, FILE_APPEND);
-        
         // Validar versión
         if (!preg_match('/^\d+\.\d+\.\d+\.\d+$/', $version)) {
-            // Log detallado del error que Apache capturará
-            trigger_error("ERROR - Validación de versión falló. Valor: [$version] Hex: " . bin2hex($version), E_USER_WARNING);
-            file_put_contents($logFile, "[$timestamp] [error] Validación de versión falló. Valor: [$version]" . PHP_EOL, FILE_APPEND);
             return [
-                'message' => 'La versión debe tener el formato X.X.X.X (ej: 1.2.3.0). Valor recibido: "' . htmlspecialchars($version) . '"',
+                'message' => 'La versión debe tener el formato X.X.X.X (ej: 1.2.3.0)',
                 'type' => 'error'
             ];
         }
         
         if (!isset($_FILES['exeFile']) || $_FILES['exeFile']['error'] !== UPLOAD_ERR_OK) {
-            $errorCode = $_FILES['exeFile']['error'] ?? 'FILE_NOT_SET';
-            $errorMessages = [
-                UPLOAD_ERR_INI_SIZE => 'El archivo excede upload_max_filesize en php.ini',
-                UPLOAD_ERR_FORM_SIZE => 'El archivo excede MAX_FILE_SIZE en el formulario',
-                UPLOAD_ERR_PARTIAL => 'El archivo solo se subió parcialmente',
-                UPLOAD_ERR_NO_FILE => 'No se subió ningún archivo',
-                UPLOAD_ERR_NO_TMP_DIR => 'Falta el directorio temporal',
-                UPLOAD_ERR_CANT_WRITE => 'No se pudo escribir el archivo en disco',
-                UPLOAD_ERR_EXTENSION => 'Una extensión de PHP detuvo la subida'
-            ];
-            $errorMsg = $errorMessages[$errorCode] ?? "Error desconocido (código: $errorCode)";
-            trigger_error("ERROR - Subida de archivo: " . $errorMsg, E_USER_WARNING);
-            file_put_contents($logFile, "[$timestamp] [error] Subida de archivo: $errorMsg (código: $errorCode)" . PHP_EOL, FILE_APPEND);
             return [
-                'message' => 'Error al subir el archivo: ' . $errorMsg,
+                'message' => 'Error al subir el archivo',
                 'type' => 'error'
             ];
         }
@@ -180,7 +134,7 @@ class HomeController extends Controller
             
             // Crear backup del archivo anterior
             if (copy($filePath, $backupPath)) {
-                trigger_error("Backup creado para {$fileName}: " . basename($backupPath), E_USER_NOTICE);
+                error_log("Backup creado para {$fileName}: " . basename($backupPath));
             }
             
             // Eliminar archivo existente
@@ -190,7 +144,7 @@ class HomeController extends Controller
                     'type' => 'error'
                 ];
             } else {
-                trigger_error("Archivo existente eliminado: {$fileName}", E_USER_NOTICE);
+                error_log("Archivo existente eliminado: {$fileName}");
             }
         }
         
