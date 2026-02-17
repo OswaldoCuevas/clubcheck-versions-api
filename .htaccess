@@ -31,12 +31,12 @@ RewriteRule ^api/check-update/?$ public/index.php [L]
 RewriteRule ^api/download/?$ public/index.php [L]
 
 # Compatibilidad legacy (URLs antiguas redirigidas a API limpia)
-RewriteRule ^api\.php$ /clubcheck/api/version [R=301,L]
-RewriteRule ^check-update\.php$ /clubcheck/api/check-update [R=301,L]
-RewriteRule ^download\.php$ /clubcheck/api/download [R=301,L]
+RewriteRule ^api\.php$ /api/version [R=301,L]
+RewriteRule ^check-update\.php$ /api/check-update [R=301,L]
+RewriteRule ^download\.php$ /api/download [R=301,L]
 
 # Bloquear acceso directo a archivos PHP (excepto public/)
-RewriteCond %{REQUEST_URI} !^/clubcheck/public/
+RewriteCond %{REQUEST_URI} !^/public/
 RewriteCond %{REQUEST_URI} \.php$
 RewriteRule ^.*$ - [F,L]
 
