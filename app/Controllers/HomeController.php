@@ -95,9 +95,9 @@ class HomeController extends Controller
         $logFile = __DIR__ . '/../../storage/logs/app.log';
         $timestamp = date('Y-m-d H:i:s');
         
-        
-        error_log("DEBUG - POST completo: " . print_r($_POST, true));
-        error_log("DEBUG - FILES completo: " . print_r($_FILES, true));
+        // Logs que Apache capturará
+        trigger_error("DEBUG - POST completo: " . json_encode($_POST), E_USER_WARNING);
+        trigger_error("DEBUG - FILES keys: " . json_encode(array_keys($_FILES)), E_USER_WARNING);
         
         // También loguear en app.log para facilitar revisión
         file_put_contents($logFile, "[$timestamp] [debug] POST: " . json_encode($_POST) . PHP_EOL, FILE_APPEND);
@@ -107,14 +107,14 @@ class HomeController extends Controller
         $mandatory = isset($_POST['mandatory']);
         $releaseNotes = trim($_POST['releaseNotes'] ?? '');
         
-        // Log para debugging
-        error_log("DEBUG - Versión recibida: [" . $version . "] Longitud: " . strlen($version) . " Bytes: " . bin2hex($version));
+        // Log para debugging que Apache capturará
+        trigger_error("DEBUG - Versión recibida: [$version] Longitud: " . strlen($version) . " Hex: " . bin2hex($version), E_USER_WARNING);
         file_put_contents($logFile, "[$timestamp] [debug] Versión: [$version] Longitud: " . strlen($version) . " Hex: " . bin2hex($version) . PHP_EOL, FILE_APPEND);
         
         // Validar versión
         if (!preg_match('/^\d+\.\d+\.\d+\.\d+$/', $version)) {
-            // Log detallado del error
-            error_log("ERROR - Validación de versión falló. Valor: [" . $version . "] Hex: " . bin2hex($version));
+            // Log detallado del error que Apache capturará
+            trigger_error("ERROR - Validación de versión falló. Valor: [$version] Hex: " . bin2hex($version), E_USER_WARNING);
             return [
                 'message' => 'La versión debe tener el formato X.X.X.X (ej: 1.2.3.0). Valor recibido: "' . htmlspecialchars($version) . '"',
                 'type' => 'error'
@@ -133,7 +133,7 @@ class HomeController extends Controller
                 UPLOAD_ERR_EXTENSION => 'Una extensión de PHP detuvo la subida'
             ];
             $errorMsg = $errorMessages[$errorCode] ?? "Error desconocido (código: $errorCode)";
-            error_log("ERROR - Subida de archivo: " . $errorMsg);
+            trigger_error("ERROR - Subida de archivo: " . $errorMsg, E_USER_WARNING);
             return [
                 'message' => 'Error al subir el archivo: ' . $errorMsg,
                 'type' => 'error'
@@ -165,7 +165,7 @@ class HomeController extends Controller
             
             // Crear backup del archivo anterior
             if (copy($filePath, $backupPath)) {
-                error_log("Backup creado para {$fileName}: " . basename($backupPath));
+                trigger_error("Backup creado para {$fileName}: " . basename($backupPath), E_USER_NOTICE);
             }
             
             // Eliminar archivo existente
@@ -175,7 +175,7 @@ class HomeController extends Controller
                     'type' => 'error'
                 ];
             } else {
-                error_log("Archivo existente eliminado: {$fileName}");
+                trigger_error("Archivo existente eliminado: {$fileName}", E_USER_NOTICE);
             }
         }
         
@@ -242,7 +242,7 @@ class HomeController extends Controller
             $filesToDelete = array_slice($backupFiles, 5);
             foreach ($filesToDelete as $oldBackup) {
                 if (unlink($oldBackup)) {
-                    error_log("Backup antiguo eliminado: " . basename($oldBackup));
+                    trigger_error("Backup antiguo eliminado: " . basename($oldBackup), E_USER_NOTICE);
                 }
             }
         }
