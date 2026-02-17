@@ -5,6 +5,7 @@ namespace Controllers;
 require_once __DIR__ . '/../Core/Controller.php';
 
 use Core\Controller;
+use Exception;
 
 class HomeController extends Controller
 {
@@ -91,8 +92,18 @@ class HomeController extends Controller
     private function processUpload()
     {
         // Log completo de POST para debugging
+        $logFile = __DIR__ . '/../../storage/logs/app.log';
+        $timestamp = date('Y-m-d H:i:s');
+
+        throw new Exception("Error Processing Request", 1);
+        
+        
         error_log("DEBUG - POST completo: " . print_r($_POST, true));
         error_log("DEBUG - FILES completo: " . print_r($_FILES, true));
+        
+        // También loguear en app.log para facilitar revisión
+        file_put_contents($logFile, "[$timestamp] [debug] POST: " . json_encode($_POST) . PHP_EOL, FILE_APPEND);
+        file_put_contents($logFile, "[$timestamp] [debug] FILES keys: " . json_encode(array_keys($_FILES)) . PHP_EOL, FILE_APPEND);
         
         $version = trim($_POST['version'] ?? '');
         $mandatory = isset($_POST['mandatory']);
@@ -100,6 +111,7 @@ class HomeController extends Controller
         
         // Log para debugging
         error_log("DEBUG - Versión recibida: [" . $version . "] Longitud: " . strlen($version) . " Bytes: " . bin2hex($version));
+        file_put_contents($logFile, "[$timestamp] [debug] Versión: [$version] Longitud: " . strlen($version) . " Hex: " . bin2hex($version) . PHP_EOL, FILE_APPEND);
         
         // Validar versión
         if (!preg_match('/^\d+\.\d+\.\d+\.\d+$/', $version)) {
