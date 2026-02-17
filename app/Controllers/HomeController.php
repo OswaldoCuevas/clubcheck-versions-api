@@ -94,17 +94,34 @@ class HomeController extends Controller
         $mandatory = isset($_POST['mandatory']);
         $releaseNotes = trim($_POST['releaseNotes'] ?? '');
         
+        // Log para debugging
+        error_log("DEBUG - Versión recibida: [" . $version . "] Longitud: " . strlen($version) . " Bytes: " . bin2hex($version));
+        
         // Validar versión
         if (!preg_match('/^\d+\.\d+\.\d+\.\d+$/', $version)) {
+            // Log detallado del error
+            error_log("ERROR - Validación de versión falló. Valor: [" . $version . "] Hex: " . bin2hex($version));
             return [
-                'message' => 'La versión debe tener el formato X.X.X.X (ej: 1.2.3.0)',
+                'message' => 'La versión debe tener el formato X.X.X.X (ej: 1.2.3.0). Valor recibido: "' . htmlspecialchars($version) . '"',
                 'type' => 'error'
             ];
         }
         
         if (!isset($_FILES['exeFile']) || $_FILES['exeFile']['error'] !== UPLOAD_ERR_OK) {
+            $errorCode = $_FILES['exeFile']['error'] ?? 'FILE_NOT_SET';
+            $errorMessages = [
+                UPLOAD_ERR_INI_SIZE => 'El archivo excede upload_max_filesize en php.ini',
+                UPLOAD_ERR_FORM_SIZE => 'El archivo excede MAX_FILE_SIZE en el formulario',
+                UPLOAD_ERR_PARTIAL => 'El archivo solo se subió parcialmente',
+                UPLOAD_ERR_NO_FILE => 'No se subió ningún archivo',
+                UPLOAD_ERR_NO_TMP_DIR => 'Falta el directorio temporal',
+                UPLOAD_ERR_CANT_WRITE => 'No se pudo escribir el archivo en disco',
+                UPLOAD_ERR_EXTENSION => 'Una extensión de PHP detuvo la subida'
+            ];
+            $errorMsg = $errorMessages[$errorCode] ?? "Error desconocido (código: $errorCode)";
+            error_log("ERROR - Subida de archivo: " . $errorMsg);
             return [
-                'message' => 'Error al subir el archivo',
+                'message' => 'Error al subir el archivo: ' . $errorMsg,
                 'type' => 'error'
             ];
         }
