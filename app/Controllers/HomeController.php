@@ -5,7 +5,6 @@ namespace Controllers;
 require_once __DIR__ . '/../Core/Controller.php';
 
 use Core\Controller;
-use Exception;
 
 class HomeController extends Controller
 {
@@ -95,13 +94,27 @@ class HomeController extends Controller
         $logFile = __DIR__ . '/../../storage/logs/app.log';
         $timestamp = date('Y-m-d H:i:s');
         
+        // Capturar datos RAW del POST
+        $rawPost = file_get_contents('php://input');
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? 'NOT_SET';
+        $contentLength = $_SERVER['CONTENT_LENGTH'] ?? 'NOT_SET';
+        $requestMethod = $_SERVER['REQUEST_METHOD'] ?? 'NOT_SET';
+        
         // Logs que Apache capturará
+        trigger_error("DEBUG - Request Method: $requestMethod", E_USER_WARNING);
+        trigger_error("DEBUG - Content-Type: $contentType", E_USER_WARNING);
+        trigger_error("DEBUG - Content-Length: $contentLength", E_USER_WARNING);
         trigger_error("DEBUG - POST completo: " . json_encode($_POST), E_USER_WARNING);
         trigger_error("DEBUG - FILES keys: " . json_encode(array_keys($_FILES)), E_USER_WARNING);
+        trigger_error("DEBUG - RAW POST length: " . strlen($rawPost), E_USER_WARNING);
         
         // También loguear en app.log para facilitar revisión
+        file_put_contents($logFile, "[$timestamp] [debug] Request Method: $requestMethod" . PHP_EOL, FILE_APPEND);
+        file_put_contents($logFile, "[$timestamp] [debug] Content-Type: $contentType" . PHP_EOL, FILE_APPEND);
+        file_put_contents($logFile, "[$timestamp] [debug] Content-Length: $contentLength" . PHP_EOL, FILE_APPEND);
         file_put_contents($logFile, "[$timestamp] [debug] POST: " . json_encode($_POST) . PHP_EOL, FILE_APPEND);
         file_put_contents($logFile, "[$timestamp] [debug] FILES keys: " . json_encode(array_keys($_FILES)) . PHP_EOL, FILE_APPEND);
+        file_put_contents($logFile, "[$timestamp] [debug] RAW POST exists: " . (strlen($rawPost) > 0 ? 'YES' : 'NO') . " Length: " . strlen($rawPost) . PHP_EOL, FILE_APPEND);
         
         $version = trim($_POST['version'] ?? '');
         $mandatory = isset($_POST['mandatory']);
@@ -115,6 +128,7 @@ class HomeController extends Controller
         if (!preg_match('/^\d+\.\d+\.\d+\.\d+$/', $version)) {
             // Log detallado del error que Apache capturará
             trigger_error("ERROR - Validación de versión falló. Valor: [$version] Hex: " . bin2hex($version), E_USER_WARNING);
+            file_put_contents($logFile, "[$timestamp] [error] Validación de versión falló. Valor: [$version]" . PHP_EOL, FILE_APPEND);
             return [
                 'message' => 'La versión debe tener el formato X.X.X.X (ej: 1.2.3.0). Valor recibido: "' . htmlspecialchars($version) . '"',
                 'type' => 'error'
@@ -134,6 +148,7 @@ class HomeController extends Controller
             ];
             $errorMsg = $errorMessages[$errorCode] ?? "Error desconocido (código: $errorCode)";
             trigger_error("ERROR - Subida de archivo: " . $errorMsg, E_USER_WARNING);
+            file_put_contents($logFile, "[$timestamp] [error] Subida de archivo: $errorMsg (código: $errorCode)" . PHP_EOL, FILE_APPEND);
             return [
                 'message' => 'Error al subir el archivo: ' . $errorMsg,
                 'type' => 'error'
@@ -242,7 +257,7 @@ class HomeController extends Controller
             $filesToDelete = array_slice($backupFiles, 5);
             foreach ($filesToDelete as $oldBackup) {
                 if (unlink($oldBackup)) {
-                    trigger_error("Backup antiguo eliminado: " . basename($oldBackup), E_USER_NOTICE);
+                    error_log("Backup antiguo eliminado: " . basename($oldBackup));
                 }
             }
         }
