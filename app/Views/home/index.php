@@ -103,6 +103,35 @@ $customScripts = '
                 }
             });
         }
+        
+        // Validación del formulario antes de enviar
+        const uploadForm = document.querySelector("form[method=\'POST\']");
+        if (uploadForm) {
+            uploadForm.addEventListener("submit", function(e) {
+                const versionInput = document.getElementById("version");
+                const versionValue = versionInput ? versionInput.value.trim() : "";
+                
+                console.log("DEBUG - Valor de versión antes de enviar:", versionValue);
+                console.log("DEBUG - Campo version:", versionInput);
+                
+                if (!versionValue) {
+                    e.preventDefault();
+                    alert("ERROR: El campo de versión está vacío. Por favor ingresa una versión.");
+                    versionInput.focus();
+                    return false;
+                }
+                
+                const pattern = /^\d+\.\d+\.\d+\.\d+$/;
+                if (!pattern.test(versionValue)) {
+                    e.preventDefault();
+                    alert("ERROR: La versión debe tener el formato X.X.X.X (ej: 1.2.3.0)\\nValor actual: " + versionValue);
+                    versionInput.focus();
+                    return false;
+                }
+                
+                console.log("Formulario válido, enviando...");
+            });
+        }
     </script>
 ';
 

@@ -90,6 +90,10 @@ class HomeController extends Controller
 
     private function processUpload()
     {
+        // Log completo de POST para debugging
+        error_log("DEBUG - POST completo: " . print_r($_POST, true));
+        error_log("DEBUG - FILES completo: " . print_r($_FILES, true));
+        
         $version = trim($_POST['version'] ?? '');
         $mandatory = isset($_POST['mandatory']);
         $releaseNotes = trim($_POST['releaseNotes'] ?? '');
