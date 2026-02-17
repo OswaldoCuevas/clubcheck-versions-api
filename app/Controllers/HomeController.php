@@ -94,8 +94,6 @@ class HomeController extends Controller
         // Log completo de POST para debugging
         $logFile = __DIR__ . '/../../storage/logs/app.log';
         $timestamp = date('Y-m-d H:i:s');
-
-        throw new Exception("Error Processing Request", 1);
         
         
         error_log("DEBUG - POST completo: " . print_r($_POST, true));
