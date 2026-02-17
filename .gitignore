@@ -24,7 +24,6 @@ Thumbs.db
 .env.local
 .env.production
 .env.staging
-config/database.php
 config/secrets.php
 
 # Logs y archivos temporales
