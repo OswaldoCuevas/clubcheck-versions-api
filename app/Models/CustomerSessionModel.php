@@ -132,7 +132,7 @@ class CustomerSessionModel extends Model
         return $this->hydrateSession($row, $this->defaultHeartbeatGrace);
     }
 
-    public function findActiveSession(string $customerId, ?string $deviceId = null, int $graceSeconds = null): ?array
+    public function findActiveSession(string $customerId, ?string $deviceId = null, ?int $graceSeconds = null): ?array
     {
         $grace = $graceSeconds ?? $this->defaultHeartbeatGrace;
 
@@ -223,7 +223,7 @@ class CustomerSessionModel extends Model
         return true;
     }
 
-    public function purgeExpired(int $graceSeconds = null): int
+    public function purgeExpired(?int $graceSeconds = null): int
     {
         $grace = $graceSeconds ?? $this->defaultHeartbeatGrace;
 
