@@ -111,5 +111,3 @@ releases/
 
 # Configuraciones locales del servidor
 # ===========================================
-ssl/*.crt
-ssl/*.key
