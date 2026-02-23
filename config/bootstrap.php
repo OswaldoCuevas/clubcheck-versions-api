@@ -75,10 +75,17 @@ function dd($data) {
 
 // Función helper para logging
 function logger($message, $level = 'info') {
-    $logFile = path('logs', 'app.log');
     $timestamp = date('Y-m-d H:i:s');
-    $logMessage = "[{$timestamp}] [{$level}] {$message}" . PHP_EOL;
-    file_put_contents($logFile, $logMessage, FILE_APPEND | LOCK_EX);
+    $logMessage = "[{$timestamp}] [{$level}] {$message}";
+    
+    // Usar error_log en lugar de file_put_contents (más compatible con servidores restrictivos)
+    error_log($logMessage);
+    
+    // Intentar escribir en archivo solo si es posible
+    $logFile = path('logs', 'app.log');
+    if ($logFile && is_writable(dirname($logFile))) {
+        @file_put_contents($logFile, $logMessage . PHP_EOL, FILE_APPEND | LOCK_EX);
+    }
 }
 
 // Configurar reporte de errores según el entorno
