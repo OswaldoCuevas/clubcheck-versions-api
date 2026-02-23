@@ -246,7 +246,7 @@ class CustomerSessionModel extends Model
         return $row ? $this->hydrateSession($row, $this->defaultHeartbeatGrace) : null;
     }
 
-    public function getSessions(array $filters = [], int $graceSeconds = null): array
+    public function getSessions(array $filters = [], ?int $graceSeconds = null): array
     {
         $grace = $graceSeconds ?? $this->defaultHeartbeatGrace;
 
