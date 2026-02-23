@@ -3,11 +3,21 @@
 namespace Controllers;
 
 require_once __DIR__ . '/../Core/Controller.php';
+require_once __DIR__ . '/../Models/VersionModel.php';
 
 use Core\Controller;
+use Models\VersionModel;
 
 class ApiController extends Controller
 {
+    private $versionModel;
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->versionModel = new VersionModel();
+    }
+
     public function version()
     {
         // Configurar headers para API
@@ -16,60 +26,37 @@ class ApiController extends Controller
         header('Access-Control-Allow-Methods: GET');
         header('Access-Control-Allow-Headers: Content-Type');
 
-        $versionFile = __DIR__ . '/../../version.json';
-
-        // Verificar si el archivo existe
-        if (!file_exists($versionFile)) {
-            http_response_code(404);
-            echo json_encode([
-                'error' => 'Archivo de versión no encontrado',
-                'message' => 'No hay información de versiones disponible'
-            ]);
-            exit;
-        }
-
-        // Leer y retornar el contenido del archivo JSON
-        $versionData = file_get_contents($versionFile);
-        $decodedData = json_decode($versionData, true);
-
-        if ($decodedData === null) {
-            http_response_code(500);
-            echo json_encode([
-                'error' => 'Formato JSON inválido',
-                'message' => 'El archivo de versión está corrupto'
-            ]);
-            exit;
-        }
+        // Obtener versión desde la base de datos
+        $versionData = $this->versionModel->getLatestVersion();
 
         // Verificar si hay una versión válida
-        $hasValidVersion = !empty($decodedData['latestVersion']) && $decodedData['latestVersion'] !== '0.0.0.0';
+        $hasValidVersion = !empty($versionData['latestVersion']) && $versionData['latestVersion'] !== '0.0.0.0';
 
         // Agregar información adicional útil para el cliente
-        $decodedData['lastUpdated'] = filemtime($versionFile);
-        $decodedData['hasUpdate'] = $hasValidVersion;
+        $versionData['hasUpdate'] = $hasValidVersion;
 
         // Agregar URLs de descarga y verificación
         if ($hasValidVersion) {
             require_once __DIR__ . '/../Core/UrlHelper.php';
             $baseUrl = \Core\UrlHelper::absoluteUrl('');
             
-            $decodedData['downloadUrl'] = $baseUrl . '/api/download';
-            $decodedData['checkUpdateUrl'] = $baseUrl . '/api/check-update';
-            $decodedData['directUrl'] = $decodedData['url'] ?? ''; // URL directa al archivo
+            $versionData['downloadUrl'] = $baseUrl . '/api/download';
+            $versionData['checkUpdateUrl'] = $baseUrl . '/api/check-update';
+            $versionData['directUrl'] = $versionData['url'] ?? ''; // URL directa al archivo
             
             // Verificar si el archivo existe físicamente
             require_once __DIR__ . '/../Helpers/FileHelper.php';
-            $fileName = getAppFileName($decodedData['latestVersion']);
-            $filePath = findExistingAppFile($decodedData['latestVersion']) ?: (__DIR__ . '/../../uploads/' . $fileName);
-            $decodedData['fileExists'] = file_exists($filePath);
+            $fileName = getAppFileName($versionData['latestVersion']);
+            $filePath = findExistingAppFile($versionData['latestVersion']) ?: (__DIR__ . '/../../uploads/' . $fileName);
+            $versionData['fileExists'] = file_exists($filePath);
             
-            if ($decodedData['fileExists']) {
-                $decodedData['fileSize'] = filesize($filePath);
-                $decodedData['fileDate'] = filemtime($filePath);
+            if ($versionData['fileExists']) {
+                $versionData['fileSize'] = filesize($filePath);
+                $versionData['fileDate'] = filemtime($filePath);
             }
         }
 
-        echo json_encode($decodedData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        echo json_encode($versionData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
         exit;
     }
 
@@ -81,31 +68,8 @@ class ApiController extends Controller
         header('Access-Control-Allow-Methods: GET, POST');
         header('Access-Control-Allow-Headers: Content-Type');
 
-        $versionFile = __DIR__ . '/../../version.json';
-
-        // Verificar si el archivo existe
-        if (!file_exists($versionFile)) {
-            http_response_code(404);
-            echo json_encode([
-                'error' => 'Archivo de versión no encontrado',
-                'hasUpdate' => false,
-                'message' => 'No hay información de versiones disponible'
-            ]);
-            exit;
-        }
-
-        // Leer información de la versión
-        $versionData = json_decode(file_get_contents($versionFile), true);
-
-        if ($versionData === null) {
-            http_response_code(500);
-            echo json_encode([
-                'error' => 'Formato JSON inválido',
-                'hasUpdate' => false,
-                'message' => 'El archivo de versión está corrupto'
-            ]);
-            exit;
-        }
+        // Obtener versión desde la base de datos
+        $versionData = $this->versionModel->getLatestVersion();
 
         // Obtener la versión actual del cliente
         $clientVersion = '';
@@ -156,47 +120,8 @@ class ApiController extends Controller
 
     public function download()
     {
-        $versionFile = __DIR__ . '/../../version.json';
-
-        // Verificar si el archivo de versión existe
-        if (!file_exists($versionFile)) {
-            http_response_code(404);
-            header('Content-Type: application/json');
-            echo json_encode([
-                'error' => 'Archivo de versión no encontrado',
-                'message' => 'No hay información de versiones disponible'
-            ]);
-            exit;
-        }
-
-        // Leer información de la versión
-        $versionData = json_decode(file_get_contents($versionFile), true);
-
-        if ($versionData === null || json_last_error() !== JSON_ERROR_NONE) {
-            http_response_code(500);
-            header('Content-Type: application/json');
-            echo json_encode([
-                'error' => 'Formato JSON inválido',
-                'message' => 'El archivo de versión está corrupto'
-            ]);
-            exit;
-        }
-
-        // Verificar que hay una versión válida
-        if (empty($versionData['latestVersion']) || $versionData['latestVersion'] === '0.0.0.0') {
-            http_response_code(404);
-            header('Content-Type: application/json');
-            echo json_encode([
-                'error' => 'No hay versión disponible',
-                'message' => 'No hay versiones disponibles para descargar'
-            ]);
-            exit;
-        }
-
-        // Construir la ruta del archivo de la última versión
-        require_once __DIR__ . '/../Helpers/FileHelper.php';
-        $fileName = getAppFileName($versionData['latestVersion']);
-        $filePath = findExistingAppFile($versionData['latestVersion']) ?: (__DIR__ . '/../../uploads/' . $fileName);
+        // Obtener versión desde la base de datos
+        $versionData = $this->versionModel->getLatestVersion();
 
         // Verificar que el archivo existe
         if (!file_exists($filePath)) {

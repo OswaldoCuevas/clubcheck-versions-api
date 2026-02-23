@@ -3,13 +3,15 @@
 namespace Controllers;
 
 require_once __DIR__ . '/../Core/Controller.php';
+require_once __DIR__ . '/../Models/VersionModel.php';
 
 use Core\Controller;
+use Models\VersionModel;
 
 class HomeController extends Controller
 {
     private $uploadDir;
-    private $versionFile;
+    private $versionModel;
 
     public function __construct()
     {
@@ -17,28 +19,12 @@ class HomeController extends Controller
         
         // Configuración
         $this->uploadDir = __DIR__ . '/../../uploads/';
-        $this->versionFile = __DIR__ . '/../../version.json';
+        $this->versionModel = new VersionModel();
         
         // Crear directorio de uploads si no existe
         if (!is_dir($this->uploadDir)) {
             if (!mkdir($this->uploadDir, 0777, true)) {
                 die('Error: No se pudo crear el directorio de uploads. Verifica los permisos.');
-            }
-        }
-        
-        // Inicializar JSON de versión si no existe
-        if (!file_exists($this->versionFile)) {
-            $initialData = [
-                'latestVersion' => '0.0.0.0',
-                'url' => '',
-                'sha256' => '',
-                'mandatory' => false,
-                'releaseNotes' => '',
-                'uploadDate' => null,
-                'timestamp' => null
-            ];
-            if (file_put_contents($this->versionFile, json_encode($initialData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) === false) {
-                die('Error: No se pudo crear el archivo version.json. Verifica los permisos.');
             }
         }
     }
@@ -71,8 +57,8 @@ class HomeController extends Controller
             }
         }
 
-        // Leer versión actual
-        $currentVersion = json_decode(file_get_contents($this->versionFile), true);
+        // Leer versión actual desde la base de datos
+        $currentVersion = $this->versionModel->getLatestVersion();
 
         // Datos para la vista
         $data = [
@@ -159,19 +145,10 @@ class HomeController extends Controller
             $baseUrl = $protocol . '://' . $host . dirname($_SERVER['REQUEST_URI'] ?? '/');
             $fileUrl = $baseUrl . '/uploads/' . $fileName;
             
-            // Actualizar JSON
-            $uploadDateTime = date('Y-m-d H:i:s P'); // Con zona horaria formato ISO (+/-HH:MM)
-            $versionData = [
-                'latestVersion' => $version,
-                'url' => $fileUrl,
-                'sha256' => $sha256,
-                'mandatory' => $mandatory,
-                'releaseNotes' => $releaseNotes,
-                'uploadDate' => $uploadDateTime,
-                'timestamp' => $uploadDateTime
-            ];
+            // Actualizar base de datos
+            $uploadDateTime = date('Y-m-d H:i:s'); // Formato MySQL
             
-            if (file_put_contents($this->versionFile, json_encode($versionData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES))) {
+            if ($this->versionModel->saveVersion($version, $fileUrl, $sha256, $mandatory, $releaseNotes, $uploadDateTime)) {
                 // Limpiar backups antiguos (mantener solo los últimos 5)
                 $this->cleanOldBackups();
                 
@@ -188,10 +165,11 @@ class HomeController extends Controller
                 }
             } else {
                 return [
-                    'message' => 'Error al guardar la información de versión',
+                    'message' => 'Error al guardar la información de versión en la base de datos',
                     'type' => 'error'
                 ];
             }
+
         } else {
             return [
                 'message' => 'Error al guardar el archivo',
