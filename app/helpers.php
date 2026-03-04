@@ -47,3 +47,42 @@ function csrf_field()
 {
     return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars(csrf_token()) . '">';
 }
+
+/**
+ * Obtiene una instancia configurada de StripeService
+ */
+function stripe(): \App\Services\StripeService
+{
+    static $instance = null;
+    
+    if ($instance === null) {
+        $config = require __DIR__ . '/../config/stripe.php';
+        $appMode = $_ENV['APP_MODE'] ?? 'DEV';
+        $testClockId = ($appMode === 'DEV') ? ($config['test_clock_id'] ?? null) : null;
+        
+        $instance = new \App\Services\StripeService(
+            $config['secret_key'],
+            $testClockId
+        );
+    }
+    
+    return $instance;
+}
+
+/**
+ * Obtiene la configuración de Stripe
+ */
+function stripe_config(string $key = null, $default = null)
+{
+    static $config = null;
+    
+    if ($config === null) {
+        $config = require __DIR__ . '/../config/stripe.php';
+    }
+    
+    if ($key === null) {
+        return $config;
+    }
+    
+    return $config[$key] ?? $default;
+}

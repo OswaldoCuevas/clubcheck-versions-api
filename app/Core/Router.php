@@ -18,6 +18,21 @@ class Router
         $this->addRoute('POST', $uri, $controller, $method);
     }
 
+    public function put($uri, $controller, $method = 'update')
+    {
+        $this->addRoute('PUT', $uri, $controller, $method);
+    }
+
+    public function delete($uri, $controller, $method = 'destroy')
+    {
+        $this->addRoute('DELETE', $uri, $controller, $method);
+    }
+
+    public function patch($uri, $controller, $method = 'update')
+    {
+        $this->addRoute('PATCH', $uri, $controller, $method);
+    }
+
     public function any($uri, $controller, $method = 'index')
     {
         $this->addRoute('ANY', $uri, $controller, $method);
@@ -52,7 +67,8 @@ class Router
 
     public function resolve()
     {
-        $requestMethod = $_SERVER['REQUEST_METHOD'];
+        // Obtener método HTTP real, soportando method spoofing
+        $requestMethod = $this->getRequestMethod();
         $requestUri = $this->getRequestUri();
 
         // Debug
@@ -70,6 +86,36 @@ class Router
         // Si no se encuentra la ruta, enviar 404
         http_response_code(404);
         echo "404 - Página no encontrada";
+    }
+
+    private function getRequestMethod()
+    {
+        // Soportar method spoofing para PUT/DELETE desde formularios o clientes que solo soportan GET/POST
+        $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        
+        // Verificar si hay un override del método en POST
+        if ($method === 'POST') {
+            // Verificar header X-HTTP-Method-Override
+            if (isset($_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'])) {
+                return strtoupper($_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE']);
+            }
+            
+            // Verificar parámetro _method en el body
+            if (isset($_POST['_method'])) {
+                return strtoupper($_POST['_method']);
+            }
+            
+            // Verificar en JSON body
+            $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+            if (strpos($contentType, 'application/json') !== false) {
+                $input = json_decode(file_get_contents('php://input'), true);
+                if (isset($input['_method'])) {
+                    return strtoupper($input['_method']);
+                }
+            }
+        }
+        
+        return strtoupper($method);
     }
 
     private function getRequestUri()

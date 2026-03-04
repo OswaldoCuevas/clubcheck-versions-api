@@ -254,6 +254,18 @@ class CustomerRegistryModel extends Model
         );
     }
 
+    public function getMessagesSendsAtMonth(string $customerId): int
+    {
+        $month = date('m');
+        $year = date('Y');
+        $row = $this->db->fetchOne(
+            'SELECT COUNT(*) AS total FROM sentmessagesdesktop WHERE Successful = 1 AND CustomerApiId = ? AND Month(DateSent) = ? AND Year(DateSent) = ?',
+            [$customerId, $month, $year]
+        );
+
+        return (int) ($row['total'] ?? 0);
+    }
+
     private function assertEmailAvailable(?string $email, ?string $ignoreCustomerId = null): void
     {
         if ($email === null || $email === '') {

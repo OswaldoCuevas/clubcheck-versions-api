@@ -1,5 +1,11 @@
 <?php
 
+// Cargar autoloader de Composer (incluye Stripe SDK)
+$composerAutoload = __DIR__ . '/../vendor/autoload.php';
+if (file_exists($composerAutoload)) {
+    require_once $composerAutoload;
+}
+
 // Autoloader para clases del proyecto
 spl_autoload_register(function ($className) {
     // Convertir namespace a ruta de archivo
@@ -17,6 +23,7 @@ spl_autoload_register(function ($className) {
         __DIR__ . '/../app/Controllers/',
         __DIR__ . '/../app/Models/',
         __DIR__ . '/../app/Core/',
+        __DIR__ . '/../app/Services/',
     ];
     
     foreach ($paths as $path) {

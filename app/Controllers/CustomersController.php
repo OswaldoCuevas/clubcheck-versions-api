@@ -25,6 +25,8 @@ require_once __DIR__ . '/../Models/SubscriptionPeriodDesktopModel.php';
 require_once __DIR__ . '/../Models/SyncStatusDesktopModel.php';
 require_once __DIR__ . '/../Models/MigrationsDesktopModel.php';
 require_once __DIR__ . '/../Models/BarcodeLookupCacheDesktopModel.php';
+require_once __DIR__ . '/../Helpers/ApiHelper.php';
+require_once __DIR__ . '/../Services/StripeService.php';
 
 use Core\Controller;
 use Models\CustomerRegistryModel;
@@ -49,12 +51,15 @@ use Models\SubscriptionPeriodDesktopModel;
 use Models\SyncStatusDesktopModel;
 use Models\MigrationsDesktopModel;
 use Models\BarcodeLookupCacheDesktopModel;
+use App\Services\StripeService;
+use ApiHelper;
 
 class CustomersController extends Controller
 {
     private CustomerSessionModel $sessionModel;
     private CustomerRegistryModel $customerRegistry;
-    private array $sessionConfig;
+    private StripeService $stripeService;
+    
     private array $desktopModels;
 
     public function __construct()
@@ -63,13 +68,17 @@ class CustomersController extends Controller
 
         $this->sessionModel = new CustomerSessionModel();
         $this->customerRegistry = new CustomerRegistryModel();
-        $appConfig = require __DIR__ . '/../../config/app.php';
-        $this->sessionConfig = $appConfig['customerSessions'] ?? [
-            'heartbeat_interval' => 60,
-            'grace_period' => 180,
-            'max_metadata_size' => 2048,
-        ];
         $this->desktopModels = $this->createDesktopModels();
+        
+        // Inicializar StripeService
+        $stripeConfig = require __DIR__ . '/../../config/stripe.php';
+        $appMode = $_ENV['APP_MODE'] ?? 'DEV';
+        $testClockId = ($appMode === 'DEV') ? ($stripeConfig['test_clock_id'] ?? null) : null;
+        
+        $this->stripeService = new StripeService(
+            $stripeConfig['secret_key'],
+            $testClockId
+        );
     }
 
     private function createDesktopModels(): array
@@ -98,66 +107,11 @@ class CustomersController extends Controller
         ];
     }
 
-    private function respond(array $data, int $statusCode = 200): void
-    {
-        http_response_code($statusCode);
-        header('Content-Type: application/json');
-        header('Access-Control-Allow-Origin: *');
-        header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-        header('Access-Control-Allow-Headers: Content-Type, Authorization');
-        echo json_encode($data, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
-        exit;
-    }
-
-    private function getJsonBody(): array
-    {
-        $raw = file_get_contents('php://input');
-
-        if (empty($raw)) {
-            return [];
-        }
-
-        $data = json_decode($raw, true);
-
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            $this->respond([
-                'error' => 'Carga JSON inválida',
-                'message' => json_last_error_msg()
-            ], 400);
-        }
-
-        return $data ?? [];
-    }
-
-    private function validateMetadata($metadata): void
-    {
-        if ($metadata === null) {
-            return;
-        }
-
-        if (!is_array($metadata)) {
-            $this->respond([
-                'error' => 'Formato de metadatos inválido',
-                'message' => 'Metadata debe ser un objeto'
-            ], 422);
-        }
-
-        $encoded = json_encode($metadata);
-        $maxSize = $this->sessionConfig['max_metadata_size'] ?? 2048;
-
-        if (strlen($encoded) > $maxSize) {
-            $this->respond([
-                'error' => 'Metadatos demasiado grandes',
-                'message' => "El contenido de metadata excede {$maxSize} bytes"
-            ], 413);
-        }
-    }
-
     private function normalizePrivacyAcceptancePayload($value, bool $required): ?array
     {
         if ($value === null) {
             if ($required) {
-                $this->respond([
+                ApiHelper::respond([
                     'error' => 'Debes enviar el objeto privacyAcceptance con la aceptación de privacidad'
                 ], 422);
             }
@@ -166,43 +120,43 @@ class CustomersController extends Controller
         }
 
         if (!is_array($value)) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'El campo privacyAcceptance debe ser un objeto con los datos de aceptación'
             ], 422);
         }
 
         $documentVersion = isset($value['documentVersion']) ? trim((string) $value['documentVersion']) : '';
         if ($documentVersion === '') {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Debes indicar la versión del documento de privacidad (documentVersion)'
             ], 422);
         }
         if (mb_strlen($documentVersion) > 50) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'documentVersion no puede superar los 50 caracteres'
             ], 422);
         }
 
         $documentUrl = isset($value['documentUrl']) ? trim((string) $value['documentUrl']) : '';
         if ($documentUrl === '') {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Debes indicar la URL del documento aceptado (documentUrl)'
             ], 422);
         }
         if (mb_strlen($documentUrl) > 255) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'documentUrl no puede superar los 255 caracteres'
             ], 422);
         }
 
         $ipAddress = isset($value['ipAddress']) ? trim((string) $value['ipAddress']) : '';
         if ($ipAddress === '') {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Debes indicar la dirección IP del aceptante (ipAddress)'
             ], 422);
         }
         if (filter_var($ipAddress, FILTER_VALIDATE_IP) === false) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'La dirección IP proporcionada no es válida'
             ], 422);
         }
@@ -216,7 +170,7 @@ class CustomersController extends Controller
         } else {
             $timestamp = strtotime((string) $acceptedAtRaw);
             if ($timestamp === false) {
-                $this->respond([
+                ApiHelper::respond([
                     'error' => 'El campo acceptedAt debe ser una fecha válida'
                 ], 422);
             }
@@ -263,7 +217,7 @@ class CustomersController extends Controller
             }
         }
 
-        $this->respond([
+        ApiHelper::respond([
             'error' => sprintf('El campo %s debe ser booleano (true/false, 1/0)', $field)
         ], 422);
 
@@ -272,26 +226,22 @@ class CustomersController extends Controller
 
     public function startSession()
     {
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->respond(['status' => 'ok']);
-        }
+        ApiHelper::respondIfOptions();
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Método no permitido'], 405);
-        }
+        ApiHelper::allowedMethodsPost();
 
-        $payload = $this->getJsonBody();
+        $payload = ApiHelper::getJsonBody();
         $customerId = $payload['customerId'] ?? null;
         $deviceId = $payload['deviceId'] ?? null;
         $metadata = $payload['metadata'] ?? null;
 
         if (empty($customerId)) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'El campo customerId es obligatorio'
             ], 422);
         }
 
-        $this->validateMetadata($metadata);
+        ApiHelper::validateMetadata($metadata);
 
         $this->sessionModel->purgeExpired($this->sessionConfig['grace_period'] ?? 180);
 
@@ -318,7 +268,7 @@ class CustomersController extends Controller
                 $response['deviceId'] = $existing['deviceId'];
             }
 
-            $this->respond($response, 200);
+            ApiHelper::respond($response, 200);
         }
 
         $session = $this->sessionModel->startSession([
@@ -340,29 +290,25 @@ class CustomersController extends Controller
             'expiresAt' => $session['lastSeen'] + $grace,
         ];
 
-        $this->respond($response, 201);
+        ApiHelper::respond($response, 201);
     }
 
     public function heartbeat()
     {
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->respond(['status' => 'ok']);
-        }
+        ApiHelper::respondIfOptions();
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Método no permitido'], 405);
-        }
+        ApiHelper::allowedMethodsPost();
 
-        $payload = $this->getJsonBody();
+        $payload = ApiHelper::getJsonBody();
         $sessionId = $payload['sessionId'] ?? null;
 
         if (empty($sessionId)) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'El campo sessionId es obligatorio'
             ], 422);
         }
 
-        $this->validateMetadata($payload['metadata'] ?? null);
+        ApiHelper::validateMetadata($payload['metadata'] ?? null);
 
         $session = $this->sessionModel->heartbeat($sessionId, [
             'metadata' => $payload['metadata'] ?? null,
@@ -371,7 +317,7 @@ class CustomersController extends Controller
         ]);
 
         if (!$session) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Sesión no encontrada o expirada'
             ], 404);
         }
@@ -384,24 +330,20 @@ class CustomersController extends Controller
             'expiresAt' => $session['lastSeen'] + $grace,
         ];
 
-        $this->respond($response);
+        ApiHelper::respond($response);
     }
 
     public function endSession()
     {
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->respond(['status' => 'ok']);
-        }
+        ApiHelper::respondIfOptions();
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Método no permitido'], 405);
-        }
+        ApiHelper::allowedMethodsPost();
 
-        $payload = $this->getJsonBody();
+        $payload = ApiHelper::getJsonBody();
         $sessionId = $payload['sessionId'] ?? null;
 
         if (empty($sessionId)) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'El campo sessionId es obligatorio'
             ], 422);
         }
@@ -409,12 +351,12 @@ class CustomersController extends Controller
         $ended = $this->sessionModel->endSession($sessionId, $payload['reason'] ?? 'app_disconnect');
 
         if (!$ended) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Sesión no encontrada'
             ], 404);
         }
 
-        $this->respond([
+        ApiHelper::respond([
             'sessionId' => $sessionId,
             'status' => 'inactive'
         ]);
@@ -422,13 +364,9 @@ class CustomersController extends Controller
 
     public function activeSessions()
     {
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->respond(['status' => 'ok']);
-        }
+        ApiHelper::respondIfOptions();
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->respond(['error' => 'Método no permitido'], 405);
-        }
+       ApiHelper::allowedMethodsGet();
 
         $this->sessionModel->purgeExpired($this->sessionConfig['grace_period'] ?? 180);
 
@@ -439,7 +377,7 @@ class CustomersController extends Controller
 
         $sessions = $this->sessionModel->getSessions($filters, $this->sessionConfig['grace_period'] ?? 180);
 
-        $this->respond([
+        ApiHelper::respond([
             'count' => count($sessions),
             'sessions' => $sessions,
             'heartbeatInterval' => $this->sessionConfig['heartbeat_interval'] ?? 60,
@@ -449,13 +387,9 @@ class CustomersController extends Controller
 
     public function getCustomer($customerId = null)
     {
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->respond(['status' => 'ok']);
-        }
+        ApiHelper::respondIfOptions();
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->respond(['error' => 'Método no permitido'], 405);
-        }
+       ApiHelper::allowedMethodsGet();
 
         if ($customerId === null) {
             $customerId = isset($_GET['customerId']) ? (string) $_GET['customerId'] : '';
@@ -464,7 +398,7 @@ class CustomersController extends Controller
         $customerId = trim(rawurldecode((string) $customerId));
 
         if ($customerId === '') {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'El campo customerId es obligatorio'
             ], 422);
         }
@@ -472,27 +406,23 @@ class CustomersController extends Controller
         $customer = $this->customerRegistry->getCustomer($customerId);
 
         if (!$customer) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Cliente no encontrado'
             ], 404);
         }
 
-        $this->respond([
+        ApiHelper::respond([
             'customer' => $customer,
         ]);
     }
 
     public function pullDesktop()
     {
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->respond(['status' => 'ok']);
-        }
+        ApiHelper::respondIfOptions();
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Método no permitido'], 405);
-        }
+        ApiHelper::allowedMethodsPost();
 
-        $payload = $this->getJsonBody();
+        $payload = ApiHelper::getJsonBody();
         $customerApiId = isset($payload['customerApiId']) ? trim((string) $payload['customerApiId']) : '';
 
         if ($customerApiId === '' && isset($payload['customerIdApi'])) {
@@ -500,7 +430,7 @@ class CustomersController extends Controller
         }
 
         if ($customerApiId === '') {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'El campo customerApiId es obligatorio'
             ], 422);
         }
@@ -514,7 +444,7 @@ class CustomersController extends Controller
         if (array_key_exists('includeRemovedByBulk', $payload)) {
             $bulkFlags = $payload['includeRemovedByBulk'];
             if (!is_array($bulkFlags)) {
-                $this->respond([
+                ApiHelper::respond([
                     'error' => 'El campo includeRemovedByBulk debe ser un objeto con banderas por bulk'
                 ], 422);
             }
@@ -534,7 +464,7 @@ class CustomersController extends Controller
             $bulks[$bulk] = $model->pull($customerApiId, $includeFlag);
         }
 
-        $this->respond([
+        ApiHelper::respond([
             'customerApiId' => $customerApiId,
             'bulks' => $bulks,
         ]);
@@ -542,15 +472,11 @@ class CustomersController extends Controller
 
     public function pushDesktop()
     {
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->respond(['status' => 'ok']);
-        }
+        ApiHelper::respondIfOptions();
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Método no permitido'], 405);
-        }
+        ApiHelper::allowedMethodsPost();
 
-        $payload = $this->getJsonBody();
+        $payload = ApiHelper::getJsonBody();
         $customerApiId = isset($payload['customerApiId']) ? trim((string) $payload['customerApiId']) : '';
 
         if ($customerApiId === '' && isset($payload['customerIdApi'])) {
@@ -558,7 +484,7 @@ class CustomersController extends Controller
         }
 
         if ($customerApiId === '') {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'El campo customerApiId es obligatorio'
             ], 422);
         }
@@ -566,7 +492,7 @@ class CustomersController extends Controller
         $bulksPayload = $payload['bulks'] ?? $payload['data'] ?? null;
 
         if ($bulksPayload === null || !is_array($bulksPayload)) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Debes enviar el objeto bulks con la información a sincronizar'
             ], 422);
         }
@@ -577,7 +503,7 @@ class CustomersController extends Controller
             $records = $bulksPayload[$bulk] ?? [];
 
             if (!is_array($records)) {
-                $this->respond([
+                ApiHelper::respond([
                     'error' => sprintf('El bulk %s debe ser un arreglo de registros', $bulk)
                 ], 422);
             }
@@ -585,7 +511,7 @@ class CustomersController extends Controller
             $results[$bulk] = $model->push($customerApiId, $records);
         }
 
-        $this->respond([
+        ApiHelper::respond([
             'customerApiId' => $customerApiId,
             'bulks' => $results,
         ]);
@@ -593,21 +519,17 @@ class CustomersController extends Controller
 
     public function saveCustomer()
     {
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->respond(['status' => 'ok']);
-        }
+        ApiHelper::respondIfOptions();
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Método no permitido'], 405);
-        }
+        ApiHelper::allowedMethodsPost();
 
-    $payload = $this->getJsonBody();
-    $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
+        $payload = ApiHelper::getJsonBody();
+        $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
 
-    $existing = $customerId !== '' ? $this->customerRegistry->getCustomer($customerId) : null;
+        $existing = $customerId !== '' ? $this->customerRegistry->getCustomer($customerId) : null;
 
         $attributes = [];
-    $privacyAcceptanceInput = array_key_exists('privacyAcceptance', $payload) ? $payload['privacyAcceptance'] : null;
+        $privacyAcceptanceInput = array_key_exists('privacyAcceptance', $payload) ? $payload['privacyAcceptance'] : null;
 
         if (array_key_exists('name', $payload)) {
             $attributes['name'] = $payload['name'] !== null ? trim((string) $payload['name']) : null;
@@ -618,7 +540,7 @@ class CustomersController extends Controller
             if ($email !== null && $email !== '') {
                 $email = trim((string) $email);
                 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                    $this->respond([
+                    ApiHelper::respond([
                         'error' => 'Formato de correo inválido'
                     ], 422);
                 }
@@ -651,7 +573,7 @@ class CustomersController extends Controller
             if ($planCode !== null && $planCode !== '') {
                 $planCode = trim((string) $planCode);
                 if (mb_strlen($planCode) > 50) {
-                    $this->respond([
+                    ApiHelper::respond([
                         'error' => 'El PlanCode debe tener máximo 50 caracteres'
                     ], 422);
                 }
@@ -671,19 +593,46 @@ class CustomersController extends Controller
         }
 
         if (empty($attributes)) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'No se enviaron atributos'
             ], 422);
         }
 
         if ($existing === null) {
             if (!array_key_exists('name', $attributes) || $attributes['name'] === null || $attributes['name'] === '') {
-                $this->respond([
+                ApiHelper::respond([
                     'error' => 'El nombre es obligatorio al crear un cliente'
                 ], 422);
             }
 
             $privacyAcceptance = $this->normalizePrivacyAcceptancePayload($privacyAcceptanceInput, true);
+
+            // Si no se proporciona billingId, crear cliente en Stripe
+            if (!array_key_exists('billingId', $attributes) || $attributes['billingId'] === null) {
+                // Validar que tengamos email para crear en Stripe
+                if (!array_key_exists('email', $attributes) || $attributes['email'] === null || $attributes['email'] === '') {
+                    ApiHelper::respond([
+                        'error' => 'El email es obligatorio'
+                    ], 422);
+                }
+
+                // Crear cliente en Stripe
+                $stripeResult = $this->stripeService->createCustomer(
+                    $attributes['name'],
+                    $attributes['email'],
+                    $attributes['phone'] ?? null
+                );
+
+                if (!$stripeResult['success']) {
+                    ApiHelper::respond([
+                        'error' => 'No se pudo crear el cliente en Stripe: ' . ($stripeResult['error'] ?? 'Error desconocido'),
+                        'code' => 'stripe_customer_creation_failed'
+                    ], 500);
+                }
+
+                // Usar el ID de Stripe como billingId
+                $attributes['billingId'] = $stripeResult['customer']->id;
+            }
 
             try {
                 $result = $this->customerRegistry->registerCustomerIfAbsent([
@@ -700,14 +649,14 @@ class CustomersController extends Controller
                 ]);
             } catch (\RuntimeException $e) {
                 if ($e->getMessage() === 'email_already_registered') {
-                    $this->respond([
+                    ApiHelper::respond([
                         'error' => 'El correo ya está registrado para otro cliente',
                         'code' => 'email_conflict',
                     ], 409);
                 }
 
                 if ($e->getMessage() === 'access_key_secret_missing') {
-                    $this->respond([
+                    ApiHelper::respond([
                         'error' => 'No se pudo generar la AccessKey. Falta configurar ACCESS_KEY_SECRET.',
                         'code' => 'access_key_generation_failed',
                     ], 500);
@@ -725,14 +674,14 @@ class CustomersController extends Controller
                 $response['accessKey'] = $result['accessKey'];
             }
 
-            $this->respond($response, $result['found'] ? 200 : 201);
+            ApiHelper::respond($response, $result['found'] ? 200 : 201);
         }
 
         try {
             $customer = $this->customerRegistry->upsertCustomer($customerId, $attributes);
         } catch (\RuntimeException $e) {
             if ($e->getMessage() === 'email_already_registered') {
-                $this->respond([
+                ApiHelper::respond([
                     'error' => 'El correo ya está registrado para otro cliente',
                     'code' => 'email_conflict',
                 ], 409);
@@ -740,7 +689,7 @@ class CustomersController extends Controller
 
             throw $e;
         }
-        $this->respond([
+        ApiHelper::respond([
             'status' => 'updated',
             'customer' => $customer,
         ], 200);
@@ -748,15 +697,11 @@ class CustomersController extends Controller
 
     public function registerCustomer()
     {
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->respond(['status' => 'ok']);
-        }
+        ApiHelper::respondIfOptions();
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Método no permitido'], 405);
-        }
+        ApiHelper::allowedMethodsPost();
 
-        $payload = $this->getJsonBody();
+        $payload = ApiHelper::getJsonBody();
 
         $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
         $name = isset($payload['name']) ? trim((string) $payload['name']) : '';
@@ -769,20 +714,20 @@ class CustomersController extends Controller
         $privacyAcceptanceInput = array_key_exists('privacyAcceptance', $payload) ? $payload['privacyAcceptance'] : null;
 
         if ($name === '' || $token === '') {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'El nombre y el token son obligatorios'
             ], 422);
         }
 
         if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Formato de correo inválido'
             ], 422);
         }
 
         if ($planCode !== null && $planCode !== '') {
             if (mb_strlen($planCode) > 50) {
-                $this->respond([
+                ApiHelper::respond([
                     'error' => 'El PlanCode debe tener máximo 50 caracteres'
                 ], 422);
             }
@@ -794,11 +739,49 @@ class CustomersController extends Controller
         $deviceName = $deviceName !== null && $deviceName !== '' ? $deviceName : null;
         $privacyAcceptance = $this->normalizePrivacyAcceptancePayload($privacyAcceptanceInput, true);
 
+        // Verificar si el cliente ya existe localmente
+        $existingCustomer = $customerId !== '' ? $this->customerRegistry->getCustomer($customerId) : null;
+        
+        // Si el cliente no existe, crear en Stripe primero
+        if ($existingCustomer === null) {
+            // Si no se proporcionó billingId, crear cliente en Stripe
+            if ($billingId === null || $billingId === '') {
+                // Validar que tengamos email para crear en Stripe
+                if ($email === '') {
+                    ApiHelper::respond([
+                        'error' => 'El email es obligatorio para crear un cliente en Stripe'
+                    ], 422);
+                }
+
+                // Crear cliente en Stripe
+                $stripeResult = $this->stripeService->createCustomer(
+                    $name,
+                    $email,
+                    $phone
+                );
+
+                if (!$stripeResult['success']) {
+                    ApiHelper::respond([
+                        'error' => 'No se pudo crear el cliente en Stripe: ' . ($stripeResult['error'] ?? 'Error desconocido'),
+                        'code' => 'stripe_customer_creation_failed'
+                    ], 500);
+                }
+
+                // Usar el ID de Stripe como billingId
+                $billingId = $stripeResult['customer']->id;
+            }
+        } else {
+            // Cliente ya existe, usar su billingId actual si no se proporciona uno nuevo
+            if ($billingId === null || $billingId === '') {
+                $billingId = $existingCustomer['billingId'] ?? null;
+            }
+        }
+
         try {
             $result = $this->customerRegistry->registerCustomerIfAbsent([
                 'customerId' => $customerId,
                 'name' => $name,
-                'billingId' => $billingId !== '' ? $billingId : null,
+                'billingId' => $billingId,
                 'planCode' => $planCode,
                 'email' => $email !== '' ? $email : null,
                 'phone' => $phone,
@@ -808,14 +791,14 @@ class CustomersController extends Controller
             ]);
         } catch (\RuntimeException $e) {
             if ($e->getMessage() === 'email_already_registered') {
-                $this->respond([
+                ApiHelper::respond([
                     'error' => 'El correo ya está registrado para otro cliente',
                     'code' => 'email_conflict',
                 ], 409);
             }
 
             if ($e->getMessage() === 'access_key_secret_missing') {
-                $this->respond([
+                ApiHelper::respond([
                     'error' => 'No se pudo generar la AccessKey. Falta configurar ACCESS_KEY_SECRET.',
                     'code' => 'access_key_generation_failed',
                 ], 500);
@@ -825,14 +808,14 @@ class CustomersController extends Controller
         }
 
         if ($result['found'] === true) {
-            $this->respond([
+            ApiHelper::respond([
                 'found' => true,
                 'registered' => false,
                 'customer' => $result['customer'],
             ], 200);
         }
 
-        $this->respond([
+        ApiHelper::respond([
             'found' => false,
             'registered' => true,
             'customer' => $result['customer'],
@@ -842,15 +825,11 @@ class CustomersController extends Controller
 
     public function loginCustomer()
     {
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->respond(['status' => 'ok']);
-        }
+        ApiHelper::respondIfOptions();
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Método no permitido'], 405);
-        }
+        ApiHelper::allowedMethodsPost();
 
-        $payload = $this->getJsonBody();
+        $payload = ApiHelper::getJsonBody();
 
         $email = isset($payload['email']) ? trim((string) $payload['email']) : '';
         $accessKey = isset($payload['accessKey']) ? trim((string) $payload['accessKey']) : '';
@@ -858,13 +837,13 @@ class CustomersController extends Controller
         $token = isset($payload['token']) ? trim((string) $payload['token']) : '';
 
         if ($email === '' || $accessKey === '' || $deviceName === '' || $token === '') {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Debes proporcionar email, accessKey, deviceName y token'
             ], 422);
         }
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Formato de correo inválido'
             ], 422);
         }
@@ -874,32 +853,32 @@ class CustomersController extends Controller
         try {
             $customer = $this->customerRegistry->loginWithAccessKey($email, $accessKey, $deviceName, $ipAddress, $token);
         } catch (\InvalidArgumentException $e) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Debes proporcionar email y accessKey válidos'
             ], 422);
         } catch (\RuntimeException $e) {
             $message = $e->getMessage();
 
             if ($message === 'too_many_attempts') {
-                $this->respond([
+                ApiHelper::respond([
                     'error' => 'Demasiados intentos fallidos. Intenta nuevamente en una hora.'
                 ], 429);
             }
 
             if ($message === 'invalid_credentials') {
-                $this->respond([
+                ApiHelper::respond([
                     'error' => 'Credenciales inválidas'
                 ], 401);
             }
 
             if ($message === 'customer_not_waiting') {
-                $this->respond([
+                ApiHelper::respond([
                     'error' => 'El cliente no está esperando un nuevo token'
                 ], 409);
             }
 
             if ($message === 'access_key_secret_missing') {
-                $this->respond([
+                ApiHelper::respond([
                     'error' => 'No se puede validar la AccessKey. Falta configurar ACCESS_KEY_SECRET.'
                 ], 500);
             }
@@ -907,7 +886,7 @@ class CustomersController extends Controller
             throw $e;
         }
 
-        $this->respond([
+        ApiHelper::respond([
             'status' => 'success',
             'customer' => [
                 'customerId' => $customer['customerId'],
@@ -922,20 +901,18 @@ class CustomersController extends Controller
 
     public function patchCustomer()
     {
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->respond(['status' => 'ok']);
-        }
+        ApiHelper::respondIfOptions();
 
         $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
         if (!in_array($method, ['POST', 'PATCH'], true)) {
-            $this->respond(['error' => 'Método no permitido'], 405);
+            ApiHelper::respond(['error' => 'Método no permitido'], 405);
         }
 
-        $payload = $this->getJsonBody();
+        $payload = ApiHelper::getJsonBody();
 
         $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
         if ($customerId === '') {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'El campo customerId es obligatorio'
             ], 422);
         }
@@ -947,7 +924,7 @@ class CustomersController extends Controller
             if ($planCode !== null && $planCode !== '') {
                 $planCode = trim((string) $planCode);
                 if (mb_strlen($planCode) > 50) {
-                    $this->respond([
+                    ApiHelper::respond([
                         'error' => 'El PlanCode debe tener máximo 50 caracteres'
                     ], 422);
                 }
@@ -964,7 +941,7 @@ class CustomersController extends Controller
             }
 
             if ($name === null || $name === '') {
-                $this->respond([
+                ApiHelper::respond([
                     'error' => 'El nombre no puede estar vacío'
                 ], 422);
             }
@@ -977,7 +954,7 @@ class CustomersController extends Controller
             if ($email !== null && $email !== '') {
                 $email = trim((string) $email);
                 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                    $this->respond([
+                    ApiHelper::respond([
                         'error' => 'Formato de correo inválido'
                     ], 422);
                 }
@@ -997,7 +974,7 @@ class CustomersController extends Controller
         }
 
         if (empty($attributes)) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Debes proporcionar al menos un atributo para actualizar'
             ], 422);
         }
@@ -1005,12 +982,12 @@ class CustomersController extends Controller
         $customer = $this->customerRegistry->patchCustomerAttributes($customerId, $attributes);
 
         if ($customer === null) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Cliente no encontrado'
             ], 404);
         }
 
-        $this->respond([
+        ApiHelper::respond([
             'status' => 'updated',
             'customer' => $customer,
         ]);
@@ -1018,15 +995,11 @@ class CustomersController extends Controller
 
     public function validateCustomer()
     {
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->respond(['status' => 'ok']);
-        }
+        ApiHelper::respondIfOptions();
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Método no permitido'], 405);
-        }
+        ApiHelper::allowedMethodsPost();
 
-        $payload = $this->getJsonBody();
+        $payload = ApiHelper::getJsonBody();
 
         $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
         $name = isset($payload['name']) ? trim((string) $payload['name']) : '';
@@ -1039,20 +1012,20 @@ class CustomersController extends Controller
         $privacyAcceptanceInput = array_key_exists('privacyAcceptance', $payload) ? $payload['privacyAcceptance'] : null;
 
         if ($name === '' || $token === '') {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'El nombre y el token son obligatorios'
             ], 422);
         }
 
         if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Formato de correo inválido'
             ], 422);
         }
 
         if ($planCode !== null && $planCode !== '') {
             if (mb_strlen($planCode) > 50) {
-                $this->respond([
+                ApiHelper::respond([
                     'error' => 'El PlanCode debe tener máximo 50 caracteres'
                 ], 422);
             }
@@ -1072,7 +1045,7 @@ class CustomersController extends Controller
         if ($existing === null) {
             $emailAvailable = $this->customerRegistry->isEmailAvailable($normalizedEmail);
             if (!$emailAvailable) {
-                $this->respond([
+                ApiHelper::respond([
                     'error' => 'El correo ya está registrado para otro cliente',
                     'code' => 'email_conflict',
                 ], 409);
@@ -1081,7 +1054,7 @@ class CustomersController extends Controller
 
         $privacyAcceptance = $this->normalizePrivacyAcceptancePayload($privacyAcceptanceInput, $existing === null);
 
-        $this->respond([
+        ApiHelper::respond([
             'valid' => true,
             'found' => $existing !== null,
             'customerId' => $existing['customerId'] ?? ($customerId !== '' ? $customerId : null),
@@ -1102,19 +1075,15 @@ class CustomersController extends Controller
 
     public function awaitToken()
     {
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->respond(['status' => 'ok']);
-        }
+        ApiHelper::respondIfOptions();
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Método no permitido'], 405);
-        }
+        ApiHelper::allowedMethodsPost();
 
-        $payload = $this->getJsonBody();
+        $payload = ApiHelper::getJsonBody();
         $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
 
         if ($customerId === '') {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'El campo customerId es obligatorio'
             ], 422);
         }
@@ -1124,12 +1093,12 @@ class CustomersController extends Controller
         $customer = $this->customerRegistry->setWaitingForToken($customerId, $waiting);
 
         if (!$customer) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Cliente no encontrado'
             ], 404);
         }
 
-        $this->respond([
+        ApiHelper::respond([
             'customerId' => $customer['customerId'],
             'billingId' => $customer['billingId'] ?? null,
             'planCode' => $customer['planCode'] ?? null,
@@ -1140,18 +1109,14 @@ class CustomersController extends Controller
 
     public function customerToken()
     {
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->respond(['status' => 'ok']);
-        }
+        ApiHelper::respondIfOptions();
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->respond(['error' => 'Método no permitido'], 405);
-        }
+       ApiHelper::allowedMethodsGet();
 
         $customerId = isset($_GET['customerId']) ? trim((string) $_GET['customerId']) : '';
 
         if ($customerId === '') {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'El campo customerId es obligatorio'
             ], 422);
         }
@@ -1159,12 +1124,12 @@ class CustomersController extends Controller
         $customer = $this->customerRegistry->getCustomer($customerId);
 
         if (!$customer) {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Cliente no encontrado'
             ], 404);
         }
 
-        $this->respond([
+        ApiHelper::respond([
             'customerId' => $customer['customerId'],
             'name' => $customer['name'],
             'billingId' => $customer['billingId'] ?? null,
@@ -1179,21 +1144,17 @@ class CustomersController extends Controller
 
     public function registerToken()
     {
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->respond(['status' => 'ok']);
-        }
+        ApiHelper::respondIfOptions();
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->respond(['error' => 'Método no permitido'], 405);
-        }
+        ApiHelper::allowedMethodsPost();
 
-        $payload = $this->getJsonBody();
+        $payload = ApiHelper::getJsonBody();
         $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
         $token = isset($payload['token']) ? trim((string) $payload['token']) : '';
         $deviceName = array_key_exists('deviceName', $payload) ? trim((string) $payload['deviceName']) : null;
 
         if ($customerId === '' || $token === '') {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Los campos customerId y token son obligatorios'
             ], 422);
         }
@@ -1205,13 +1166,13 @@ class CustomersController extends Controller
         $result = $this->customerRegistry->registerToken($customerId, $token, $deviceName);
 
         if ($result['status'] === 'not_found') {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'Cliente no encontrado'
             ], 404);
         }
 
         if ($result['status'] === 'not_waiting') {
-            $this->respond([
+            ApiHelper::respond([
                 'error' => 'El cliente no está esperando un nuevo token',
                 'waitingForToken' => $result['customer']['waitingForToken'] ?? false,
             ], 409);
@@ -1219,9 +1180,36 @@ class CustomersController extends Controller
 
         $customer = $result['customer'];
 
-        $this->respond([
+        ApiHelper::respond([
             'status' => 'updated',
             'customer' => $customer,
+        ]);
+    }
+
+    public function getMessagesSendsAtMonth($customerId = null){
+        ApiHelper::respondIfOptions();
+
+        ApiHelper::allowedMethodsGet();
+
+        $customerId = $customerId ?? (isset($_GET['customerId']) ? trim((string) $_GET['customerId']) : '');
+
+        if ($customerId === '') {
+            ApiHelper::respond([
+                'error' => 'El campo customerId es obligatorio'
+            ], 422);
+        }
+
+        $sendsAtMonth = $this->customerRegistry->getMessagesSendsAtMonth($customerId);
+
+        if ($sendsAtMonth === null) {
+            ApiHelper::respond([
+                'error' => 'Cliente no encontrado'
+            ], 404);
+        }
+
+        ApiHelper::respond([
+            'customerId' => $customerId,
+            'total' => $sendsAtMonth,
         ]);
     }
 }

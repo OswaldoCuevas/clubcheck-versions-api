@@ -26,7 +26,7 @@ $router->any('/api/customers/sessions/active', 'CustomersController', 'activeSes
 $router->any('/api/customers/save', 'CustomersController', 'saveCustomer');
 $router->any('/api/customers/register', 'CustomersController', 'registerCustomer');
 $router->any('/api/customers/login', 'CustomersController', 'loginCustomer');
-$router->any('/api/customers/validate', 'CustomersController', 'validateCustomer');
+$router->post('/api/customers/validate', 'CustomersController', 'validateCustomer');
 $router->any('/api/customers', 'CustomersController', 'patchCustomer');
 $router->any('/api/customers/:customerId', 'CustomersController', 'getCustomer');
 $router->any('/api/customers/token', 'CustomersController', 'customerToken');
@@ -34,6 +34,7 @@ $router->any('/api/customers/token/register', 'CustomersController', 'registerTo
 $router->any('/api/customers/token/await', 'CustomersController', 'awaitToken');
 $router->any('/api/customers/desktop/pull', 'CustomersController', 'pullDesktop');
 $router->any('/api/customers/desktop/push', 'CustomersController', 'pushDesktop');
+$router->any('/api/customers/messages-sends-at-month/:customerId', 'CustomersController', 'getMessagesSendsAtMonth');
 
 // Rutas administrativas
 $router->any('/admin', 'AdminController', 'index');
@@ -46,5 +47,31 @@ $router->get('/admin/api-docs', 'AdminController', 'apiDocs');
 $router->any('/password-generator', 'ToolsController', 'passwordGenerator');
 $router->any('/quick-hash', 'ToolsController', 'quickHash');
 $router->any('/generate-password', 'ToolsController', 'generatePassword');
+
+// ==================== STRIPE ====================
+// Configuración pública (clave pública para el cliente)
+$router->get('/api/customers/stripe/config', 'StripeController', 'getPublicConfig');
+
+// Clientes
+$router->post('/api/customers/stripe/customers', 'StripeController', 'createCustomer');
+$router->get('/api/customers/stripe/customers/:customerId', 'StripeController', 'getCustomer');
+$router->put('/api/customers/stripe/customers/:customerId', 'StripeController', 'updateCustomer');
+
+// Tarjetas
+$router->post('/api/customers/stripe/customers/:customerId/cards', 'StripeController', 'addCard');
+$router->get('/api/customers/stripe/customers/:customerId/cards', 'StripeController', 'listCards');
+$router->delete('/api/customers/stripe/customers/:customerId/cards/:cardId', 'StripeController', 'deleteCard');
+$router->put('/api/customers/stripe/customers/:customerId/cards/:cardId/default', 'StripeController', 'setDefaultCard');
+
+// Suscripciones
+$router->post('/api/customers/stripe/customers/:customerId/subscriptions', 'StripeController', 'createSubscription');
+$router->get('/api/customers/stripe/customers/:customerId/subscriptions/active', 'StripeController', 'getActiveSubscription');
+$router->put('/api/customers/stripe/subscriptions/:subscriptionId', 'StripeController', 'updateSubscription');
+$router->put('/api/customers/stripe/subscriptions/:subscriptionId/plan', 'StripeController', 'changePlan');
+
+// Precios/Planes
+$router->get('/api/customers/stripe/prices', 'StripeController', 'listPrices');
+$router->post('/api/customers/stripe/subscriptions/:subscriptionId/preview', 'StripeController', 'previewPlanChange');
+$router->post('/api/customers/stripe/customers/:customerId/subscriptions/preview', 'StripeController', 'previewNewSubscription');
 
 return $router;

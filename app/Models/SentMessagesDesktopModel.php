@@ -30,6 +30,7 @@ class SentMessagesDesktopModel extends BaseDesktopSyncModel
         'ErrorMessage',
         'CustomerApiId',
     ];
+
     protected array $booleanColumns = ['Successful'];
     protected ?string $orderBy = 'SentDay';
 }
