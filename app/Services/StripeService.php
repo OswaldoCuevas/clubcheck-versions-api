@@ -70,7 +70,7 @@ class StripeService
                 $this->deleteCard($customerId, $card->id);
                 return [
                     'success' => false,
-                    'error' => 'CVC incorrecto'
+                    'error' => 'CVV incorrecto'
                 ];
             }
 
@@ -291,9 +291,9 @@ class StripeService
                 'expand' => ['latest_invoice.payment_intent', 'items.data.price']
             ];
 
-            if ($trialDays > 0) {
-                $options['trial_period_days'] = $trialDays;
-            }
+            // if ($trialDays > 0) {
+            //     $options['trial_period_days'] = $trialDays;
+            // }
 
             // NO se pasa test_clock aquí - se hereda automáticamente del cliente
 
@@ -697,10 +697,8 @@ public function previewNewSubscription(string $customerId, string $priceId, int 
         $currency = strtoupper($price->currency ?? 'mxn');
         
         // Si hay días de prueba, el cobro inicial es 0
-        $amountDue = $trialDays > 0 ? 0 : $amount;
-        $billingDate = $trialDays > 0 
-            ? date('Y-m-d', strtotime("+{$trialDays} days"))
-            : date('Y-m-d');
+        $amountDue = $amount;
+        $billingDate = date('Y-m-d');
 
         return [
             'success' => true,
@@ -717,8 +715,7 @@ public function previewNewSubscription(string $customerId, string $priceId, int 
                 'current_plan_formatted' => $this->formatMoney(0, $currency),
                 'billing_date' => $billingDate,
                 'is_upgrade' => true,
-                'immediate_charge' => $trialDays === 0,
-                'trial_days' => $trialDays,
+                'immediate_charge' => false,
                 'new_plan_name' => $price->nickname ?? $price->lookup_key ?? 'Plan',
             ]
         ];
