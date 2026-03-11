@@ -15,6 +15,7 @@ require_once __DIR__ . '/../Models/InfoMySubscriptionDesktopModel.php';
 require_once __DIR__ . '/../Models/WhatsAppDesktopModel.php';
 require_once __DIR__ . '/../Models/AppSettingsDesktopModel.php';
 require_once __DIR__ . '/../Models/SentMessagesDesktopModel.php';
+require_once __DIR__ . '/../Models/MessageSentModel.php';
 require_once __DIR__ . '/../Models/ProductDesktopModel.php';
 require_once __DIR__ . '/../Models/ProductPriceDesktopModel.php';
 require_once __DIR__ . '/../Models/ProductStockDesktopModel.php';
@@ -41,6 +42,7 @@ use Models\InfoMySubscriptionDesktopModel;
 use Models\WhatsAppDesktopModel;
 use Models\AppSettingsDesktopModel;
 use Models\SentMessagesDesktopModel;
+use Models\MessageSentModel;
 use Models\ProductDesktopModel;
 use Models\ProductPriceDesktopModel;
 use Models\ProductStockDesktopModel;
@@ -58,6 +60,7 @@ class CustomersController extends Controller
 {
     private CustomerSessionModel $sessionModel;
     private CustomerRegistryModel $customerRegistry;
+    private MessageSentModel $messageSentModel;
     private StripeService $stripeService;
     
     private array $desktopModels;
@@ -68,6 +71,7 @@ class CustomersController extends Controller
 
         $this->sessionModel = new CustomerSessionModel();
         $this->customerRegistry = new CustomerRegistryModel();
+        $this->messageSentModel = new MessageSentModel();
         $this->desktopModels = $this->createDesktopModels();
         
         // Inicializar StripeService
@@ -1199,17 +1203,18 @@ class CustomersController extends Controller
             ], 422);
         }
 
-        $sendsAtMonth = $this->customerRegistry->getMessagesSendsAtMonth($customerId);
+        // Obtener mes y año actual
+        $now = new \DateTime('now', new \DateTimeZone('America/Mexico_City'));
+        $month = (int) $now->format('m');
+        $year = (int) $now->format('Y');
 
-        if ($sendsAtMonth === null) {
-            ApiHelper::respond([
-                'error' => 'Cliente no encontrado'
-            ], 404);
-        }
+        // Consultar mensajes exitosos del mes usando MessageSentModel
+        $sendsAtMonth = $this->messageSentModel->countSuccessfulByMonth($customerId, $month, $year);
 
         ApiHelper::respond([
             'customerId' => $customerId,
             'total' => $sendsAtMonth,
+            'month' => $now->format('Y-m'),
         ]);
     }
 }

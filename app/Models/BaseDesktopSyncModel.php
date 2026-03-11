@@ -201,6 +201,16 @@ abstract class BaseDesktopSyncModel extends Model
         return $normalized === '' ? null : $normalized;
     }
 
+    public function findById(string $id): ?array
+    {
+        $row = $this->db->fetchOne(
+            sprintf('SELECT * FROM %s WHERE %s = ? LIMIT 1', $this->table, $this->primaryKey),
+            [$id]
+        );
+
+        return $row ?: null;
+    }
+
     protected function isNullable(string $column): bool
     {
         return in_array($column, $this->nullableColumns, true);

@@ -286,6 +286,279 @@ Tras registrar el token exitosamente, el servicio limpia la marca `waitingForTok
 
 Los endpoints bajo `/api/customers/sessions/*` siguen disponibles para que la app de escritorio envíe heartbeats (`start`, `heartbeat`, `end`, `active`). Aunque ya no se muestran en el panel principal, continúan actualizando los campos `lastSeen` y `metadata` del registro de clientes.
 
+### API de WhatsApp
+
+Los endpoints de WhatsApp permiten enviar mensajes de templates desde el backend. Todos los mensajes se registran automáticamente en la tabla `SentMessagesDesktop`.
+
+> **Configuración requerida:** Define las siguientes variables de entorno:
+> - `WHATSAPP_API_URL` - URL de la API de WhatsApp (default: `https://graph.facebook.com/v18.0`)
+> - `WHATSAPP_PHONE_NUMBER_ID` - ID del número de teléfono de WhatsApp Business
+> - `WHATSAPP_ACCESS_TOKEN` - Token de acceso de la API
+
+#### 1. Estado del servicio
+```http
+GET /clubcheck/api/customers/whatsapp/status
+```
+
+**Respuesta:**
+```json
+{
+    "configured": true,
+    "timestamp": 1699900000
+}
+```
+
+#### 2. Conteo mensual de mensajes
+```http
+GET /clubcheck/api/customers/whatsapp/monthly-count/CUSTOMER-ID
+```
+
+**Respuesta:**
+```json
+{
+    "customerApiId": "CUSTOMER-ID",
+    "count": 150,
+    "month": "2026-03"
+}
+```
+
+#### 3. Listar mensajes enviados con filtros
+
+Este endpoint permite obtener el historial de mensajes con filtros avanzados, paginación y búsqueda.
+
+```http
+GET /clubcheck/api/customers/whatsapp/messages/CUSTOMER-ID?page=1&perPage=20&status=failed&search=5512345678&startDate=2026-03-01&endDate=2026-03-10
+```
+
+**Query Parameters:**
+
+| Parámetro | Tipo | Requerido | Descripción |
+|-----------|------|-----------|-------------|
+| `page` | number | No | Número de página (default: 1) |
+| `perPage` | number | No | Registros por página (default: 50, max: 500) |
+| `startDate` | string | No | Fecha inicio en formato YYYY-MM-DD |
+| `endDate` | string | No | Fecha fin en formato YYYY-MM-DD |
+| `status` | string | No | Filtrar por estatus: `success` o `failed` |
+| `search` | string | No | Buscar en teléfono, mensaje o error |
+
+**Ejemplo de uso desde JavaScript/TypeScript:**
+```javascript
+async function getWhatsAppMessages(customerApiId, filters = {}) {
+    const params = new URLSearchParams({
+        page: filters.page || 1,
+        perPage: filters.perPage || 20,
+        ...(filters.startDate && { startDate: filters.startDate }),
+        ...(filters.endDate && { endDate: filters.endDate }),
+        ...(filters.status && { status: filters.status }),
+        ...(filters.search && { search: filters.search })
+    });
+
+    const response = await fetch(
+        `https://tu-servidor.com/clubcheck/api/customers/whatsapp/messages/${customerApiId}?${params}`,
+        {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        }
+    );
+
+    return await response.json();
+}
+
+// Ejemplo de uso
+const messages = await getWhatsAppMessages('CLUB-001', {
+    page: 1,
+    perPage: 20,
+    status: 'failed',
+    startDate: '2026-03-01',
+    endDate: '2026-03-10',
+    search: '5512345678'
+});
+
+console.log(messages);
+```
+
+**Respuesta:**
+```json
+{
+    "customerApiId": "CLUB-001",
+    "messages": [
+        {
+            "Id": "uuid-123",
+            "UserId": "USER-001",
+            "CustomerApiId": "CLUB-001",
+            "PhoneNumber": "525512345678",
+            "Message": "Aviso de membresía: vence en 3 días. Club: Mi Club",
+            "SentDay": "2026-03-10",
+            "SentHour": "14:30:00",
+            "Successful": 1,
+            "ErrorMessage": null
+        }
+    ],
+    "pagination": {
+        "total": 150,
+        "page": 1,
+        "perPage": 20,
+        "totalPages": 8,
+        "hasNextPage": true,
+        "hasPrevPage": false
+    },
+    "filters": {
+        "startDate": "2026-03-01",
+        "endDate": "2026-03-10",
+        "status": "failed",
+        "search": "5512345678"
+    }
+}
+```
+
+#### 4. Enviar mensaje de nueva suscripción
+```http
+POST /clubcheck/api/customers/whatsapp/send/subscription
+Content-Type: application/json
+
+{
+    "customerApiId": "CLUB-001",
+    "subscriptionId": "SUB-123",
+    "phone": "5512345678",
+    "userId": "USER-001",
+    "firstName": "Juan",
+    "clubName": "Mi Club",
+    "startDate": "10/03/2026",
+    "endDate": "10/04/2026"
+}
+```
+
+**Campos obligatorios:** `customerApiId`, `subscriptionId`, `phone`
+
+**Respuesta exitosa:**
+```json
+{
+    "success": true,
+    "subscriptionId": "SUB-123",
+    "messageId": "wamid.xxx",
+    "error": null
+}
+```
+
+#### 5. Enviar mensaje de advertencia (vencimiento próximo)
+```http
+POST /clubcheck/api/customers/whatsapp/send/warning
+Content-Type: application/json
+
+{
+    "customerApiId": "CLUB-001",
+    "subscriptionId": "SUB-123",
+    "phone": "5512345678",
+    "userId": "USER-001",
+    "clubName": "Mi Club",
+    "days": 3
+}
+```
+
+#### 6. Enviar mensaje de membresía finalizada
+```http
+POST /clubcheck/api/customers/whatsapp/send/finalized
+Content-Type: application/json
+
+{
+    "customerApiId": "CLUB-001",
+    "subscriptionId": "SUB-123",
+    "phone": "5512345678",
+    "userId": "USER-001",
+    "clubName": "Mi Club"
+}
+```
+
+#### 7. Enviar mensaje de último día
+```http
+POST /clubcheck/api/customers/whatsapp/send/last-day
+Content-Type: application/json
+
+{
+    "customerApiId": "CLUB-001",
+    "subscriptionId": "SUB-123",
+    "phone": "5512345678",
+    "userId": "USER-001",
+    "clubName": "Mi Club"
+}
+```
+
+#### 8. Envío en bulk (múltiples mensajes)
+
+Este endpoint permite enviar múltiples mensajes en una sola petición y devuelve los `subscriptionId` de los mensajes exitosos para que el frontend pueda actualizar el estado de las suscripciones.
+
+```http
+POST /clubcheck/api/customers/whatsapp/send/bulk
+Content-Type: application/json
+
+{
+    "customerApiId": "CLUB-001",
+    "clubName": "Mi Club",
+    "items": [
+        {
+            "template": "subscription",
+            "subscriptionId": "SUB-001",
+            "phone": "5512345678",
+            "userId": "USER-001",
+            "parameters": {
+                "firstName": "Juan",
+                "startDate": "10/03/2026",
+                "endDate": "10/04/2026"
+            }
+        },
+        {
+            "template": "warning",
+            "subscriptionId": "SUB-002",
+            "phone": "5522334455",
+            "userId": "USER-002",
+            "parameters": {
+                "days": 2
+            }
+        },
+        {
+            "template": "finalized",
+            "subscriptionId": "SUB-003",
+            "phone": "5533445566",
+            "parameters": {}
+        }
+    ]
+}
+```
+
+**Templates disponibles:**
+- `subscription` / `new_subscription` - Bienvenida de membresía
+- `warning` / `warning_subscription` - Advertencia de vencimiento próximo
+- `finalized` / `finalized_subscription` - Membresía finalizada
+- `last_day` / `warning_last_day` - Último día de membresía
+
+**Parámetros por template:**
+| Template | Parámetros |
+|----------|------------|
+| `subscription` | `firstName`, `startDate`, `endDate` |
+| `warning` | `days` (número de días restantes) |
+| `finalized` | (ninguno adicional) |
+| `last_day` | (ninguno adicional) |
+
+**Respuesta:**
+```json
+{
+    "success": [
+        { "subscriptionId": "SUB-001", "messageId": "wamid.xxx" },
+        { "subscriptionId": "SUB-002", "messageId": "wamid.yyy" }
+    ],
+    "failed": [
+        { "subscriptionId": "SUB-003", "error": "Número de teléfono inválido" }
+    ],
+    "total": 3,
+    "successCount": 2,
+    "failedCount": 1
+}
+```
+
+El frontend puede usar el array `success` para actualizar las suscripciones que ya tienen su mensaje enviado.
+
 ### Panel administrativo y monitoreo
 
 - Después de iniciar sesión accedes al panel `/admin`, con accesos directos a gestión de versiones, herramientas y clientes.

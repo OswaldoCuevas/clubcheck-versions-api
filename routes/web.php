@@ -36,6 +36,30 @@ $router->any('/api/customers/desktop/pull', 'CustomersController', 'pullDesktop'
 $router->any('/api/customers/desktop/push', 'CustomersController', 'pushDesktop');
 $router->any('/api/customers/messages-sends-at-month/:customerId', 'CustomersController', 'getMessagesSendsAtMonth');
 
+// Rutas de mensajes enviados (MessageSent)
+$router->get('/api/messages-sent', 'MessageSentController', 'index');
+$router->get('/api/messages-sent/:id', 'MessageSentController', 'show');
+$router->post('/api/messages-sent', 'MessageSentController', 'store');
+$router->put('/api/messages-sent/:id', 'MessageSentController', 'update');
+$router->delete('/api/messages-sent/:id', 'MessageSentController', 'destroy');
+
+// ==================== WHATSAPP ====================
+// Estado del servicio
+$router->get('/api/customers/whatsapp/status', 'WhatsAppController', 'status');
+$router->get('/api/customers/whatsapp/monthly-count/:customerApiId', 'WhatsAppController', 'monthlyCount');
+
+// Listado de mensajes con filtros
+$router->get('/api/customers/whatsapp/messages/:customerApiId', 'WhatsAppController', 'listMessages');
+
+// Envío de templates individuales
+$router->post('/api/customers/whatsapp/send/subscription', 'WhatsAppController', 'sendSubscription');
+$router->post('/api/customers/whatsapp/send/warning', 'WhatsAppController', 'sendWarning');
+$router->post('/api/customers/whatsapp/send/finalized', 'WhatsAppController', 'sendFinalized');
+$router->post('/api/customers/whatsapp/send/last-day', 'WhatsAppController', 'sendLastDay');
+
+// Envío en bulk
+$router->post('/api/customers/whatsapp/send/bulk', 'WhatsAppController', 'sendBulk');
+
 // Rutas administrativas
 $router->any('/admin', 'AdminController', 'index');
 $router->get('/admin/customers', 'AdminController', 'customers');
