@@ -71,6 +71,15 @@ $router->get('/admin/api/customers', 'AdminController', 'customersJson');
 $router->post('/admin/api/customers/regenerate-access-key', 'AdminController', 'regenerateAccessKey');
 $router->get('/admin/api-docs', 'AdminController', 'apiDocs');
 
+// WhatsApp Admin CRUD
+$router->get('/admin/whatsapp', 'AdminController', 'whatsapp');
+$router->get('/admin/api/whatsapp', 'AdminController', 'whatsappListJson');
+$router->post('/admin/api/whatsapp/:id/delete', 'AdminController', 'whatsappDeleteJson');
+$router->post('/admin/api/whatsapp/:id/register', 'AdminController', 'whatsappRegisterJson');
+$router->get('/admin/api/whatsapp/:id/status', 'AdminController', 'whatsappStatusJson');
+$router->delete('/admin/api/whatsapp/:id', 'AdminController', 'whatsappDeleteJson');
+$router->post('/admin/api/whatsapp', 'AdminController', 'whatsappCreateJson');
+
 // Rutas de herramientas
 $router->any('/password-generator', 'ToolsController', 'passwordGenerator');
 $router->any('/quick-hash', 'ToolsController', 'quickHash');
@@ -96,6 +105,10 @@ $router->post('/api/customers/stripe/customers/:customerId/subscriptions', 'Stri
 $router->get('/api/customers/stripe/customers/:customerId/subscriptions/active', 'StripeController', 'getActiveSubscription');
 $router->put('/api/customers/stripe/subscriptions/:subscriptionId', 'StripeController', 'updateSubscription');
 $router->put('/api/customers/stripe/subscriptions/:subscriptionId/plan', 'StripeController', 'changePlan');
+
+// Paquetes
+$router->get('/api/customers/stripe/packages', 'StripeController', 'getPackages');
+$router->get('/api/customers/stripe/customers/:customerId/package', 'StripeController', 'getCurrentPackage');
 
 // Precios/Planes
 $router->get('/api/customers/stripe/prices', 'StripeController', 'listPrices');

@@ -741,4 +741,98 @@ private function formatMoney(int $amountInCents, string $currency = 'MXN'): stri
     $amount = $amountInCents / 100;
     return '$' . number_format($amount, 2) . ' ' . $currency;
 }
+
+/**
+ * Obtiene el paquete actual del cliente basándose en su suscripción activa
+ * Si no tiene suscripción activa, devuelve 'free'
+ * 
+ * @param string $customerId ID del cliente en Stripe
+ * @return array Información del paquete actual con sus reglas
+ */
+public function getCurrentPackage(string $customerId): array
+{
+    try {
+        $config = require __DIR__ . '/../../config/stripe.php';
+        $packages = $config['packages'] ?? [];
+        
+        // Obtener suscripción activa
+        $subscriptionResult = $this->getActiveSubscription($customerId);
+        
+        if (!$subscriptionResult['success']) {
+            return [
+                'success' => false,
+                'error' => $subscriptionResult['error'] ?? 'Error al obtener suscripción'
+            ];
+        }
+        
+        // Si no tiene suscripción activa, devolver paquete free
+        if (!$subscriptionResult['has_subscription']) {
+            $freePackage = $packages['free'] ?? null;
+            if (!$freePackage) {
+                return [
+                    'success' => true,
+                    'package' => [
+                        'name' => 'Free',
+                        'lookup_key' => 'free',
+                        'is_free' => true,
+                        'rules' => []
+                    ]
+                ];
+            }
+            
+            return [
+                'success' => true,
+                'package' => [
+                    'name' => $freePackage['name'],
+                    'lookup_key' => 'free',
+                    'is_free' => true,
+                    'rules' => $freePackage['rules'] ?? []
+                ]
+            ];
+        }
+        
+        // Obtener lookup_key de la suscripción activa
+        $subscription = $subscriptionResult['subscription'];
+        $lookupKey = $subscription['lookup_key'] ?? null;
+        
+        // Buscar el paquete correspondiente
+        $currentPackage = $packages[$lookupKey] ?? null;
+        
+        if (!$currentPackage) {
+            // Si no se encuentra el paquete, devolver info básica
+            return [
+                'success' => true,
+                'package' => [
+                    'name' => $subscription['price_name'] ?? $lookupKey ?? 'Plan Desconocido',
+                    'lookup_key' => $lookupKey,
+                    'is_free' => false,
+                    'subscription_status' => $subscription['status'],
+                    'current_period_end' => $subscription['current_period_end'],
+                    'rules' => []
+                ]
+            ];
+        }
+        
+        return [
+            'success' => true,
+            'package' => [
+                'name' => $currentPackage['name'],
+                'lookup_key' => $lookupKey,
+                'is_free' => false,
+                'subscription_id' => $subscription['id'],
+                'subscription_status' => $subscription['status'],
+                'cancel_at_period_end' => $subscription['cancel_at_period_end'],
+                'current_period_end' => $subscription['current_period_end'],
+                'unit_amount' => $subscription['unit_amount'],
+                'rules' => $currentPackage['rules'] ?? []
+            ]
+        ];
+        
+    } catch (\Exception $e) {
+        return [
+            'success' => false,
+            'error' => $this->offlineMessage
+        ];
+    }
+}
 }

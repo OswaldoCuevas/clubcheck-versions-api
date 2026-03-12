@@ -18,19 +18,56 @@ return [
     // Días de prueba por defecto para nuevas suscripciones
     'default_trial_days' => 30,
     
-    // Lookup keys de los planes disponibles
-    'plans' => [
+    // Paquetes/Planes con sus reglas y límites
+    // null = ilimitado, 0 = no incluido, número/true = incluido con cantidad
+    'packages' => [
+        'free' => [
+            'name' => 'Free',
+            'lookup_key' => 'free',
+            'rules' => [
+                'enable_fingerprint' => true,
+                'enable_qr' => true,
+                'max_messages' => 5,
+                'max_members_actives' => 15,
+                'products_to_sale' => 10,
+                'max_partners' => 40,
+            ],
+        ],
         'essential_monthly' => [
-            'name' => 'Plan Básico',
-            'features' => ['Acceso básico', 'Soporte por email']
+            'name' => 'Esencial',
+            'lookup_key' => 'essential_monthly',
+            'rules' => [
+                'enable_fingerprint' => true,
+                'enable_qr' => true,
+                'max_messages' => 5,
+                'max_members_actives' => 15,
+                'products_to_sale' => 10,
+                'max_partners' => 40,
+            ],
         ],
         'intermediate_monthly' => [
-            'name' => 'Plan Intermedio', 
-            'features' => ['Todo lo del básico', 'Reportes avanzados']
+            'name' => 'Intermedio',
+            'lookup_key' => 'intermediate_monthly',
+            'rules' => [
+                'enable_fingerprint' => true,
+                'enable_qr' => true,
+                'max_messages' => 600,
+                'max_members_actives' => 150,
+                'products_to_sale' => null,  // ilimitado
+                'max_partners' => null,       // ilimitado
+            ],
         ],
         'professional_monthly' => [
-            'name' => 'Plan Profesional',
-            'features' => ['Todo lo del intermedio', 'Soporte prioritario', 'API access']
+            'name' => 'Profesional',
+            'lookup_key' => 'professional_monthly',
+            'rules' => [
+                'enable_fingerprint' => true,
+                'enable_qr' => true,
+                'max_messages' => 900,
+                'max_members_actives' => 300,
+                'products_to_sale' => null,  // ilimitado
+                'max_partners' => null,       // ilimitado
+            ],
         ],
     ],
 ];

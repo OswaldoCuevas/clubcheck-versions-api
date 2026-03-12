@@ -5,11 +5,13 @@ namespace Controllers;
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Services/WhatsAppService.php';
 require_once __DIR__ . '/../Models/MessageSentModel.php';
+require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
 require_once __DIR__ . '/../Helpers/ApiHelper.php';
 
 use Core\Controller;
 use App\Services\WhatsAppService;
 use Models\MessageSentModel;
+use Models\WhatsAppConfigurationModel;
 use ApiHelper;
 
 /**
@@ -21,12 +23,23 @@ class WhatsAppController extends Controller
 {
     private WhatsAppService $whatsAppService;
     private MessageSentModel $messageSentModel;
+    private WhatsAppConfigurationModel $configModel;
 
     public function __construct()
     {
         parent::__construct();
-        $this->whatsAppService = new WhatsAppService();
+        $this->whatsAppService = new WhatsAppService(); // Servicio default (config global)
         $this->messageSentModel = new MessageSentModel();
+        $this->configModel = new WhatsAppConfigurationModel();
+    }
+
+    /**
+     * Obtiene una instancia de WhatsAppService para un customer específico.
+     * Si el customer tiene configuración propia, la usará; si no, usará la global.
+     */
+    private function getServiceForCustomer(string $customerId): WhatsAppService
+    {
+        return new WhatsAppService($customerId);
     }
 
     /**
@@ -59,7 +72,8 @@ class WhatsAppController extends Controller
             ApiHelper::respond(['error' => 'customerApiId es requerido'], 422);
         }
 
-        $count = $this->whatsAppService->getMonthlyCount($customerApiId);
+        $service = $this->getServiceForCustomer($customerApiId);
+        $count = $service->getMonthlyCount($customerApiId);
 
         ApiHelper::respond([
             'customerApiId' => $customerApiId,
@@ -151,7 +165,8 @@ class WhatsAppController extends Controller
         $payload = ApiHelper::getJsonBody();
         $this->validateRequired($payload, ['customerApiId', 'subscriptionId', 'phone']);
 
-        $result = $this->whatsAppService->sendSubscriptionTemplate(
+        $service = $this->getServiceForCustomer($payload['customerApiId']);
+        $result = $service->sendSubscriptionTemplate(
             $payload['phone'],
             $payload['firstName'] ?? 'Cliente',
             $payload['clubName'] ?? 'tu club',
@@ -192,7 +207,8 @@ class WhatsAppController extends Controller
         $days = $payload['days'] ?? 3;
         $daysText = $days == 1 ? 'un día' : "{$days} días";
 
-        $result = $this->whatsAppService->sendWarningTemplate(
+        $service = $this->getServiceForCustomer($payload['customerApiId']);
+        $result = $service->sendWarningTemplate(
             $payload['phone'],
             $payload['clubName'] ?? 'tu club',
             $daysText,
@@ -227,7 +243,8 @@ class WhatsAppController extends Controller
         $payload = ApiHelper::getJsonBody();
         $this->validateRequired($payload, ['customerApiId', 'subscriptionId', 'phone']);
 
-        $result = $this->whatsAppService->sendFinalizedTemplate(
+        $service = $this->getServiceForCustomer($payload['customerApiId']);
+        $result = $service->sendFinalizedTemplate(
             $payload['phone'],
             $payload['clubName'] ?? 'tu club',
             $payload['customerApiId'],
@@ -261,7 +278,8 @@ class WhatsAppController extends Controller
         $payload = ApiHelper::getJsonBody();
         $this->validateRequired($payload, ['customerApiId', 'subscriptionId', 'phone']);
 
-        $result = $this->whatsAppService->sendLastDayTemplate(
+        $service = $this->getServiceForCustomer($payload['customerApiId']);
+        $result = $service->sendLastDayTemplate(
             $payload['phone'],
             $payload['clubName'] ?? 'tu club',
             $payload['customerApiId'],
@@ -344,7 +362,8 @@ class WhatsAppController extends Controller
             return $item;
         }, $items);
 
-        $result = $this->whatsAppService->sendBulk($items, $payload['customerApiId']);
+        $service = $this->getServiceForCustomer($payload['customerApiId']);
+        $result = $service->sendBulk($items, $payload['customerApiId']);
 
         ApiHelper::respond($result);
     }
@@ -352,19 +371,24 @@ class WhatsAppController extends Controller
     // ==================== PERFIL DEL NEGOCIO ====================
 
     /**
-     * POST /api/customers/whatsapp/business-profile/register
+     * POST /api/customers/whatsapp/business-profile/:customerId
      * 
-     * Registra o actualiza el perfil del negocio de WhatsApp con nombre y logo
+     * Crea o actualiza la configuración de WhatsApp del customer.
+     * Cada customer solo puede tener UNA configuración.
+     * Si ya existe, se actualiza. Si no, se crea.
      * 
      * Body JSON:
      * {
+     *   "phoneNumber": "+521234567890",
+     *   "phoneNumberId": "123456789012345",
+     *   "accessToken": "EAAxxxxxx...",
      *   "businessName": "Mi Gimnasio",
      *   "logo": "base64_encoded_image", // Opcional
-     *   "logoFilename": "logo.jpg", // Opcional, nombre del archivo
+     *   "logoFilename": "logo.jpg", // Opcional
      *   "address": "Calle Principal 123", // Opcional
      *   "description": "El mejor gimnasio de la ciudad", // Opcional
      *   "email": "contacto@migimnasio.com", // Opcional
-     *   "vertical": "HEALTH", // Opcional (AUTO, BEAUTY, APPAREL, EDU, ENTERTAIN, etc.)
+     *   "vertical": "HEALTH", // Opcional
      *   "websites": ["https://migimnasio.com"] // Opcional
      * }
      * 
@@ -372,129 +396,210 @@ class WhatsAppController extends Controller
      * {
      *   "success": true,
      *   "data": {
-     *     "businessName": "Mi Gimnasio",
+     *     "id": "uuid",
+     *     "created": true,
+     *     "config": { ... },
      *     "profileUpdated": true,
      *     "logoUploaded": true
      *   }
      * }
      */
-    public function registerBusinessProfile(): void
+    public function registerBusinessProfile(string $customerId): void
     {
         ApiHelper::respondIfOptions();
         ApiHelper::allowedMethodsPost();
 
-        $payload = ApiHelper::getJsonBody();
-        $this->validateRequired($payload, ['businessName']);
+        if (empty($customerId)) {
+            ApiHelper::respond(['error' => 'customerId es requerido'], 422);
+        }
 
-        $businessName = $payload['businessName'];
+        $payload = ApiHelper::getJsonBody();
+        $this->validateRequired($payload, ['phoneNumber', 'phoneNumberId', 'businessName']);
+
+        // Preparar datos para guardar en BD
+        $configData = [
+            'CustomerId' => $customerId,
+            'PhoneNumber' => $payload['phoneNumber'],
+            'PhoneNumberId' => $payload['phoneNumberId'],
+            'AccessToken' => $payload['accessToken'] ?? null,
+            'BusinessName' => $payload['businessName'],
+            'BusinessAddress' => $payload['address'] ?? null,
+            'BusinessDescription' => $payload['description'] ?? null,
+            'BusinessEmail' => $payload['email'] ?? null,
+            'BusinessVertical' => $payload['vertical'] ?? null,
+            'BusinessWebsites' => $payload['websites'] ?? null,
+            'CreatedBy' => $customerId
+        ];
+
+        // Crear o actualizar configuración en BD (upsert por CustomerId)
+        $dbResult = $this->configModel->upsert($configData);
+
+        if (!$dbResult['success']) {
+            ApiHelper::respond([
+                'success' => false,
+                'error' => $dbResult['error']
+            ], 422);
+        }
+
+        // Intentar actualizar perfil en WhatsApp API
+        $logoUploaded = false;
+        $profileUpdated = false;
         $logoPath = null;
-        $tempFile = null;
 
         // Si hay logo en base64, guardarlo temporalmente
         if (isset($payload['logo']) && !empty($payload['logo'])) {
-            $logoData = $payload['logo'];
-            
-            // Remover el prefijo data:image si existe
-            if (preg_match('/^data:image\/(\w+);base64,/', $logoData, $matches)) {
-                $logoData = substr($logoData, strpos($logoData, ',') + 1);
-                $extension = $matches[1];
-            } else {
-                $extension = 'jpg';
-            }
-
-            // Decodificar base64
-            $decodedLogo = base64_decode($logoData);
-            
-            if ($decodedLogo === false) {
-                ApiHelper::respond(['error' => 'El logo no es un base64 válido'], 422);
-            }
-
-            // Guardar temporalmente
-            $filename = $payload['logoFilename'] ?? 'logo.' . $extension;
-            $tempFile = sys_get_temp_dir() . '/' . uniqid('whatsapp_logo_') . '_' . $filename;
-            
-            if (file_put_contents($tempFile, $decodedLogo) === false) {
-                ApiHelper::respond(['error' => 'No se pudo guardar el logo temporalmente'], 500);
-            }
-
-            $logoPath = $tempFile;
+            $logoPath = $this->saveTempLogo($payload['logo'], $payload['logoFilename'] ?? null);
         }
 
-        // Preparar datos adicionales del perfil
+        // Preparar datos adicionales del perfil para la API de WhatsApp
         $additionalData = [];
-        $optionalFields = ['address', 'description', 'email', 'vertical', 'websites'];
-        
-        foreach ($optionalFields as $field) {
-            if (isset($payload[$field]) && !empty($payload[$field])) {
-                $additionalData[$field] = $payload[$field];
-            }
+        if (!empty($payload['address'])) {
+            $additionalData['address'] = $payload['address'];
+        }
+        if (!empty($payload['description'])) {
+            $additionalData['description'] = $payload['description'];
+        }
+        if (!empty($payload['email'])) {
+            $additionalData['email'] = $payload['email'];
+        }
+        if (!empty($payload['vertical'])) {
+            $additionalData['vertical'] = $payload['vertical'];
+        }
+        if (!empty($payload['websites'])) {
+            $additionalData['websites'] = $payload['websites'];
         }
 
-        // Registrar perfil
-        $result = $this->whatsAppService->registerBusinessProfile(
-            $businessName,
+        // Registrar perfil en WhatsApp API usando la configuración del customer
+        // (que ya fue guardada en BD, así que el servicio la cargará)
+        $service = $this->getServiceForCustomer($customerId);
+        $whatsappResult = $service->registerBusinessProfile(
+            $payload['businessName'],
             $logoPath,
             $additionalData
         );
 
+        $profileUpdated = $whatsappResult['success'];
+        $logoUploaded = $logoPath !== null && $whatsappResult['success'];
+
         // Eliminar archivo temporal si existe
-        if ($tempFile && file_exists($tempFile)) {
-            unlink($tempFile);
+        if ($logoPath && file_exists($logoPath)) {
+            unlink($logoPath);
         }
 
-        if ($result['success']) {
-            ApiHelper::respond([
-                'success' => true,
-                'data' => $result['data']
-            ]);
-        } else {
-            ApiHelper::respond([
-                'success' => false,
-                'error' => $result['error']
-            ], 422);
-        }
+        // Obtener la configuración creada/actualizada
+        $config = $this->configModel->findById($dbResult['id']);
+
+        ApiHelper::respond([
+            'success' => true,
+            'data' => [
+                'id' => $dbResult['id'],
+                'created' => $dbResult['created'],
+                'config' => $this->formatConfig($config),
+                'profileUpdated' => $profileUpdated,
+                'logoUploaded' => $logoUploaded,
+                'whatsappError' => $whatsappResult['success'] ? null : $whatsappResult['error']
+            ]
+        ]);
     }
 
     /**
-     * GET /api/customers/whatsapp/business-profile
+     * GET /api/customers/whatsapp/business-profile/:customerId
      * 
-     * Obtiene el perfil actual del negocio de WhatsApp
+     * Obtiene la configuración de WhatsApp de un customer.
+     * Cada customer tiene una sola configuración.
      * 
      * Response:
      * {
      *   "success": true,
-     *   "profile": {
-     *     "about": "Mi Gimnasio",
-     *     "address": "Calle Principal 123",
-     *     "description": "El mejor gimnasio",
-     *     "email": "contacto@migimnasio.com",
-     *     "profile_picture_url": "https://...",
-     *     "websites": ["https://migimnasio.com"],
-     *     "vertical": "HEALTH"
-     *   }
+     *   "data": { ... }
      * }
      */
-    public function getBusinessProfile(): void
+    public function getBusinessProfile(string $customerId): void
     {
         ApiHelper::respondIfOptions();
         ApiHelper::allowedMethodsGet();
 
-        $result = $this->whatsAppService->getBusinessProfile();
+        if (empty($customerId)) {
+            ApiHelper::respond(['error' => 'customerId es requerido'], 422);
+        }
 
-        if ($result['success']) {
-            ApiHelper::respond([
-                'success' => true,
-                'profile' => $result['profile']
-            ]);
-        } else {
+        $config = $this->configModel->findByCustomerId($customerId);
+
+        if (!$config) {
             ApiHelper::respond([
                 'success' => false,
-                'error' => $result['error']
-            ], 422);
+                'error' => 'No hay configuración de WhatsApp para este customer'
+            ], 404);
         }
+
+        ApiHelper::respond([
+            'success' => true,
+            'data' => $this->formatConfig($config)
+        ]);
     }
 
     // ==================== HELPERS ====================
+
+    /**
+     * Formatea una configuración para la respuesta de la API
+     */
+    private function formatConfig(?array $config): ?array
+    {
+        if (!$config) {
+            return null;
+        }
+
+        return [
+            'id' => $config['Id'],
+            'customerId' => $config['CustomerId'],
+            'phoneNumber' => $config['PhoneNumber'],
+            'phoneNumberId' => $config['PhoneNumberId'],
+            'hasAccessToken' => !empty($config['AccessToken']),
+            'businessName' => $config['BusinessName'],
+            'address' => $config['BusinessAddress'],
+            'description' => $config['BusinessDescription'],
+            'email' => $config['BusinessEmail'],
+            'vertical' => $config['BusinessVertical'],
+            'websites' => $config['BusinessWebsites'] ? json_decode($config['BusinessWebsites'], true) : null,
+            'profilePictureUrl' => $config['ProfilePictureUrl'],
+            'isActive' => (bool) $config['IsActive'],
+            'createdAt' => $config['CreatedAt'],
+            'updatedAt' => $config['UpdatedAt']
+        ];
+    }
+
+    /**
+     * Guarda un logo en base64 como archivo temporal
+     */
+    private function saveTempLogo(string $logoBase64, ?string $filename = null): ?string
+    {
+        $logoData = $logoBase64;
+        
+        // Remover el prefijo data:image si existe
+        if (preg_match('/^data:image\/(\w+);base64,/', $logoData, $matches)) {
+            $logoData = substr($logoData, strpos($logoData, ',') + 1);
+            $extension = $matches[1];
+        } else {
+            $extension = 'jpg';
+        }
+
+        // Decodificar base64
+        $decodedLogo = base64_decode($logoData);
+        
+        if ($decodedLogo === false) {
+            return null;
+        }
+
+        // Guardar temporalmente
+        $filename = $filename ?? 'logo.' . $extension;
+        $tempFile = sys_get_temp_dir() . '/' . uniqid('whatsapp_logo_') . '_' . $filename;
+        
+        if (file_put_contents($tempFile, $decodedLogo) === false) {
+            return null;
+        }
+
+        return $tempFile;
+    }
 
     /**
      * Valida que los campos requeridos estén presentes

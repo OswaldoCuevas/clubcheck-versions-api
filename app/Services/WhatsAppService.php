@@ -3,13 +3,16 @@
 namespace App\Services;
 
 require_once __DIR__ . '/../Models/MessageSentModel.php';
+require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
 
 use Models\MessageSentModel;
+use Models\WhatsAppConfigurationModel;
 
 /**
  * Servicio de WhatsApp Business API
  * 
  * Maneja el envío de mensajes y templates a través de la API de WhatsApp
+ * Puede usar la configuración global o la configuración específica de un customer
  */
 class WhatsAppService
 {
@@ -18,14 +21,57 @@ class WhatsAppService
     private string $accessToken;
     private array $config;
     private MessageSentModel $messageSentModel;
+    private ?string $customerId;
 
-    public function __construct()
+    /**
+     * Constructor
+     * 
+     * @param string|null $customerId ID del customer (customerApiId o customerId). 
+     *                                Si se proporciona, intenta usar su configuración personalizada.
+     *                                Si no existe o está vacía, usa la configuración global.
+     */
+    public function __construct(?string $customerId = null)
     {
         $this->config = require __DIR__ . '/../../config/whatsapp.php';
+        $this->customerId = $customerId;
+        
+        // Valores default desde config global
         $this->apiUrl = $this->config['api_url'];
         $this->phoneNumberId = $this->config['phone_number_id'];
         $this->accessToken = $this->config['access_token'];
+        
+        // Si se proporciona customerId, intentar cargar su configuración
+        if (!empty($customerId)) {
+            $this->loadCustomerConfig($customerId);
+        }
+        
         $this->messageSentModel = new MessageSentModel();
+    }
+
+    /**
+     * Carga la configuración específica de un customer si existe
+     */
+    private function loadCustomerConfig(string $customerId): void
+    {
+        try {
+            $configModel = new WhatsAppConfigurationModel();
+            $customerConfig = $configModel->findByCustomerId($customerId);
+            
+            if ($customerConfig) {
+                // Si tiene phoneNumberId, usarlo
+                if (!empty($customerConfig['PhoneNumberId'])) {
+                    $this->phoneNumberId = $customerConfig['PhoneNumberId'];
+                }
+                
+                // Si tiene accessToken propio, usarlo
+                if (!empty($customerConfig['AccessToken'])) {
+                    $this->accessToken = $customerConfig['AccessToken'];
+                }
+            }
+        } catch (\Throwable $e) {
+            // Si falla la carga, continuar con config global (ya establecida)
+            error_log("Error loading customer WhatsApp config: " . $e->getMessage());
+        }
     }
 
     // ==================== RESULTADO ====================
@@ -842,5 +888,132 @@ class WhatsAppService
             (int) $now->format('m'),
             (int) $now->format('Y')
         );
+    }
+
+    // ==================== REGISTRO DE NÚMERO ====================
+
+    /**
+     * Registra un número de teléfono en WhatsApp Business API
+     * 
+     * Este método hace un POST a /{phone-number-id}/register para completar
+     * el registro del número y que aparezca como "connected" en Meta.
+     * 
+     * @param string $phoneNumberId ID del número de teléfono de WhatsApp
+     * @param string $accessToken Token de acceso (si es diferente al global)
+     * @param string|null $pin PIN de 6 dígitos para two-step verification (opcional)
+     * @return array ['success' => bool, 'error' => string|null]
+     */
+    public function registerPhoneNumber(string $phoneNumberId, string $accessToken, ?string $pin = null): array
+    {
+        $url = "{$this->apiUrl}/{$phoneNumberId}/register";
+
+        $payload = [
+            'messaging_product' => 'whatsapp'
+        ];
+
+        // Agregar PIN si se proporciona (para two-step verification)
+        if ($pin !== null && strlen($pin) === 6) {
+            $payload['pin'] = $pin;
+        }
+
+        $jsonBody = json_encode($payload);
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $jsonBody,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $accessToken,
+                'Content-Type: application/json',
+            ],
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 30,
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlError) {
+            return [
+                'success' => false,
+                'error' => "Error de conexión: {$curlError}",
+                'httpCode' => 0
+            ];
+        }
+
+        $responseData = json_decode($response, true);
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            return [
+                'success' => true,
+                'error' => null,
+                'httpCode' => $httpCode,
+                'response' => $responseData
+            ];
+        }
+
+        $errorMessage = $responseData['error']['message'] ?? "HTTP {$httpCode}";
+        return [
+            'success' => false,
+            'error' => $errorMessage,
+            'httpCode' => $httpCode,
+            'response' => $responseData
+        ];
+    }
+
+    /**
+     * Verifica el estado de un número de teléfono en WhatsApp
+     * 
+     * @param string $phoneNumberId ID del número de teléfono
+     * @param string $accessToken Token de acceso
+     * @return array ['success' => bool, 'status' => string|null, 'error' => string|null]
+     */
+    public function getPhoneNumberStatus(string $phoneNumberId, string $accessToken): array
+    {
+        $url = "{$this->apiUrl}/{$phoneNumberId}?fields=verified_name,code_verification_status,display_phone_number,quality_rating,platform_type,throughput,id";
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $accessToken,
+            ],
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 30,
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlError) {
+            return [
+                'success' => false,
+                'status' => null,
+                'error' => "Error de conexión: {$curlError}"
+            ];
+        }
+
+        $responseData = json_decode($response, true);
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            return [
+                'success' => true,
+                'status' => $responseData['code_verification_status'] ?? 'UNKNOWN',
+                'data' => $responseData,
+                'error' => null
+            ];
+        }
+
+        $errorMessage = $responseData['error']['message'] ?? "HTTP {$httpCode}";
+        return [
+            'success' => false,
+            'status' => null,
+            'error' => $errorMessage
+        ];
     }
 }

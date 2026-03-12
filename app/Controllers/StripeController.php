@@ -278,8 +278,112 @@ class StripeController extends Controller
         ApiHelper::respond([
             'success' => true,
             'public_key' => $config['public_key'],
-            'plans' => $config['plans'] ?? []
+            'packages' => $config['packages'] ?? []
         ]);
+    }
+
+    // ==================== PAQUETES ====================
+
+    /**
+     * GET /api/customers/stripe/packages
+     * Lista todos los paquetes disponibles con sus reglas y límites
+     * 
+     * Respuesta exitosa:
+     * {
+     *   "success": true,
+     *   "packages": [
+     *     {
+     *       "name": "Free",
+     *       "lookup_key": "free",
+     *       "rules": {
+     *         "enable_fingerprint": true,
+     *         "enable_qr": true,
+     *         "max_messages": 5,
+     *         "max_members_actives": 15,
+     *         "products_to_sale": 10,
+     *         "max_partners": 40
+     *       }
+     *     },
+     *     ...
+     *   ]
+     * }
+     * 
+     * Nota sobre reglas:
+     * - null = ilimitado
+     * - 0 = no incluido
+     * - número/true = incluido con esa cantidad
+     */
+    public function getPackages(): void
+    {
+        ApiHelper::allowedMethodsGet();
+        $config = require __DIR__ . '/../../config/stripe.php';
+        
+        $packages = [];
+        foreach ($config['packages'] ?? [] as $key => $package) {
+            $packages[] = [
+                'name' => $package['name'],
+                'lookup_key' => $package['lookup_key'] ?? $key,
+                'rules' => $package['rules'] ?? []
+            ];
+        }
+        
+        ApiHelper::respond([
+            'success' => true,
+            'packages' => $packages
+        ]);
+    }
+
+    /**
+     * GET /api/customers/stripe/customers/:customerId/package
+     * Obtiene el paquete actual del cliente basándose en su suscripción activa
+     * Si no tiene suscripción activa, devuelve el paquete 'free'
+     * 
+     * Respuesta exitosa (con suscripción):
+     * {
+     *   "success": true,
+     *   "package": {
+     *     "name": "Profesional",
+     *     "lookup_key": "professional_monthly",
+     *     "is_free": false,
+     *     "subscription_id": "sub_xxx",
+     *     "subscription_status": "active",
+     *     "cancel_at_period_end": false,
+     *     "current_period_end": 1712102400,
+     *     "unit_amount": 79900,
+     *     "rules": {
+     *       "enable_fingerprint": true,
+     *       "enable_qr": true,
+     *       "max_messages": 900,
+     *       "max_members_actives": 300,
+     *       "products_to_sale": null,
+     *       "max_partners": null
+     *     }
+     *   }
+     * }
+     * 
+     * Respuesta exitosa (sin suscripción - free):
+     * {
+     *   "success": true,
+     *   "package": {
+     *     "name": "Free",
+     *     "lookup_key": "free",
+     *     "is_free": true,
+     *     "rules": {
+     *       "enable_fingerprint": true,
+     *       "enable_qr": true,
+     *       "max_messages": 5,
+     *       "max_members_actives": 15,
+     *       "products_to_sale": 10,
+     *       "max_partners": 40
+     *     }
+     *   }
+     * }
+     */
+    public function getCurrentPackage(string $customerId): void
+    {
+        ApiHelper::allowedMethodsGet();
+        $result = $this->stripeService->getCurrentPackage($customerId);
+        ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
 
     /**

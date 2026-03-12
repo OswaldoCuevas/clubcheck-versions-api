@@ -4,9 +4,13 @@ namespace Controllers;
 
 use Core\Controller;
 use Models\CustomerRegistryModel;
+use Models\WhatsAppConfigurationModel;
+use App\Services\WhatsAppService;
 
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
+require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
+require_once __DIR__ . '/../Services/WhatsAppService.php';
 
 class AdminController extends Controller
 {
@@ -590,5 +594,252 @@ class AdminController extends Controller
         ];
 
         $this->view('admin/api-docs', $data);
+    }
+
+    // ==================== WHATSAPP CONFIGURATIONS ====================
+
+    /**
+     * GET /admin/whatsapp
+     * Vista principal del CRUD de configuraciones de WhatsApp
+     */
+    public function whatsapp()
+    {
+        $this->requirePermission('admin_access');
+
+        $currentUser = $this->userModel->getCurrentUser();
+        $registry = new CustomerRegistryModel();
+        $customers = $registry->getCustomers();
+
+        $data = [
+            'currentUser' => $currentUser,
+            'title' => 'Configuración WhatsApp - ClubCheck',
+            'customers' => $customers,
+            'isAuthenticated' => true,
+        ];
+
+        $this->view('admin/whatsapp', $data);
+    }
+
+    /**
+     * GET /admin/api/whatsapp
+     * API: Lista todas las configuraciones de WhatsApp
+     */
+    public function whatsappListJson()
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $configModel = new WhatsAppConfigurationModel();
+        $configs = $configModel->getAllWithCustomerInfo();
+
+        $this->json([
+            'success' => true,
+            'count' => count($configs),
+            'configurations' => $configs,
+        ]);
+    }
+
+    /**
+     * POST /admin/api/whatsapp
+     * API: Crea una nueva configuración de WhatsApp
+     */
+    public function whatsappCreateJson()
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+
+        // Validar campos requeridos
+        $required = ['customerId', 'phoneNumber', 'phoneNumberId', 'businessName'];
+        foreach ($required as $field) {
+            if (empty($payload[$field])) {
+                $this->json(['error' => "Campo requerido: {$field}"], 422);
+            }
+        }
+
+        $configModel = new WhatsAppConfigurationModel();
+
+        // Verificar si el customer ya tiene configuración
+        if ($configModel->customerHasConfiguration($payload['customerId'])) {
+            $this->json(['error' => 'Este cliente ya tiene una configuración de WhatsApp'], 422);
+        }
+
+        // Crear configuración
+        $result = $configModel->create([
+            'CustomerId' => $payload['customerId'],
+            'PhoneNumber' => $payload['phoneNumber'],
+            'PhoneNumberId' => $payload['phoneNumberId'],
+            'AccessToken' => $payload['accessToken'] ?? null,
+            'BusinessName' => $payload['businessName'],
+            'BusinessAddress' => $payload['address'] ?? null,
+            'BusinessDescription' => $payload['description'] ?? null,
+            'BusinessEmail' => $payload['email'] ?? null,
+            'CreatedBy' => 'admin'
+        ]);
+
+        if (!$result['success']) {
+            $this->json(['error' => $result['error']], 422);
+        }
+
+        // Si se proporcionó accessToken, intentar registrar el número en WhatsApp
+        $whatsappRegistered = false;
+        $whatsappError = null;
+
+        if (!empty($payload['accessToken']) && !empty($payload['registerInWhatsApp'])) {
+            $whatsappService = new WhatsAppService();
+            $registerResult = $whatsappService->registerPhoneNumber(
+                $payload['phoneNumberId'],
+                $payload['accessToken']
+            );
+            $whatsappRegistered = $registerResult['success'];
+            $whatsappError = $registerResult['error'];
+        }
+
+        $config = $configModel->findById($result['id']);
+
+        $this->json([
+            'success' => true,
+            'id' => $result['id'],
+            'configuration' => $config,
+            'whatsappRegistered' => $whatsappRegistered,
+            'whatsappError' => $whatsappError
+        ]);
+    }
+
+    /**
+     * DELETE /admin/api/whatsapp/:id
+     * API: Elimina una configuración de WhatsApp
+     */
+    public function whatsappDeleteJson(string $id)
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'DELETE' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        if (empty($id)) {
+            $this->json(['error' => 'ID es requerido'], 422);
+        }
+
+        $configModel = new WhatsAppConfigurationModel();
+        $result = $configModel->delete($id);
+
+        if (!$result['success']) {
+            $this->json(['error' => $result['error']], 404);
+        }
+
+        $this->json([
+            'success' => true,
+            'message' => 'Configuración eliminada correctamente'
+        ]);
+    }
+
+    /**
+     * POST /admin/api/whatsapp/:id/register
+     * API: Registra el número en WhatsApp API para que aparezca activo
+     */
+    public function whatsappRegisterJson(string $id)
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $configModel = new WhatsAppConfigurationModel();
+        $config = $configModel->findById($id);
+
+        if (!$config) {
+            $this->json(['error' => 'Configuración no encontrada'], 404);
+        }
+
+        if (empty($config['AccessToken'])) {
+            $this->json(['error' => 'Esta configuración no tiene Access Token'], 422);
+        }
+
+        $whatsappService = new WhatsAppService();
+        $result = $whatsappService->registerPhoneNumber(
+            $config['PhoneNumberId'],
+            $config['AccessToken']
+        );
+
+        if (!$result['success']) {
+            $this->json([
+                'success' => false,
+                'error' => $result['error'],
+                'httpCode' => $result['httpCode'] ?? null
+            ], 422);
+        }
+
+        $this->json([
+            'success' => true,
+            'message' => 'Número registrado correctamente en WhatsApp',
+            'response' => $result['response'] ?? null
+        ]);
+    }
+
+    /**
+     * GET /admin/api/whatsapp/:id/status
+     * API: Obtiene el estado del número en WhatsApp
+     */
+    public function whatsappStatusJson(string $id)
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $configModel = new WhatsAppConfigurationModel();
+        $config = $configModel->findById($id);
+
+        if (!$config) {
+            $this->json(['error' => 'Configuración no encontrada'], 404);
+        }
+
+        if (empty($config['AccessToken'])) {
+            $this->json(['error' => 'Esta configuración no tiene Access Token'], 422);
+        }
+
+        $whatsappService = new WhatsAppService();
+        $result = $whatsappService->getPhoneNumberStatus(
+            $config['PhoneNumberId'],
+            $config['AccessToken']
+        );
+
+        $this->json([
+            'success' => $result['success'],
+            'status' => $result['status'],
+            'data' => $result['data'] ?? null,
+            'error' => $result['error']
+        ]);
     }
 }
