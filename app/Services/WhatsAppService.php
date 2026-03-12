@@ -524,6 +524,286 @@ class WhatsAppService
         }
     }
 
+    // ==================== PERFIL DEL NEGOCIO ====================
+
+    /**
+     * Sube una imagen de logo a WhatsApp y devuelve el handle
+     * 
+     * @param string $imagePath Ruta absoluta de la imagen
+     * @return array ['success' => bool, 'handle' => string|null, 'error' => string|null]
+     */
+    private function uploadProfileImage(string $imagePath): array
+    {
+        if (!$this->isConfigured()) {
+            return [
+                'success' => false,
+                'handle' => null,
+                'error' => 'WhatsApp no está configurado'
+            ];
+        }
+
+        if (!file_exists($imagePath)) {
+            return [
+                'success' => false,
+                'handle' => null,
+                'error' => 'La imagen no existe'
+            ];
+        }
+
+        $url = "{$this->apiUrl}/{$this->phoneNumberId}/media";
+
+        $mimeType = mime_content_type($imagePath);
+        $cFile = new \CURLFile($imagePath, $mimeType, basename($imagePath));
+
+        $postData = [
+            'file' => $cFile,
+            'type' => $mimeType,
+            'messaging_product' => 'whatsapp'
+        ];
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $postData,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $this->accessToken,
+            ],
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 30,
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlError) {
+            return [
+                'success' => false,
+                'handle' => null,
+                'error' => "Error de conexión: {$curlError}"
+            ];
+        }
+
+        $responseData = json_decode($response, true);
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            return [
+                'success' => true,
+                'handle' => $responseData['id'] ?? null,
+                'error' => null
+            ];
+        }
+
+        $errorMessage = $responseData['error']['message'] ?? "HTTP {$httpCode}";
+        return [
+            'success' => false,
+            'handle' => null,
+            'error' => $errorMessage
+        ];
+    }
+
+    /**
+     * Actualiza el perfil del negocio de WhatsApp
+     * 
+     * @param array $profileData Datos del perfil. Campos disponibles:
+     *   - about: string (256 chars max) - Descripción del negocio
+     *   - address: string - Dirección física
+     *   - description: string (512 chars max) - Descripción detallada
+     *   - email: string - Email de contacto
+     *   - profile_picture_handle: string - ID del media subido previamente
+     *   - vertical: string - Industria (AUTO, BEAUTY, APPAREL, EDU, ENTERTAIN, EVENT_PLAN, FINANCE, GROCERY, GOVT, HOTEL, HEALTH, NONPROFIT, PROF_SERVICES, RETAIL, TRAVEL, RESTAURANT, NOT_A_BIZ)
+     *   - websites: array - Lista de URLs
+     * 
+     * @return array ['success' => bool, 'response' => array|null, 'error' => string|null]
+     */
+    public function updateBusinessProfile(array $profileData): array
+    {
+        if (!$this->isConfigured()) {
+            return [
+                'success' => false,
+                'response' => null,
+                'error' => 'WhatsApp no está configurado. Verifique WHATSAPP_PHONE_NUMBER_ID y WHATSAPP_ACCESS_TOKEN.'
+            ];
+        }
+
+        $url = "{$this->apiUrl}/{$this->phoneNumberId}/whatsapp_business_profile";
+
+        $payload = [
+            'messaging_product' => 'whatsapp'
+        ];
+
+        // Agregar solo los campos proporcionados
+        $allowedFields = ['about', 'address', 'description', 'email', 'profile_picture_handle', 'vertical', 'websites'];
+        foreach ($allowedFields as $field) {
+            if (isset($profileData[$field])) {
+                $payload[$field] = $profileData[$field];
+            }
+        }
+
+        $jsonBody = json_encode($payload);
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $jsonBody,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $this->accessToken,
+                'Content-Type: application/json',
+            ],
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 30,
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlError) {
+            return [
+                'success' => false,
+                'response' => null,
+                'error' => "Error de conexión: {$curlError}"
+            ];
+        }
+
+        $responseData = json_decode($response, true);
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            return [
+                'success' => true,
+                'response' => $responseData,
+                'error' => null
+            ];
+        }
+
+        $errorMessage = $responseData['error']['message'] ?? "HTTP {$httpCode}: " . substr($response, 0, 400);
+        return [
+            'success' => false,
+            'response' => $responseData,
+            'error' => $errorMessage
+        ];
+    }
+
+    /**
+     * Registra o actualiza el perfil del negocio con nombre y logo
+     * 
+     * @param string $businessName Nombre del negocio que aparece en los mensajes
+     * @param string|null $logoPath Ruta absoluta de la imagen del logo (opcional)
+     * @param array $additionalData Datos adicionales del perfil (opcional)
+     * @return array ['success' => bool, 'data' => array|null, 'error' => string|null]
+     */
+    public function registerBusinessProfile(
+        string $businessName,
+        ?string $logoPath = null,
+        array $additionalData = []
+    ): array {
+        $profileData = [
+            'about' => substr($businessName, 0, 256) // Límite de 256 caracteres
+        ];
+
+        // Si hay logo, subirlo primero
+        if ($logoPath !== null && !empty($logoPath)) {
+            $uploadResult = $this->uploadProfileImage($logoPath);
+            
+            if (!$uploadResult['success']) {
+                return [
+                    'success' => false,
+                    'data' => null,
+                    'error' => "Error al subir el logo: " . $uploadResult['error']
+                ];
+            }
+
+            $profileData['profile_picture_handle'] = $uploadResult['handle'];
+        }
+
+        // Agregar datos adicionales
+        $profileData = array_merge($profileData, $additionalData);
+
+        // Actualizar perfil
+        $result = $this->updateBusinessProfile($profileData);
+
+        if ($result['success']) {
+            return [
+                'success' => true,
+                'data' => [
+                    'businessName' => $businessName,
+                    'profileUpdated' => true,
+                    'logoUploaded' => $logoPath !== null,
+                    'response' => $result['response']
+                ],
+                'error' => null
+            ];
+        }
+
+        return [
+            'success' => false,
+            'data' => null,
+            'error' => $result['error']
+        ];
+    }
+
+    /**
+     * Obtiene el perfil actual del negocio
+     * 
+     * @return array ['success' => bool, 'profile' => array|null, 'error' => string|null]
+     */
+    public function getBusinessProfile(): array
+    {
+        if (!$this->isConfigured()) {
+            return [
+                'success' => false,
+                'profile' => null,
+                'error' => 'WhatsApp no está configurado'
+            ];
+        }
+
+        $url = "{$this->apiUrl}/{$this->phoneNumberId}/whatsapp_business_profile?fields=about,address,description,email,profile_picture_url,websites,vertical";
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $this->accessToken,
+            ],
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 30,
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlError) {
+            return [
+                'success' => false,
+                'profile' => null,
+                'error' => "Error de conexión: {$curlError}"
+            ];
+        }
+
+        $responseData = json_decode($response, true);
+
+        if ($httpCode >= 200 && $httpCode < 300) {
+            return [
+                'success' => true,
+                'profile' => $responseData['data'][0] ?? null,
+                'error' => null
+            ];
+        }
+
+        $errorMessage = $responseData['error']['message'] ?? "HTTP {$httpCode}";
+        return [
+            'success' => false,
+            'profile' => null,
+            'error' => $errorMessage
+        ];
+    }
+
     // ==================== UTILIDADES ====================
 
     /**

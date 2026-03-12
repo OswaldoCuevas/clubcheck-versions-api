@@ -60,6 +60,10 @@ $router->post('/api/customers/whatsapp/send/last-day', 'WhatsAppController', 'se
 // Envío en bulk
 $router->post('/api/customers/whatsapp/send/bulk', 'WhatsAppController', 'sendBulk');
 
+// Perfil del negocio
+$router->post('/api/customers/whatsapp/business-profile/register', 'WhatsAppController', 'registerBusinessProfile');
+$router->get('/api/customers/whatsapp/business-profile', 'WhatsAppController', 'getBusinessProfile');
+
 // Rutas administrativas
 $router->any('/admin', 'AdminController', 'index');
 $router->get('/admin/customers', 'AdminController', 'customers');

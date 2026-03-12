@@ -349,6 +349,151 @@ class WhatsAppController extends Controller
         ApiHelper::respond($result);
     }
 
+    // ==================== PERFIL DEL NEGOCIO ====================
+
+    /**
+     * POST /api/customers/whatsapp/business-profile/register
+     * 
+     * Registra o actualiza el perfil del negocio de WhatsApp con nombre y logo
+     * 
+     * Body JSON:
+     * {
+     *   "businessName": "Mi Gimnasio",
+     *   "logo": "base64_encoded_image", // Opcional
+     *   "logoFilename": "logo.jpg", // Opcional, nombre del archivo
+     *   "address": "Calle Principal 123", // Opcional
+     *   "description": "El mejor gimnasio de la ciudad", // Opcional
+     *   "email": "contacto@migimnasio.com", // Opcional
+     *   "vertical": "HEALTH", // Opcional (AUTO, BEAUTY, APPAREL, EDU, ENTERTAIN, etc.)
+     *   "websites": ["https://migimnasio.com"] // Opcional
+     * }
+     * 
+     * Response:
+     * {
+     *   "success": true,
+     *   "data": {
+     *     "businessName": "Mi Gimnasio",
+     *     "profileUpdated": true,
+     *     "logoUploaded": true
+     *   }
+     * }
+     */
+    public function registerBusinessProfile(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsPost();
+
+        $payload = ApiHelper::getJsonBody();
+        $this->validateRequired($payload, ['businessName']);
+
+        $businessName = $payload['businessName'];
+        $logoPath = null;
+        $tempFile = null;
+
+        // Si hay logo en base64, guardarlo temporalmente
+        if (isset($payload['logo']) && !empty($payload['logo'])) {
+            $logoData = $payload['logo'];
+            
+            // Remover el prefijo data:image si existe
+            if (preg_match('/^data:image\/(\w+);base64,/', $logoData, $matches)) {
+                $logoData = substr($logoData, strpos($logoData, ',') + 1);
+                $extension = $matches[1];
+            } else {
+                $extension = 'jpg';
+            }
+
+            // Decodificar base64
+            $decodedLogo = base64_decode($logoData);
+            
+            if ($decodedLogo === false) {
+                ApiHelper::respond(['error' => 'El logo no es un base64 válido'], 422);
+            }
+
+            // Guardar temporalmente
+            $filename = $payload['logoFilename'] ?? 'logo.' . $extension;
+            $tempFile = sys_get_temp_dir() . '/' . uniqid('whatsapp_logo_') . '_' . $filename;
+            
+            if (file_put_contents($tempFile, $decodedLogo) === false) {
+                ApiHelper::respond(['error' => 'No se pudo guardar el logo temporalmente'], 500);
+            }
+
+            $logoPath = $tempFile;
+        }
+
+        // Preparar datos adicionales del perfil
+        $additionalData = [];
+        $optionalFields = ['address', 'description', 'email', 'vertical', 'websites'];
+        
+        foreach ($optionalFields as $field) {
+            if (isset($payload[$field]) && !empty($payload[$field])) {
+                $additionalData[$field] = $payload[$field];
+            }
+        }
+
+        // Registrar perfil
+        $result = $this->whatsAppService->registerBusinessProfile(
+            $businessName,
+            $logoPath,
+            $additionalData
+        );
+
+        // Eliminar archivo temporal si existe
+        if ($tempFile && file_exists($tempFile)) {
+            unlink($tempFile);
+        }
+
+        if ($result['success']) {
+            ApiHelper::respond([
+                'success' => true,
+                'data' => $result['data']
+            ]);
+        } else {
+            ApiHelper::respond([
+                'success' => false,
+                'error' => $result['error']
+            ], 422);
+        }
+    }
+
+    /**
+     * GET /api/customers/whatsapp/business-profile
+     * 
+     * Obtiene el perfil actual del negocio de WhatsApp
+     * 
+     * Response:
+     * {
+     *   "success": true,
+     *   "profile": {
+     *     "about": "Mi Gimnasio",
+     *     "address": "Calle Principal 123",
+     *     "description": "El mejor gimnasio",
+     *     "email": "contacto@migimnasio.com",
+     *     "profile_picture_url": "https://...",
+     *     "websites": ["https://migimnasio.com"],
+     *     "vertical": "HEALTH"
+     *   }
+     * }
+     */
+    public function getBusinessProfile(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsGet();
+
+        $result = $this->whatsAppService->getBusinessProfile();
+
+        if ($result['success']) {
+            ApiHelper::respond([
+                'success' => true,
+                'profile' => $result['profile']
+            ]);
+        } else {
+            ApiHelper::respond([
+                'success' => false,
+                'error' => $result['error']
+            ], 422);
+        }
+    }
+
     // ==================== HELPERS ====================
 
     /**
