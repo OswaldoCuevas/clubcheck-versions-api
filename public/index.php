@@ -68,7 +68,8 @@ try {
     if (!$isPublicRoute) {
         $apiPrefixes = [
             '/api/customers/sessions',
-            '/api/customers'
+            '/api/customers',
+            '/api/email'  // Rutas de email públicas (recuperación de contraseña, etc.)
         ];
 
         foreach ($apiPrefixes as $prefix) {

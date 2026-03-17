@@ -24,6 +24,9 @@ spl_autoload_register(function ($className) {
         __DIR__ . '/../app/Models/',
         __DIR__ . '/../app/Core/',
         __DIR__ . '/../app/Services/',
+        __DIR__ . '/../app/Exceptions/',
+        __DIR__ . '/../app/Middleware/',
+        __DIR__ . '/../utils/',
     ];
     
     foreach ($paths as $path) {

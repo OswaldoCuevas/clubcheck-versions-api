@@ -127,7 +127,7 @@ await httpClient.PostAsync("tu-api.com/cards", new {
 ### Instalación en tu proyecto
 1. Instala el paquete NuGet de Stripe:
    ```bash
-   Install-Package Stripe.net
+   Install-plan Stripe.net
    ```
 
 2. Copia `docs/StripeApiClient.cs` a tu proyecto

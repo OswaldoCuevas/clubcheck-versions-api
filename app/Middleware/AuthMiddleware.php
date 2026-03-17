@@ -45,7 +45,8 @@ class AuthMiddleware
         // Verificar si es una ruta pública
         $publicPrefixes = [
             '/api/customers/sessions',
-            '/api/customers'
+            '/api/customers',
+            '/api/email'  // Rutas de email públicas (password reset, etc.)
         ];
 
         foreach (self::$publicRoutes as $route) {

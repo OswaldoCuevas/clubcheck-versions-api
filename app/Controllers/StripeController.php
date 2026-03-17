@@ -243,6 +243,7 @@ class StripeController extends Controller
         $result = $this->stripeService->changePlan($subscriptionId, $priceId);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
+    
 
     // ==================== PRECIOS ====================
 
@@ -278,20 +279,20 @@ class StripeController extends Controller
         ApiHelper::respond([
             'success' => true,
             'public_key' => $config['public_key'],
-            'packages' => $config['packages'] ?? []
+            'plans' => $config['plans'] ?? []
         ]);
     }
 
     // ==================== PAQUETES ====================
 
     /**
-     * GET /api/customers/stripe/packages
+     * GET /api/customers/stripe/plans
      * Lista todos los paquetes disponibles con sus reglas y límites
      * 
      * Respuesta exitosa:
      * {
      *   "success": true,
-     *   "packages": [
+     *   "plans": [
      *     {
      *       "name": "Free",
      *       "lookup_key": "free",
@@ -313,35 +314,35 @@ class StripeController extends Controller
      * - 0 = no incluido
      * - número/true = incluido con esa cantidad
      */
-    public function getPackages(): void
+    public function getplans(): void
     {
         ApiHelper::allowedMethodsGet();
         $config = require __DIR__ . '/../../config/stripe.php';
         
-        $packages = [];
-        foreach ($config['packages'] ?? [] as $key => $package) {
-            $packages[] = [
-                'name' => $package['name'],
-                'lookup_key' => $package['lookup_key'] ?? $key,
-                'rules' => $package['rules'] ?? []
+        $plans = [];
+        foreach ($config['plans'] ?? [] as $key => $plan) {
+            $plans[] = [
+                'name' => $plan['name'],
+                'lookup_key' => $plan['lookup_key'] ?? $key,
+                'rules' => $plan['rules'] ?? []
             ];
         }
         
         ApiHelper::respond([
             'success' => true,
-            'packages' => $packages
+            'plans' => $plans
         ]);
     }
 
     /**
-     * GET /api/customers/stripe/customers/:customerId/package
+     * GET /api/customers/stripe/customers/:customerId/plan
      * Obtiene el paquete actual del cliente basándose en su suscripción activa
      * Si no tiene suscripción activa, devuelve el paquete 'free'
      * 
      * Respuesta exitosa (con suscripción):
      * {
      *   "success": true,
-     *   "package": {
+     *   "plan": {
      *     "name": "Profesional",
      *     "lookup_key": "professional_monthly",
      *     "is_free": false,
@@ -364,7 +365,7 @@ class StripeController extends Controller
      * Respuesta exitosa (sin suscripción - free):
      * {
      *   "success": true,
-     *   "package": {
+     *   "plan": {
      *     "name": "Free",
      *     "lookup_key": "free",
      *     "is_free": true,
@@ -379,10 +380,10 @@ class StripeController extends Controller
      *   }
      * }
      */
-    public function getCurrentPackage(string $customerId): void
+    public function getCurrentPlan(string $customerId): void
     {
         ApiHelper::allowedMethodsGet();
-        $result = $this->stripeService->getCurrentPackage($customerId);
+        $result = $this->stripeService->getCurrentPlan($customerId);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
 

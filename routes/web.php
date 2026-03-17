@@ -4,6 +4,25 @@ use Core\Router;
 
 $router = new Router();
 
+// ==================== MIDDLEWARES ====================
+// 
+// Los middlewares se pasan como cuarto parámetro en un array:
+//   $router->get('/ruta', 'Controller', 'method', ['middleware1', 'middleware2']);
+// 
+// Middlewares disponibles:
+//   - 'jwt' : Requiere token JWT válido en header Authorization: Bearer <token>
+//   - 'auth': Requiere sesión de usuario autenticado
+// 
+// Ejemplo de rutas protegidas con JWT:
+//   $router->get('/api/protected', 'ApiController', 'protectedMethod', ['jwt']);
+//   $router->post('/api/data', 'DataController', 'store', ['jwt']);
+// 
+// Para acceder al payload del JWT en el controlador:
+//   use App\Middleware\JwtMiddleware;
+//   $userId = JwtMiddleware::get('user_id');
+//   $payload = JwtMiddleware::getCurrentPayload();
+// ======================================================
+
 // Rutas principales
 $router->any('/', 'HomeController', 'index');
 $router->get('/home', 'HomeController', 'index');
@@ -107,12 +126,34 @@ $router->put('/api/customers/stripe/subscriptions/:subscriptionId', 'StripeContr
 $router->put('/api/customers/stripe/subscriptions/:subscriptionId/plan', 'StripeController', 'changePlan');
 
 // Paquetes
-$router->get('/api/customers/stripe/packages', 'StripeController', 'getPackages');
-$router->get('/api/customers/stripe/customers/:customerId/package', 'StripeController', 'getCurrentPackage');
+$router->get('/api/customers/stripe/plans', 'StripeController', 'getplans');
+$router->get('/api/customers/stripe/customers/:customerId/plan', 'StripeController', 'getCurrentPlan');
 
 // Precios/Planes
 $router->get('/api/customers/stripe/prices', 'StripeController', 'listPrices');
 $router->post('/api/customers/stripe/subscriptions/:subscriptionId/preview', 'StripeController', 'previewPlanChange');
 $router->post('/api/customers/stripe/customers/:customerId/subscriptions/preview', 'StripeController', 'previewNewSubscription');
+
+// ==================== EMAIL ====================
+// Estado y tipos
+$router->get('/api/email/status', 'EmailController', 'status');
+$router->get('/api/email/types', 'EmailController', 'types');
+
+// Envío de correos
+$router->post('/api/email/send', 'EmailController', 'send');
+$router->post('/api/email/send/password-reset', 'EmailController', 'sendPasswordReset');
+$router->post('/api/email/send/email-confirmation', 'EmailController', 'sendEmailConfirmation');
+$router->post('/api/email/send/welcome', 'EmailController', 'sendWelcome');
+$router->post('/api/email/send/notification', 'EmailController', 'sendNotification');
+
+// Verificación de códigos
+$router->post('/api/email/verify', 'EmailController', 'verify');
+$router->post('/api/email/verify/password-reset', 'EmailController', 'verifyPasswordReset');
+$router->post('/api/email/verify/email-confirmation', 'EmailController', 'verifyEmailConfirmation');
+
+// Historial y estadísticas
+$router->get('/api/email/history/:email', 'EmailController', 'history');
+$router->get('/api/email/stats', 'EmailController', 'stats');
+$router->post('/api/email/cleanup', 'EmailController', 'cleanup');
 
 return $router;

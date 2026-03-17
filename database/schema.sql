@@ -403,6 +403,7 @@ CREATE TABLE `SentMessagesDesktop` (
     `Message` TEXT NOT NULL,
     `SentDay` VARCHAR(50) NOT NULL,
     `SentHour` VARCHAR(50) NOT NULL,
+    `DateSent` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `Successful` TINYINT NOT NULL DEFAULT 0,
     `ErrorMessage` TEXT NULL,
     `Sync` TINYINT DEFAULT 0,

@@ -4,9 +4,11 @@ namespace App\Services;
 
 require_once __DIR__ . '/../Models/MessageSentModel.php';
 require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
+require_once __DIR__ . '/../../utils/CustomerPermits.php';
 
 use Models\MessageSentModel;
 use Models\WhatsAppConfigurationModel;
+use CustomerPermits;
 
 /**
  * Servicio de WhatsApp Business API
@@ -194,7 +196,8 @@ class WhatsAppService
         string $customerApiId,
         ?string $userId = null,
         ?string $subscriptionId = null,
-        ?string $username = null
+        ?string $username = null,
+        ?string $errorMessage = null
     ): array {
         $phone = $this->normalizePhone($phone);
         $templateConfig = $this->config['templates']['subscription'];
@@ -222,7 +225,7 @@ class WhatsAppService
         ];
 
         $description = "Bienvenida de membresía {$clubName}: {$startDate} - {$endDate}";
-        $result = $this->sendAndLog($body, $phone, $description, $customerApiId, $userId, $subscriptionId, $username);
+        $result = $this->sendAndLog($body, $phone, $description, $customerApiId, $userId, $subscriptionId, $username, $errorMessage);
         
         return $result;
     }
@@ -240,7 +243,8 @@ class WhatsAppService
         string $customerApiId,
         ?string $userId = null,
         ?string $subscriptionId = null,
-        ?string $username = null
+        ?string $username = null,
+        ?string $errorMessage = null
     ): array {
         $phone = $this->normalizePhone($phone);
         $templateConfig = $this->config['templates']['warning_subscription'];
@@ -266,7 +270,7 @@ class WhatsAppService
         ];
 
         $description = "Aviso de membresía: vence en {$days}. Club: {$clubName}";
-        return $this->sendAndLog($body, $phone, $description, $customerApiId, $userId, $subscriptionId, $username);
+        return $this->sendAndLog($body, $phone, $description, $customerApiId, $userId, $subscriptionId, $username, $errorMessage);
     }
 
     /**
@@ -281,7 +285,8 @@ class WhatsAppService
         string $customerApiId,
         ?string $userId = null,
         ?string $subscriptionId = null,
-        ?string $username = null
+        ?string $username = null,
+        ?string $errorMessage = null
     ): array {
         $phone = $this->normalizePhone($phone);
         $templateConfig = $this->config['templates']['finalized_subscription'];
@@ -306,7 +311,7 @@ class WhatsAppService
         ];
 
         $description = "Aviso de membresía finalizada. Club: {$clubName}";
-        return $this->sendAndLog($body, $phone, $description, $customerApiId, $userId, $subscriptionId, $username);
+        return $this->sendAndLog($body, $phone, $description, $customerApiId, $userId, $subscriptionId, $username, $errorMessage);
     }
 
     /**
@@ -321,7 +326,8 @@ class WhatsAppService
         string $customerApiId,
         ?string $userId = null,
         ?string $subscriptionId = null,
-        ?string $username = null
+        ?string $username = null,
+        ?string $errorMessage = null
     ): array {
         $phone = $this->normalizePhone($phone);
         $templateConfig = $this->config['templates']['warning_last_day'];
@@ -338,7 +344,7 @@ class WhatsAppService
         ];
 
         $description = "Aviso de membresía: último día. Club: {$clubName}";
-        return $this->sendAndLog($body, $phone, $description, $customerApiId, $userId, $subscriptionId, $username);
+        return $this->sendAndLog($body, $phone, $description, $customerApiId, $userId, $subscriptionId, $username, $errorMessage);
     }
 
     // ==================== BULK OPERATIONS ====================
@@ -379,16 +385,45 @@ class WhatsAppService
             $results['warning'] = "Se limitó a {$maxBulkSize} mensajes";
         }
 
+         // Obtener mes y año actual
+        $now = new \DateTime('now', new \DateTimeZone('America/Mexico_City'));
+        $month = (int) $now->format('m');
+        $year = (int) $now->format('Y');
+        $totalMessagesAtMonth = $this->messageSentModel->countSuccessfulByMonth($customerApiId, $month, $year);
+
+        $customerPermits = new CustomerPermits($customerApiId);
+
         foreach ($bulkItems as $item) {
             $subscriptionId = $item['subscriptionId'] ?? null;
-            
-            if (empty($subscriptionId)) {
+            $errorMessage = null;
+
+            try{    
+                $customerPermits->checkSendMessage($totalMessagesAtMonth);
+            } catch (\App\Exceptions\ApiException $e) {
+                $errorMessage = $e->getMessage();
+            } catch (\Exception $e) {
+                $errorMessage = $e->getMessage();
+            }
+
+            if ($errorMessage) {
                 $results['failed'][] = [
-                    'subscriptionId' => null,
-                    'error' => 'subscriptionId es requerido',
+                    'subscriptionId' => $subscriptionId,
+                    'error' => $errorMessage,
                 ];
                 $results['failedCount']++;
-                continue;
+         
+            }
+
+           
+            
+            if (empty($subscriptionId)) {
+                $errorMessage = 'subscriptionId es requerido';
+                $results['failed'][] = [
+                    'subscriptionId' => null,
+                    'error' => $errorMessage,
+                ];
+                $results['failedCount']++;
+    
             }
 
             $template = $item['template'] ?? '';
@@ -398,12 +433,12 @@ class WhatsAppService
             $parameters = $item['parameters'] ?? [];
 
             if (empty($phone)) {
+                $errorMessage = 'El teléfono es requerido';
                 $results['failed'][] = [
                     'subscriptionId' => $subscriptionId,
-                    'error' => 'El teléfono es requerido',
+                    'error' => $errorMessage,
                 ];
                 $results['failedCount']++;
-                continue;
             }
 
             $result = $this->sendTemplateByType(
@@ -413,7 +448,8 @@ class WhatsAppService
                 $customerApiId,
                 $userId,
                 $subscriptionId,
-                $username
+                $username,
+                $errorMessage
             );
 
             if ($result['success']) {
@@ -422,6 +458,7 @@ class WhatsAppService
                     'messageId' => $result['messageId'],
                 ];
                 $results['successCount']++;
+                $totalMessagesAtMonth++;
             } else {
                 $results['failed'][] = [
                     'subscriptionId' => $subscriptionId,
@@ -444,7 +481,8 @@ class WhatsAppService
         string $customerApiId,
         ?string $userId,
         ?string $subscriptionId,
-        ?string $username
+        ?string $username,
+        ?string $errorMessage = null
     ): array {
         $clubName = $parameters['clubName'] ?? 'tu club';
 
@@ -460,7 +498,8 @@ class WhatsAppService
                     $customerApiId,
                     $userId,
                     $subscriptionId,
-                    $username
+                    $username,
+                    $errorMessage
                 );
 
             case 'warning':
@@ -474,7 +513,8 @@ class WhatsAppService
                     $customerApiId,
                     $userId,
                     $subscriptionId,
-                    $username
+                    $username,
+                    $errorMessage
                 );
 
             case 'finalized':
@@ -485,7 +525,8 @@ class WhatsAppService
                     $customerApiId,
                     $userId,
                     $subscriptionId,
-                    $username
+                    $username,
+                    $errorMessage
                 );
 
             case 'last_day':
@@ -496,7 +537,8 @@ class WhatsAppService
                     $customerApiId,
                     $userId,
                     $subscriptionId,
-                    $username
+                    $username,
+                    $errorMessage
                 );
 
             default:
@@ -522,11 +564,16 @@ class WhatsAppService
         string $customerApiId,
         ?string $userId,
         ?string $subscriptionId,
-        ?string $username
+        ?string $username,
+        ?string $errorMessage = null
     ): array {
         $jsonBody = json_encode($body, JSON_UNESCAPED_UNICODE);
-        $result = $this->sendRequest($jsonBody);
-        
+
+        $result = $errorMessage !== null
+        ? self::createResult(false, $errorMessage, null, 0, $subscriptionId)
+        : $this->sendRequest($jsonBody);
+
+
         // Agregar subscriptionId al resultado
         $result['subscriptionId'] = $subscriptionId;
 

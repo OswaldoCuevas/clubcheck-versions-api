@@ -259,7 +259,7 @@ class CustomerRegistryModel extends Model
         $month = date('m');
         $year = date('Y');
         $row = $this->db->fetchOne(
-            'SELECT COUNT(*) AS total FROM sentmessagesdesktop WHERE Successful = 1 AND CustomerApiId = ? AND Month(DateSent) = ? AND Year(DateSent) = ?',
+            'SELECT COUNT(*) AS total FROM MessageSent WHERE Successful = 1 AND CustomerApiId = ? AND Month(DateSent) = ? AND Year(DateSent) = ?',
             [$customerId, $month, $year]
         );
 

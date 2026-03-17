@@ -20,7 +20,8 @@ return [
     
     // Paquetes/Planes con sus reglas y límites
     // null = ilimitado, 0 = no incluido, número/true = incluido con cantidad
-    'packages' => [
+    'plans' =>  ($_ENV['APP_MODE'] ?? 'DEV') == 'PROD' 
+    ?  [
         'free' => [
             'name' => 'Free',
             'lookup_key' => 'free',
@@ -28,9 +29,9 @@ return [
                 'enable_fingerprint' => true,
                 'enable_qr' => true,
                 'max_messages' => 5,
-                'max_members_actives' => 15,
+                'max_members_actives' => 20,
                 'products_to_sale' => 10,
-                'max_partners' => 40,
+                'max_partners' => 50,
             ],
         ],
         'essential_monthly' => [
@@ -40,9 +41,9 @@ return [
                 'enable_fingerprint' => true,
                 'enable_qr' => true,
                 'max_messages' => 5,
-                'max_members_actives' => 15,
+                'max_members_actives' => 20,
                 'products_to_sale' => 10,
-                'max_partners' => 40,
+                'max_partners' => 50,
             ],
         ],
         'intermediate_monthly' => [
@@ -69,5 +70,55 @@ return [
                 'max_partners' => null,       // ilimitado
             ],
         ],
-    ],
+    ]
+    : [
+        'free' => [
+            'name' => 'Free',
+            'lookup_key' => 'free',
+            'rules' => [
+                'enable_fingerprint' => true,
+                'enable_qr' => true,
+                'max_messages' => 16,
+                'max_members_actives' => 20,
+                'products_to_sale' => 10,
+                'max_partners' => 50,
+            ],
+        ],
+        'essential_monthly' => [
+            'name' => 'Esencial',
+            'lookup_key' => 'essential_monthly',
+            'rules' => [
+                'enable_fingerprint' => true,
+                'enable_qr' => true,
+                'max_messages' => 16,
+                'max_members_actives' => 20,
+                'products_to_sale' => 10,
+                'max_partners' => 50,
+            ],
+        ],
+        'intermediate_monthly' => [
+            'name' => 'Intermedio',
+            'lookup_key' => 'intermediate_monthly',
+            'rules' => [
+                'enable_fingerprint' => true,
+                'enable_qr' => true,
+                'max_messages' => 16,
+                'max_members_actives' => 150,
+                'products_to_sale' => null,  // ilimitado
+                'max_partners' => null,       // ilimitado
+            ],
+        ],
+        'professional_monthly' => [
+            'name' => 'Profesional',
+            'lookup_key' => 'professional_monthly',
+            'rules' => [
+                'enable_fingerprint' => true,
+                'enable_qr' => true,
+                'max_messages' => 900,
+                'max_members_actives' => 300,
+                'products_to_sale' => null,  // ilimitado
+                'max_partners' => null,       // ilimitado
+            ],
+        ],
+    ]
 ];

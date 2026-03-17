@@ -7,12 +7,14 @@ require_once __DIR__ . '/../Services/WhatsAppService.php';
 require_once __DIR__ . '/../Models/MessageSentModel.php';
 require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
 require_once __DIR__ . '/../Helpers/ApiHelper.php';
+require_once __DIR__ . '/../../utils/CustomerPermits.php';
 
 use Core\Controller;
 use App\Services\WhatsAppService;
 use Models\MessageSentModel;
 use Models\WhatsAppConfigurationModel;
 use ApiHelper;
+use CustomerPermits;
 
 /**
  * Controlador de WhatsApp
@@ -165,6 +167,16 @@ class WhatsAppController extends Controller
         $payload = ApiHelper::getJsonBody();
         $this->validateRequired($payload, ['customerApiId', 'subscriptionId', 'phone']);
 
+        $customerPermits = new CustomerPermits($payload['customerApiId']);
+        $erroMessages = null;
+        try{
+            $customerPermits->checkSendMessage();
+        } catch (\App\Exceptions\ApiException $e) {
+            $erroMessages = $e->getMessage();
+        } catch (\Exception $e) {
+            $erroMessages = $e->getMessage();
+        }
+
         $service = $this->getServiceForCustomer($payload['customerApiId']);
         $result = $service->sendSubscriptionTemplate(
             $payload['phone'],
@@ -175,7 +187,8 @@ class WhatsAppController extends Controller
             $payload['customerApiId'],
             $payload['userId'] ?? null,
             $payload['subscriptionId'],
-            $payload['username'] ?? null
+            $payload['username'] ?? null,
+            $erroMessages
         );
 
         $this->respondResult($result);
@@ -204,6 +217,16 @@ class WhatsAppController extends Controller
         $payload = ApiHelper::getJsonBody();
         $this->validateRequired($payload, ['customerApiId', 'subscriptionId', 'phone']);
 
+        $customerPermits = new CustomerPermits($payload['customerApiId']);
+        $erroMessages = null;
+        try{
+            $customerPermits->checkSendMessage();
+        } catch (\App\Exceptions\ApiException $e) {
+            $erroMessages = $e->getMessage();
+        } catch (\Exception $e) {
+            $erroMessages = $e->getMessage();
+        }
+
         $days = $payload['days'] ?? 3;
         $daysText = $days == 1 ? 'un día' : "{$days} días";
 
@@ -215,7 +238,8 @@ class WhatsAppController extends Controller
             $payload['customerApiId'],
             $payload['userId'] ?? null,
             $payload['subscriptionId'],
-            $payload['username'] ?? null
+            $payload['username'] ?? null,
+            $erroMessages
         );
 
         $this->respondResult($result);
@@ -243,6 +267,16 @@ class WhatsAppController extends Controller
         $payload = ApiHelper::getJsonBody();
         $this->validateRequired($payload, ['customerApiId', 'subscriptionId', 'phone']);
 
+        $customerPermits = new CustomerPermits($payload['customerApiId']);
+        $erroMessages = null;
+        try{
+            $customerPermits->checkSendMessage();
+        } catch (\App\Exceptions\ApiException $e) {
+            $erroMessages = $e->getMessage();
+        } catch (\Exception $e) {
+            $erroMessages = $e->getMessage();
+        }
+
         $service = $this->getServiceForCustomer($payload['customerApiId']);
         $result = $service->sendFinalizedTemplate(
             $payload['phone'],
@@ -250,7 +284,8 @@ class WhatsAppController extends Controller
             $payload['customerApiId'],
             $payload['userId'] ?? null,
             $payload['subscriptionId'],
-            $payload['username'] ?? null
+            $payload['username'] ?? null,
+            $erroMessages
         );
 
         $this->respondResult($result);
@@ -278,6 +313,16 @@ class WhatsAppController extends Controller
         $payload = ApiHelper::getJsonBody();
         $this->validateRequired($payload, ['customerApiId', 'subscriptionId', 'phone']);
 
+        $customerPermits = new CustomerPermits($payload['customerApiId']);
+        $erroMessages = null;
+        try{
+            $customerPermits->checkSendMessage();
+        } catch (\App\Exceptions\ApiException $e) {
+            $erroMessages = $e->getMessage();
+        } catch (\Exception $e) {
+            $erroMessages = $e->getMessage();
+        }
+
         $service = $this->getServiceForCustomer($payload['customerApiId']);
         $result = $service->sendLastDayTemplate(
             $payload['phone'],
@@ -285,7 +330,8 @@ class WhatsAppController extends Controller
             $payload['customerApiId'],
             $payload['userId'] ?? null,
             $payload['subscriptionId'],
-            $payload['username'] ?? null
+            $payload['username'] ?? null,
+            $erroMessages
         );
 
         $this->respondResult($result);
@@ -329,6 +375,7 @@ class WhatsAppController extends Controller
     {
         ApiHelper::respondIfOptions();
         ApiHelper::allowedMethodsPost();
+        
 
         $payload = ApiHelper::getJsonBody();
         $this->validateRequired($payload, ['customerApiId', 'items']);
@@ -350,7 +397,7 @@ class WhatsAppController extends Controller
         }
 
         $clubName = $payload['clubName'] ?? 'tu club';
-
+     
         // Agregar clubName a cada item si no lo tiene
         $items = array_map(function ($item) use ($clubName) {
             if (!isset($item['parameters'])) {

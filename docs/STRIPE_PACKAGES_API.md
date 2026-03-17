@@ -8,7 +8,7 @@ Documentación para obtener información de paquetes y el paquete actual del cli
 
 Obtiene la lista completa de paquetes disponibles con sus reglas y límites.
 
-**Endpoint:** `GET /api/customers/stripe/packages`
+**Endpoint:** `GET /api/customers/stripe/plans`
 
 **Headers:**
 ```
@@ -19,7 +19,7 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "packages": [
+  "plans": [
     {
       "name": "Free",
       "lookup_key": "free",
@@ -78,7 +78,7 @@ Content-Type: application/json
 
 Obtiene el paquete actual basándose en la suscripción activa del cliente. Si no tiene suscripción activa, devuelve el paquete "free".
 
-**Endpoint:** `GET /api/customers/stripe/customers/:customerId/package`
+**Endpoint:** `GET /api/customers/stripe/customers/:customerId/plan`
 
 **Parámetros de URL:**
 | Parámetro | Tipo | Descripción |
@@ -94,7 +94,7 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "package": {
+  "plan": {
     "name": "Profesional",
     "lookup_key": "professional_monthly",
     "is_free": false,
@@ -119,7 +119,7 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "package": {
+  "plan": {
     "name": "Free",
     "lookup_key": "free",
     "is_free": true,
@@ -176,7 +176,7 @@ Las reglas en cada paquete siguen esta convención:
 
 ```typescript
 // Interfaces
-interface PackageRules {
+interface planRules {
   enable_fingerprint: boolean;
   enable_qr: boolean;
   max_messages: number | null;
@@ -185,13 +185,13 @@ interface PackageRules {
   max_partners: number | null;
 }
 
-interface Package {
+interface plan {
   name: string;
   lookup_key: string;
-  rules: PackageRules;
+  rules: planRules;
 }
 
-interface CurrentPackage extends Package {
+interface Currentplan extends plan {
   is_free: boolean;
   subscription_id?: string;
   subscription_status?: string;
@@ -201,27 +201,27 @@ interface CurrentPackage extends Package {
 }
 
 // Obtener todos los paquetes
-async function getPackages(): Promise<Package[]> {
-  const response = await fetch('/api/customers/stripe/packages');
+async function getplans(): Promise<plan[]> {
+  const response = await fetch('/api/customers/stripe/plans');
   const data = await response.json();
   
   if (!data.success) {
     throw new Error(data.error);
   }
   
-  return data.packages;
+  return data.plans;
 }
 
 // Obtener paquete actual del cliente
-async function getCurrentPackage(customerId: string): Promise<CurrentPackage> {
-  const response = await fetch(`/api/customers/stripe/customers/${customerId}/package`);
+async function getCurrentPlan(customerId: string): Promise<Currentplan> {
+  const response = await fetch(`/api/customers/stripe/customers/${customerId}/plan`);
   const data = await response.json();
   
   if (!data.success) {
     throw new Error(data.error);
   }
   
-  return data.package;
+  return data.plan;
 }
 
 // Helper para verificar si una característica es ilimitada
@@ -238,7 +238,7 @@ function isAvailable(value: number | null | boolean): boolean {
 
 // Ejemplo de uso
 async function checkUserLimits(customerId: string) {
-  const pkg = await getCurrentPackage(customerId);
+  const pkg = await getCurrentPlan(customerId);
   
   console.log(`Plan actual: ${pkg.name}`);
   console.log(`Es gratis: ${pkg.is_free}`);
@@ -259,7 +259,7 @@ async function checkUserLimits(customerId: string) {
 ### C# / .NET
 
 ```csharp
-public class PackageRules
+public class planRules
 {
     public bool EnableFingerprint { get; set; }
     public bool EnableQr { get; set; }
@@ -269,21 +269,21 @@ public class PackageRules
     public int? MaxPartners { get; set; }
 }
 
-public class Package
+public class plan
 {
     public string Name { get; set; }
     public string LookupKey { get; set; }
-    public PackageRules Rules { get; set; }
+    public planRules Rules { get; set; }
 }
 
-public class CurrentPackageResponse
+public class CurrentplanResponse
 {
     public bool Success { get; set; }
-    public CurrentPackage Package { get; set; }
+    public Currentplan plan { get; set; }
     public string Error { get; set; }
 }
 
-public class CurrentPackage : Package
+public class Currentplan : plan
 {
     public bool IsFree { get; set; }
     public string SubscriptionId { get; set; }
@@ -294,40 +294,40 @@ public class CurrentPackage : Package
 }
 
 // Ejemplo de cliente HTTP
-public class StripePackageClient
+public class StripeplanClient
 {
     private readonly HttpClient _httpClient;
     private readonly string _baseUrl;
 
-    public StripePackageClient(string baseUrl)
+    public StripeplanClient(string baseUrl)
     {
         _httpClient = new HttpClient();
         _baseUrl = baseUrl;
     }
 
-    public async Task<List<Package>> GetPackagesAsync()
+    public async Task<List<plan>> GetplansAsync()
     {
-        var response = await _httpClient.GetAsync($"{_baseUrl}/api/customers/stripe/packages");
+        var response = await _httpClient.GetAsync($"{_baseUrl}/api/customers/stripe/plans");
         var content = await response.Content.ReadAsStringAsync();
-        var result = JsonSerializer.Deserialize<PackagesResponse>(content);
+        var result = JsonSerializer.Deserialize<plansResponse>(content);
         
         if (!result.Success)
             throw new Exception(result.Error);
             
-        return result.Packages;
+        return result.plans;
     }
 
-    public async Task<CurrentPackage> GetCurrentPackageAsync(string customerId)
+    public async Task<Currentplan> getCurrentPlanAsync(string customerId)
     {
         var response = await _httpClient.GetAsync(
-            $"{_baseUrl}/api/customers/stripe/customers/{customerId}/package");
+            $"{_baseUrl}/api/customers/stripe/customers/{customerId}/plan");
         var content = await response.Content.ReadAsStringAsync();
-        var result = JsonSerializer.Deserialize<CurrentPackageResponse>(content);
+        var result = JsonSerializer.Deserialize<CurrentplanResponse>(content);
         
         if (!result.Success)
             throw new Exception(result.Error);
             
-        return result.Package;
+        return result.plan;
     }
 
     // Helper para verificar límites
@@ -337,27 +337,27 @@ public class StripePackageClient
 }
 
 // Uso
-var client = new StripePackageClient("https://api.tudominio.com");
-var currentPackage = await client.GetCurrentPackageAsync("cus_xxx");
+var client = new StripeplanClient("https://api.tudominio.com");
+var currentplan = await client.getCurrentPlanAsync("cus_xxx");
 
-if (currentPackage.IsFree)
+if (currentplan.IsFree)
 {
     Console.WriteLine("Usuario en plan gratuito");
 }
 else
 {
-    Console.WriteLine($"Plan: {currentPackage.Name}");
-    Console.WriteLine($"Estado: {currentPackage.SubscriptionStatus}");
+    Console.WriteLine($"Plan: {currentplan.Name}");
+    Console.WriteLine($"Estado: {currentplan.SubscriptionStatus}");
 }
 
 // Verificar límite de mensajes
-if (client.IsUnlimited(currentPackage.Rules.MaxMessages))
+if (client.IsUnlimited(currentplan.Rules.MaxMessages))
 {
     Console.WriteLine("Mensajes ilimitados");
 }
 else
 {
-    Console.WriteLine($"Límite de mensajes: {currentPackage.Rules.MaxMessages}");
+    Console.WriteLine($"Límite de mensajes: {currentplan.Rules.MaxMessages}");
 }
 ```
 
@@ -365,9 +365,9 @@ else
 
 ## Flujo Recomendado
 
-1. **Al iniciar la aplicación:** Llamar a `GET /api/customers/stripe/packages` para obtener todos los paquetes disponibles y cachearlos.
+1. **Al iniciar la aplicación:** Llamar a `GET /api/customers/stripe/plans` para obtener todos los paquetes disponibles y cachearlos.
 
-2. **Al autenticar al usuario:** Llamar a `GET /api/customers/stripe/customers/:customerId/package` para obtener el paquete actual.
+2. **Al autenticar al usuario:** Llamar a `GET /api/customers/stripe/customers/:customerId/plan` para obtener el paquete actual.
 
 3. **Validar permisos:** Usar las reglas del paquete para habilitar/deshabilitar funcionalidades en la UI.
 

@@ -749,11 +749,11 @@ private function formatMoney(int $amountInCents, string $currency = 'MXN'): stri
  * @param string $customerId ID del cliente en Stripe
  * @return array Información del paquete actual con sus reglas
  */
-public function getCurrentPackage(string $customerId): array
+public function getCurrentPlan(string $customerId): array
 {
     try {
         $config = require __DIR__ . '/../../config/stripe.php';
-        $packages = $config['packages'] ?? [];
+        $plans = $config['plans'] ?? [];
         
         // Obtener suscripción activa
         $subscriptionResult = $this->getActiveSubscription($customerId);
@@ -767,11 +767,11 @@ public function getCurrentPackage(string $customerId): array
         
         // Si no tiene suscripción activa, devolver paquete free
         if (!$subscriptionResult['has_subscription']) {
-            $freePackage = $packages['free'] ?? null;
-            if (!$freePackage) {
+            $freeplan = $plans['free'] ?? null;
+            if (!$freeplan) {
                 return [
                     'success' => true,
-                    'package' => [
+                    'plan' => [
                         'name' => 'Free',
                         'lookup_key' => 'free',
                         'is_free' => true,
@@ -782,11 +782,11 @@ public function getCurrentPackage(string $customerId): array
             
             return [
                 'success' => true,
-                'package' => [
-                    'name' => $freePackage['name'],
+                'plan' => [
+                    'name' => $freeplan['name'],
                     'lookup_key' => 'free',
                     'is_free' => true,
-                    'rules' => $freePackage['rules'] ?? []
+                    'rules' => $freeplan['rules'] ?? []
                 ]
             ];
         }
@@ -796,13 +796,13 @@ public function getCurrentPackage(string $customerId): array
         $lookupKey = $subscription['lookup_key'] ?? null;
         
         // Buscar el paquete correspondiente
-        $currentPackage = $packages[$lookupKey] ?? null;
+        $currentplan = $plans[$lookupKey] ?? null;
         
-        if (!$currentPackage) {
+        if (!$currentplan) {
             // Si no se encuentra el paquete, devolver info básica
             return [
                 'success' => true,
-                'package' => [
+                'plan' => [
                     'name' => $subscription['price_name'] ?? $lookupKey ?? 'Plan Desconocido',
                     'lookup_key' => $lookupKey,
                     'is_free' => false,
@@ -815,8 +815,8 @@ public function getCurrentPackage(string $customerId): array
         
         return [
             'success' => true,
-            'package' => [
-                'name' => $currentPackage['name'],
+            'plan' => [
+                'name' => $currentplan['name'],
                 'lookup_key' => $lookupKey,
                 'is_free' => false,
                 'subscription_id' => $subscription['id'],
@@ -824,7 +824,7 @@ public function getCurrentPackage(string $customerId): array
                 'cancel_at_period_end' => $subscription['cancel_at_period_end'],
                 'current_period_end' => $subscription['current_period_end'],
                 'unit_amount' => $subscription['unit_amount'],
-                'rules' => $currentPackage['rules'] ?? []
+                'rules' => $currentplan['rules'] ?? []
             ]
         ];
         

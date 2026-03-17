@@ -2,43 +2,62 @@
 
 namespace Core;
 
+use App\Exceptions\ApiException;
+
 class Router
 {
     private $routes = [];
     private $currentRoute = null;
     private $routeParams = [];
+    
+    /**
+     * Registro de middlewares disponibles
+     * Mapea alias a clases de middleware
+     */
+    private array $middlewareRegistry = [
+        'jwt' => \App\Middleware\JwtMiddleware::class,
+        'auth' => \Middleware\AuthMiddleware::class,
+    ];
 
-    public function get($uri, $controller, $method = 'index')
+    /**
+     * Registra un nuevo middleware en el registry
+     */
+    public function registerMiddleware(string $alias, string $className): void
     {
-        $this->addRoute('GET', $uri, $controller, $method);
+        $this->middlewareRegistry[$alias] = $className;
     }
 
-    public function post($uri, $controller, $method = 'store')
+    public function get($uri, $controller, $method = 'index', array $middleware = [])
     {
-        $this->addRoute('POST', $uri, $controller, $method);
+        $this->addRoute('GET', $uri, $controller, $method, $middleware);
     }
 
-    public function put($uri, $controller, $method = 'update')
+    public function post($uri, $controller, $method = 'store', array $middleware = [])
     {
-        $this->addRoute('PUT', $uri, $controller, $method);
+        $this->addRoute('POST', $uri, $controller, $method, $middleware);
     }
 
-    public function delete($uri, $controller, $method = 'destroy')
+    public function put($uri, $controller, $method = 'update', array $middleware = [])
     {
-        $this->addRoute('DELETE', $uri, $controller, $method);
+        $this->addRoute('PUT', $uri, $controller, $method, $middleware);
     }
 
-    public function patch($uri, $controller, $method = 'update')
+    public function delete($uri, $controller, $method = 'destroy', array $middleware = [])
     {
-        $this->addRoute('PATCH', $uri, $controller, $method);
+        $this->addRoute('DELETE', $uri, $controller, $method, $middleware);
     }
 
-    public function any($uri, $controller, $method = 'index')
+    public function patch($uri, $controller, $method = 'update', array $middleware = [])
     {
-        $this->addRoute('ANY', $uri, $controller, $method);
+        $this->addRoute('PATCH', $uri, $controller, $method, $middleware);
     }
 
-    private function addRoute($method, $uri, $controller, $action)
+    public function any($uri, $controller, $method = 'index', array $middleware = [])
+    {
+        $this->addRoute('ANY', $uri, $controller, $method, $middleware);
+    }
+
+    private function addRoute($method, $uri, $controller, $action, array $middleware = [])
     {
         $normalizedUri = rtrim($uri, '/');
         if ($normalizedUri === '') {
@@ -62,6 +81,7 @@ class Router
             'hasParams' => $hasParams,
             'regex' => $regex,
             'paramNames' => $paramNames,
+            'middleware' => $middleware,
         ];
     }
 
@@ -84,8 +104,45 @@ class Router
         }
 
         // Si no se encuentra la ruta, enviar 404
+        $this->handleNotFound($requestUri);
+    }
+
+    /**
+     * Maneja errores 404 (ruta no encontrada)
+     */
+    private function handleNotFound(string $requestUri): void
+    {
+        // Si es una petición API, responder con JSON
+        if ($this->isApiRequest($requestUri)) {
+            $this->respondJson([
+                'success' => false,
+                'error' => 'Endpoint no encontrado',
+                'error_code' => 'ROUTE_NOT_FOUND'
+            ], 404);
+            return;
+        }
+
+        // Para peticiones web normales
         http_response_code(404);
         echo "404 - Página no encontrada";
+    }
+
+    /**
+     * Determina si la petición es una API request
+     */
+    private function isApiRequest(string $uri): bool
+    {
+        return strpos($uri, '/api/') === 0;
+    }
+
+    /**
+     * Responde con JSON
+     */
+    private function respondJson(array $data, int $statusCode = 200): void
+    {
+        http_response_code($statusCode);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode($data, JSON_UNESCAPED_UNICODE);
     }
 
     private function getRequestMethod()
@@ -184,7 +241,70 @@ class Router
             throw new \Exception("Method {$method} not found in {$controllerClass}");
         }
 
-        return call_user_func_array([$controller, $method], $this->routeParams);
+        try {
+            // Ejecutar middlewares antes del controlador
+            $this->runMiddleware($route['middleware'] ?? []);
+            
+            return call_user_func_array([$controller, $method], $this->routeParams);
+        } catch (ApiException $e) {
+            // Excepción controlada - responder con JSON formateado
+            $e->respond();
+        } catch (\Exception $e) {
+            // Excepción no controlada - loguear y responder error genérico
+            error_log("Unhandled Exception in {$controllerClass}@{$method}: " . $e->getMessage());
+            error_log($e->getTraceAsString());
+
+            // En producción no mostrar detalles del error
+            $isProduction = ($_ENV['APP_MODE'] ?? 'DEV') === 'PROD';
+            
+            $this->respondJson([
+                'success' => false,
+                'error' => $isProduction ? 'Error interno del servidor' : $e->getMessage(),
+                'error_code' => 'INTERNAL_ERROR',
+                'debug' => $isProduction ? null : [
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ]
+            ], 500);
+        }
+    }
+
+    /**
+     * Ejecuta los middlewares de la ruta
+     * 
+     * @param array $middlewares Array de nombres de middleware
+     * @throws \Exception Si un middleware falla
+     */
+    private function runMiddleware(array $middlewares): void
+    {
+        foreach ($middlewares as $middlewareName) {
+            // Verificar si el middleware tiene parámetros (ej: 'role:admin')
+            $params = [];
+            if (strpos($middlewareName, ':') !== false) {
+                [$middlewareName, $paramString] = explode(':', $middlewareName, 2);
+                $params = explode(',', $paramString);
+            }
+
+            // Buscar la clase del middleware
+            $middlewareClass = $this->middlewareRegistry[$middlewareName] ?? null;
+
+            if (!$middlewareClass) {
+                throw new \Exception("Middleware '{$middlewareName}' no registrado");
+            }
+
+            if (!class_exists($middlewareClass)) {
+                throw new \Exception("Clase de middleware '{$middlewareClass}' no encontrada");
+            }
+
+            // Instanciar y ejecutar el middleware
+            $middleware = new $middlewareClass();
+
+            if (method_exists($middleware, 'handle')) {
+                $middleware->handle(...$params);
+            } else {
+                throw new \Exception("Middleware '{$middlewareName}' no tiene método handle()");
+            }
+        }
     }
 
     public function getCurrentRoute()

@@ -33,7 +33,7 @@ class MessageSentModel extends Model
     public function findByCustomer(string $customerApiId, int $limit = 500, int $offset = 0): array
     {
         return $this->db->fetchAll(
-            "SELECT * FROM {$this->table} WHERE CustomerApiId = ? ORDER BY SentDay DESC, SentHour DESC LIMIT ? OFFSET ?",
+            "SELECT * FROM {$this->table} WHERE CustomerApiId = ? ORDER BY DateSent DESC LIMIT ? OFFSET ?",
             [$customerApiId, $limit, $offset]
         );
     }
@@ -47,8 +47,9 @@ class MessageSentModel extends Model
             "SELECT COUNT(*) AS total FROM {$this->table}
              WHERE Successful = 1
                AND CustomerApiId = ?
-               AND SentDay LIKE ?",
-            [$customerApiId, sprintf('%04d-%02d-%%', $year, $month)]
+               AND MONTH(DateSent) = ?
+               AND YEAR(DateSent) = ?",
+            [$customerApiId, $month, $year]
         );
 
         return (int) ($row['total'] ?? 0);
@@ -79,12 +80,12 @@ class MessageSentModel extends Model
 
         // Filtro por rango de fechas
         if (!empty($filters['startDate'])) {
-            $where[] = 'SentDay >= ?';
+            $where[] = 'DateSent >= ?';
             $params[] = $filters['startDate'];
         }
 
         if (!empty($filters['endDate'])) {
-            $where[] = 'SentDay <= ?';
+            $where[] = 'DateSent <= ?';
             $params[] = $filters['endDate'];
         }
 
@@ -116,7 +117,7 @@ class MessageSentModel extends Model
 
         // Obtener datos paginados
         $dataQuery = "SELECT * FROM {$this->table} WHERE {$whereClause} 
-                      ORDER BY SentDay DESC, SentHour DESC 
+                      ORDER BY DateSent DESC 
                       LIMIT ? OFFSET ?";
         $dataParams = array_merge($params, [$perPage, $offset]);
         $data = $this->db->fetchAll($dataQuery, $dataParams);
@@ -142,7 +143,7 @@ class MessageSentModel extends Model
 
     /**
      * Inserta un nuevo registro.
-     * $data debe incluir: Id, CustomerApiId, Message, SentDay, SentHour, Successful.
+     * $data debe incluir: Id, CustomerApiId, Message, DateSent, Successful.
      */
     public function create(array $data): bool
     {
@@ -192,7 +193,7 @@ class MessageSentModel extends Model
     private function sanitize(array $data): array
     {
         $allowed = ['Id', 'UserId', 'Username', 'CustomerApiId', 'PhoneNumber', 'Message',
-                    'SentDay', 'SentHour', 'Successful', 'ErrorMessage', 'Sync'];
+                    'DateSent', 'Successful', 'ErrorMessage', 'Sync'];
 
         $clean = [];
         foreach ($allowed as $col) {
