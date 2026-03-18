@@ -1217,4 +1217,126 @@ class CustomersController extends Controller
             'month' => $now->format('Y-m'),
         ]);
     }
+
+    /**
+     * POST /api/customers/jwt/validate
+     * Valida un token JWT de cliente y retorna información sobre su validez
+     * 
+     * Request body:
+     *   - token (string, opcional si viene en Authorization header): Token JWT a validar
+     * 
+     * Headers:
+     *   - Authorization: Bearer <token> (opcional si viene en body)
+     * 
+     * Response:
+     *   - valid (bool): Si el token es válido
+     *   - customerId (string|null): ID del cliente si el token es válido
+     *   - error (string|null): Mensaje de error si el token no es válido
+     *   - errorCode (string|null): Código de error
+     *   - customer (object|null): Información del cliente si el token es válido
+     */
+    public function validateJwtToken()
+    {
+        ApiHelper::respondIfOptions();
+
+        // Permitir GET y POST
+        $method = $_SERVER['REQUEST_METHOD'];
+        if (!in_array($method, ['GET', 'POST'])) {
+            ApiHelper::respond(['error' => 'Method not allowed'], 405);
+        }
+
+        // Extraer token del Authorization header o del body
+        $token = null;
+        
+        // Intentar obtener del header Authorization
+        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+        if (preg_match('/Bearer\s+(\S+)/', $authHeader, $matches)) {
+            $token = $matches[1];
+        }
+        
+        // Si no hay token en header, intentar del body
+        if (!$token) {
+            $payload = ApiHelper::getJsonBody();
+            $token = isset($payload['token']) ? trim((string) $payload['token']) : '';
+        }
+        
+        // También permitir token como query parameter (para GET requests)
+        if (!$token && isset($_GET['token'])) {
+            $token = trim((string) $_GET['token']);
+        }
+
+        if (!$token) {
+            ApiHelper::respond([
+                'valid' => false,
+                'error' => 'Token no proporcionado',
+                'errorCode' => 'TOKEN_MISSING',
+                'customerId' => null,
+                'customer' => null,
+            ], 400);
+        }
+
+        // Validar el token usando CustomerJwtService
+        require_once __DIR__ . '/../Services/CustomerJwtService.php';
+        $customerJwtService = new \App\Services\CustomerJwtService();
+        
+        // Obtener IP y user agent para logging
+        $ipAddress = $_SERVER['REMOTE_ADDR'] ?? null;
+        $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? null;
+        
+        $result = $customerJwtService->validateCustomerToken(
+            $token,
+            $ipAddress,
+            null, // deviceName
+            $userAgent
+        );
+
+        if ($result['valid']) {
+            // Token válido, obtener información del cliente
+            $customerId = $result['customerId'];
+            $customer = $this->customerRegistry->getCustomer($customerId);
+            
+            ApiHelper::respond([
+                'valid' => true,
+                'customerId' => $customerId,
+                'customer' => $customer ? [
+                    'id' => $customer['customerId'],
+                    'name' => $customer['name'],
+                    'email' => $customer['email'],
+                    'deviceName' => $customer['deviceName'],
+                    'isActive' => (bool) $customer['isActive'],
+                ] : null,
+                'error' => null,
+                'errorCode' => null,
+            ]);
+        } else {
+            // Token inválido
+            $statusCode = 401; // Unauthorized
+            
+            // Ajustar código de estado según el tipo de error
+            if (in_array($result['errorCode'], ['CUSTOMER_NOT_FOUND', 'CUSTOMER_INACTIVE'])) {
+                $statusCode = 403; // Forbidden
+            }
+            
+            ApiHelper::respond([
+                'valid' => false,
+                'customerId' => $result['customerId'],
+                'error' => $this->mapperErrorJwt($result['errorCode']),
+                'errorCode' => $result['errorCode'],
+                'customer' => null,
+            ], $statusCode);
+        }
+    }
+
+    private function mapperErrorJwt($errorCode)
+    {
+        $mapping = [
+            'TOKEN_EXPIRED' => 'El token ha expirado',
+            'TOKEN_INVALID' => 'El token es inválido',
+            'CUSTOMER_NOT_FOUND' => 'Cliente no encontrado',
+            'CUSTOMER_INACTIVE' => 'Cliente inactivo',
+            'TOKEN_MISSING' => 'Token no proporcionado',
+        ];
+
+        return $mapping[$errorCode] ?? 'Error desconocido';
+    }
 }

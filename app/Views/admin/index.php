@@ -157,6 +157,24 @@ ob_start();
                                             </div>
                                         </div>
                                     </div>
+                                    <div class="col-md-6">
+                                        <div class="card h-100 border-0 shadow-sm hover-shadow">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex align-items-center mb-3">
+                                                    <span class="icon-circle bg-danger text-white me-3">
+                                                        <i class="fas fa-shield-halved"></i>
+                                                    </span>
+                                                    <div>
+                                                        <h5 class="card-title mb-1">Tokens JWT y seguridad</h5>
+                                                        <small class="text-muted">Monitorea tokens de acceso e IPs de clientes</small>
+                                                    </div>
+                                                </div>
+                                                <a href="<?= app_url('/admin/jwt-tokens') ?>" class="btn btn-danger mt-auto">
+                                                    Monitorear accesos <i class="fas fa-shield-halved ms-2"></i>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

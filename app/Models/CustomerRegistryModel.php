@@ -814,4 +814,148 @@ class CustomerRegistryModel extends Model
             'customer' => $this->getCustomer($customerId),
         ];
     }
+
+    // ===== Métodos para gestión de Tokens JWT =====
+
+    /**
+     * Obtiene información del token JWT de un cliente
+     * 
+     * @param string $customerId ID del cliente
+     * @return array|null Información del token o null si no existe el cliente
+     */
+    public function getCustomerJwtInfo(string $customerId): ?array
+    {
+        $customerId = $this->normaliseCustomerId($customerId);
+
+        if ($customerId === '') {
+            return null;
+        }
+
+        $row = $this->db->fetchOne(
+            'SELECT Id, Name, Email, Token, TokenJwt, TokenJwtCreatedAt, TokenJwtExpiresAt, IsActive, LastSeen, DeviceName 
+             FROM Customers WHERE Id = ?',
+            [$customerId]
+        );
+
+        if (!$row) {
+            return null;
+        }
+
+        $hasJwt = !empty($row['TokenJwt']);
+        $isExpired = false;
+        $expiresIn = null;
+
+        if ($hasJwt && $row['TokenJwtExpiresAt']) {
+            $expiresAt = strtotime($row['TokenJwtExpiresAt']);
+            $isExpired = $expiresAt < time();
+            $expiresIn = max(0, $expiresAt - time());
+        }
+
+        return [
+            'customerId' => $row['Id'],
+            'name' => $row['Name'],
+            'email' => $row['Email'],
+            'deviceName' => $row['DeviceName'],
+            'machineToken' => $row['Token'],
+            'hasJwt' => $hasJwt,
+            'jwtCreatedAt' => $row['TokenJwtCreatedAt'],
+            'jwtExpiresAt' => $row['TokenJwtExpiresAt'],
+            'isExpired' => $isExpired,
+            'expiresIn' => $expiresIn,
+            'isActive' => (bool) $row['IsActive'],
+            'lastSeen' => $row['LastSeen'],
+        ];
+    }
+
+    /**
+     * Revoca el token JWT de un cliente
+     * 
+     * @param string $customerId ID del cliente
+     * @return bool True si se revocó exitosamente
+     */
+    public function revokeJwtToken(string $customerId): bool
+    {
+        $customerId = $this->normaliseCustomerId($customerId);
+
+        if ($customerId === '') {
+            return false;
+        }
+
+        $this->db->execute_query(
+            'UPDATE Customers SET TokenJwt = NULL, TokenJwtCreatedAt = NULL, TokenJwtExpiresAt = NULL, UpdatedAt = ? WHERE Id = ?',
+            [$this->now(), $customerId]
+        );
+
+        return $this->db->affected_rows > 0;
+    }
+
+    /**
+     * Lista todos los clientes con tokens JWT (activos o expirados)
+     * 
+     * @param bool $includeExpired Si incluir tokens expirados (default: false)
+     * @return array Lista de clientes con información de JWT
+     */
+    public function getCustomersWithJwt(bool $includeExpired = false): array
+    {
+        $query = 'SELECT c.Id, c.Name, c.Email, c.Token, c.TokenJwt, c.TokenJwtCreatedAt, c.TokenJwtExpiresAt, 
+                         c.IsActive, c.LastSeen, c.DeviceName
+                  FROM Customers c
+                  WHERE c.TokenJwt IS NOT NULL';
+
+        if (!$includeExpired) {
+            $query .= ' AND c.TokenJwtExpiresAt > NOW()';
+        }
+
+        $query .= ' ORDER BY c.TokenJwtExpiresAt DESC';
+
+        $rows = $this->db->fetchAll($query);
+
+        return array_map(function ($row) {
+            $expiresAt = $row['TokenJwtExpiresAt'] ? strtotime($row['TokenJwtExpiresAt']) : null;
+            $isExpired = $expiresAt ? $expiresAt < time() : false;
+
+            return [
+                'customerId' => $row['Id'],
+                'name' => $row['Name'],
+                'email' => $row['Email'],
+                'deviceName' => $row['DeviceName'],
+                'machineToken' => $row['Token'],
+                'jwtCreatedAt' => $row['TokenJwtCreatedAt'],
+                'jwtExpiresAt' => $row['TokenJwtExpiresAt'],
+                'isExpired' => $isExpired,
+                'expiresIn' => $expiresAt ? max(0, $expiresAt - time()) : null,
+                'isActive' => (bool) $row['IsActive'],
+                'lastSeen' => $row['LastSeen'],
+            ];
+        }, $rows);
+    }
+
+    /**
+     * Obtiene estadísticas de tokens JWT
+     * 
+     * @return array Estadísticas de tokens
+     */
+    public function getJwtStats(): array
+    {
+        $now = $this->now();
+        
+        $stats = $this->db->fetchOne(
+            "SELECT 
+                COUNT(*) AS total_customers,
+                SUM(CASE WHEN TokenJwt IS NOT NULL THEN 1 ELSE 0 END) AS with_jwt,
+                SUM(CASE WHEN TokenJwt IS NOT NULL AND TokenJwtExpiresAt > ? THEN 1 ELSE 0 END) AS active_jwt,
+                SUM(CASE WHEN TokenJwt IS NOT NULL AND TokenJwtExpiresAt <= ? THEN 1 ELSE 0 END) AS expired_jwt
+             FROM Customers
+             WHERE IsActive = 1",
+            [$now, $now]
+        );
+
+        return [
+            'totalCustomers' => (int) ($stats['total_customers'] ?? 0),
+            'withJwt' => (int) ($stats['with_jwt'] ?? 0),
+            'activeJwt' => (int) ($stats['active_jwt'] ?? 0),
+            'expiredJwt' => (int) ($stats['expired_jwt'] ?? 0),
+        ];
+    }
 }
+

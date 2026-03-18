@@ -37,14 +37,13 @@ class JwtService
      * Crea un nuevo token JWT
      * 
      * @param array $payload Datos a incluir en el token
-     * @param int|null $expiresIn Tiempo de expiración en segundos (null = usa default)
+     * @param int|null $expiresIn Tiempo de expiración en segundos (null = usa default, 0 = sin expiración)
      * @param array $customHeaders Headers adicionales para el token
      * @return string Token JWT
      */
     public function createToken(array $payload, ?int $expiresIn = null, array $customHeaders = []): string
     {
         $issuedAt = time();
-        $expiration = $issuedAt + ($expiresIn ?? $this->defaultExpiration);
 
         // Header
         $header = array_merge([
@@ -53,11 +52,18 @@ class JwtService
         ], $customHeaders);
 
         // Payload con claims estándar
-        $payload = array_merge([
+        $standardClaims = [
             'iat' => $issuedAt,      // Issued at
-            'exp' => $expiration,     // Expiration
-            'nbf' => $issuedAt,       // Not before
-        ], $payload);
+        ];
+        
+        // Solo agregar expiración si no es 0 (0 = sin caducidad)
+        if ($expiresIn !== 0) {
+            $expiration = $issuedAt + ($expiresIn ?? $this->defaultExpiration);
+            $standardClaims['exp'] = $expiration;    // Expiration
+            $standardClaims['nbf'] = $issuedAt;      // Not before
+        }
+        
+        $payload = array_merge($standardClaims, $payload);
 
         // Codificar header y payload
         $headerEncoded = $this->base64UrlEncode(json_encode($header));

@@ -51,6 +51,7 @@ $router->any('/api/customers/:customerId', 'CustomersController', 'getCustomer')
 $router->any('/api/customers/token', 'CustomersController', 'customerToken');
 $router->any('/api/customers/token/register', 'CustomersController', 'registerToken');
 $router->any('/api/customers/token/await', 'CustomersController', 'awaitToken');
+$router->any('/api/customers/jwt/validate', 'CustomersController', 'validateJwtToken');
 $router->any('/api/customers/desktop/pull', 'CustomersController', 'pullDesktop');
 $router->any('/api/customers/desktop/push', 'CustomersController', 'pushDesktop');
 $router->any('/api/customers/messages-sends-at-month/:customerId', 'CustomersController', 'getMessagesSendsAtMonth');
@@ -98,6 +99,14 @@ $router->post('/admin/api/whatsapp/:id/register', 'AdminController', 'whatsappRe
 $router->get('/admin/api/whatsapp/:id/status', 'AdminController', 'whatsappStatusJson');
 $router->delete('/admin/api/whatsapp/:id', 'AdminController', 'whatsappDeleteJson');
 $router->post('/admin/api/whatsapp', 'AdminController', 'whatsappCreateJson');
+
+// JWT Tokens Admin
+$router->get('/admin/jwt-tokens', 'AdminController', 'jwtTokens');
+$router->get('/admin/api/jwt-tokens', 'AdminController', 'jwtTokensJson');
+$router->post('/admin/api/jwt-tokens/create', 'AdminController', 'createJwtToken');
+$router->post('/admin/api/jwt-tokens/revoke', 'AdminController', 'revokeJwtToken');
+$router->get('/admin/api/jwt-tokens/customer/:customerId/ips', 'AdminController', 'customerIpsJson');
+$router->post('/admin/api/jwt-tokens/ips/:id/flag', 'AdminController', 'flagIp');
 
 // Rutas de herramientas
 $router->any('/password-generator', 'ToolsController', 'passwordGenerator');

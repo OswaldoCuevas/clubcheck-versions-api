@@ -842,4 +842,225 @@ class AdminController extends Controller
             'error' => $result['error']
         ]);
     }
+
+    // ===== Gestión de Tokens JWT =====
+
+    /**
+     * GET /admin/jwt-tokens
+     * Muestra la página de administración de tokens JWT
+     */
+    public function jwtTokens()
+    {
+        $this->requirePermission('admin_access');
+
+        $currentUser = $this->userModel->getCurrentUser();
+
+        $data = [
+            'currentUser' => $currentUser,
+            'title' => 'Tokens JWT - ClubCheck',
+            'isAuthenticated' => true,
+        ];
+
+        $this->view('admin/jwt-tokens', $data);
+    }
+
+    /**
+     * GET /admin/api/jwt-tokens
+     * API: Lista todos los clientes con información de tokens JWT e IPs
+     */
+    public function jwtTokensJson()
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        require_once __DIR__ . '/../Models/CustomerIpLogModel.php';
+        
+        $registry = new CustomerRegistryModel();
+        $ipLogModel = new \Models\CustomerIpLogModel();
+
+        // Obtener estadísticas de JWT
+        $stats = $registry->getJwtStats();
+
+        // Obtener resumen de clientes con IPs
+        $customerSummary = $ipLogModel->getCustomerIpSummary();
+
+        $this->json([
+            'success' => true,
+            'stats' => $stats,
+            'customers' => $customerSummary,
+        ]);
+    }
+
+    /**
+     * POST /admin/api/jwt-tokens/create
+     * API: Crea un nuevo token JWT para un cliente
+     */
+    public function createJwtToken()
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
+        $expiresIn = isset($payload['expiresIn']) ? (int) $payload['expiresIn'] : null;
+
+        if ($customerId === '') {
+            $this->json(['error' => 'customerId es obligatorio'], 422);
+        }
+
+        require_once __DIR__ . '/../Services/CustomerJwtService.php';
+        $customerJwtService = new \App\Services\CustomerJwtService();
+
+        try {
+            $result = $customerJwtService->renewCustomerToken($customerId, $expiresIn);
+
+            if (!$result) {
+                $this->json([
+                    'success' => false,
+                    'error' => 'No se pudo crear el token. Verifique que el cliente exista, esté activo y tenga un token de máquina registrado.'
+                ], 422);
+            }
+
+            $this->json([
+                'success' => true,
+                'message' => 'Token JWT creado exitosamente',
+                'data' => [
+                    'customerId' => $customerId,
+                    'expiresAt' => $result['expiresAt'],
+                    'expiresIn' => $result['expiresIn'],
+                ]
+            ]);
+        } catch (\RuntimeException $e) {
+            $errorMessages = [
+                'customer_not_found' => 'Cliente no encontrado',
+                'customer_inactive' => 'El cliente está inactivo',
+                'machine_token_mismatch' => 'El token de máquina no coincide',
+            ];
+
+            $message = $errorMessages[$e->getMessage()] ?? $e->getMessage();
+            $this->json(['success' => false, 'error' => $message], 422);
+        }
+    }
+
+    /**
+     * POST /admin/api/jwt-tokens/revoke
+     * API: Revoca el token JWT de un cliente
+     */
+    public function revokeJwtToken()
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
+
+        if ($customerId === '') {
+            $this->json(['error' => 'customerId es obligatorio'], 422);
+        }
+
+        $registry = new CustomerRegistryModel();
+        $result = $registry->revokeJwtToken($customerId);
+
+        if (!$result) {
+            $this->json(['success' => false, 'error' => 'Cliente no encontrado'], 404);
+        }
+
+        $this->json([
+            'success' => true,
+            'message' => 'Token JWT revocado exitosamente'
+        ]);
+    }
+
+    /**
+     * GET /admin/api/jwt-tokens/customer/:customerId/ips
+     * API: Obtiene las IPs registradas de un cliente
+     */
+    public function customerIpsJson(string $customerId)
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $customerId = trim($customerId);
+
+        if ($customerId === '') {
+            $this->json(['error' => 'customerId es obligatorio'], 422);
+        }
+
+        require_once __DIR__ . '/../Models/CustomerIpLogModel.php';
+        $ipLogModel = new \Models\CustomerIpLogModel();
+
+        $ips = $ipLogModel->getCustomerIps($customerId);
+        $hasMultiple = $ipLogModel->hasMultipleRecentIps($customerId);
+
+        $this->json([
+            'success' => true,
+            'customerId' => $customerId,
+            'hasMultipleRecentIps' => $hasMultiple,
+            'ips' => $ips,
+        ]);
+    }
+
+    /**
+     * POST /admin/api/jwt-tokens/ips/:id/flag
+     * API: Marca o desmarca una IP como sospechosa
+     */
+    public function flagIp(string $id)
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $flagged = isset($payload['flagged']) ? (bool) $payload['flagged'] : true;
+        $reason = isset($payload['reason']) ? trim((string) $payload['reason']) : null;
+
+        require_once __DIR__ . '/../Models/CustomerIpLogModel.php';
+        $ipLogModel = new \Models\CustomerIpLogModel();
+
+        $result = $ipLogModel->setFlagged($id, $flagged, $reason);
+
+        if (!$result) {
+            $this->json(['success' => false, 'error' => 'Registro de IP no encontrado'], 404);
+        }
+
+        $this->json([
+            'success' => true,
+            'message' => $flagged ? 'IP marcada como sospechosa' : 'Marca de IP eliminada'
+        ]);
+    }
 }
+
