@@ -121,19 +121,34 @@ class CustomerJwtMiddleware
      */
     private function extractToken(): ?string
     {
-        // Intentar obtener del header Authorization
-        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? null;
-
+        $authHeader = null;
+        
+        // 1. Intentar con apache_request_headers() o getallheaders() primero
+        if (function_exists('apache_request_headers')) {
+            $headers = apache_request_headers();
+            $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+        } elseif (function_exists('getallheaders')) {
+            $headers = getallheaders();
+            $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+        }
+        
+        // 2. Fallback a $_SERVER (múltiples variantes)
+        if (!$authHeader) {
+            $authHeader = $_SERVER['HTTP_AUTHORIZATION'] 
+                ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] 
+                ?? null;
+        }
+        
+        // 3. Extraer el token del formato "Bearer <token>"
         if ($authHeader && preg_match('/Bearer\s+(.+)$/i', $authHeader, $matches)) {
             return $matches[1];
         }
 
-        // Intentar del header X-Access-Token
+        // 4. Headers alternativos para compatibilidad
         if (isset($_SERVER['HTTP_X_ACCESS_TOKEN'])) {
             return $_SERVER['HTTP_X_ACCESS_TOKEN'];
         }
 
-        // Intentar del header X-Customer-JWT
         if (isset($_SERVER['HTTP_X_CUSTOMER_JWT'])) {
             return $_SERVER['HTTP_X_CUSTOMER_JWT'];
         }

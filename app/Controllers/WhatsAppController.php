@@ -70,6 +70,8 @@ class WhatsAppController extends Controller
         ApiHelper::respondIfOptions();
         ApiHelper::allowedMethodsGet();
 
+        $customerApiId = ApiHelper::getCustomerIdFromSession($customerApiId);
+
         if (empty($customerApiId)) {
             ApiHelper::respond(['error' => 'customerApiId es requerido'], 422);
         }
@@ -104,9 +106,7 @@ class WhatsAppController extends Controller
         ApiHelper::respondIfOptions();
         ApiHelper::allowedMethodsGet();
 
-        if (empty($customerApiId)) {
-            ApiHelper::respond(['error' => 'customerApiId es requerido'], 422);
-        }
+        $customerApiId = ApiHelper::getCustomerIdFromSession($customerApiId);
 
         // Obtener parámetros de paginación
         $page = max(1, (int) ($_GET['page'] ?? 1));
@@ -165,6 +165,7 @@ class WhatsAppController extends Controller
         ApiHelper::allowedMethodsPost();
 
         $payload = ApiHelper::getJsonBody();
+        $payload['customerApiId'] = ApiHelper::getCustomerIdFromSession($payload['customerApiId'] ?? null);
         $this->validateRequired($payload, ['customerApiId', 'subscriptionId', 'phone']);
 
         $customerPermits = new CustomerPermits($payload['customerApiId']);
@@ -215,6 +216,7 @@ class WhatsAppController extends Controller
         ApiHelper::allowedMethodsPost();
 
         $payload = ApiHelper::getJsonBody();
+        $payload['customerApiId'] = ApiHelper::getCustomerIdFromSession($payload['customerApiId'] ?? null);
         $this->validateRequired($payload, ['customerApiId', 'subscriptionId', 'phone']);
 
         $customerPermits = new CustomerPermits($payload['customerApiId']);
@@ -265,6 +267,8 @@ class WhatsAppController extends Controller
         ApiHelper::allowedMethodsPost();
 
         $payload = ApiHelper::getJsonBody();
+        $payload['customerApiId'] = ApiHelper::getCustomerIdFromSession($payload['customerApiId'] ?? null);
+
         $this->validateRequired($payload, ['customerApiId', 'subscriptionId', 'phone']);
 
         $customerPermits = new CustomerPermits($payload['customerApiId']);
@@ -309,8 +313,10 @@ class WhatsAppController extends Controller
     {
         ApiHelper::respondIfOptions();
         ApiHelper::allowedMethodsPost();
-
         $payload = ApiHelper::getJsonBody();
+
+        $payload['customerApiId'] = ApiHelper::getCustomerIdFromSession($payload['customerApiId'] ?? null);
+
         $this->validateRequired($payload, ['customerApiId', 'subscriptionId', 'phone']);
 
         $customerPermits = new CustomerPermits($payload['customerApiId']);
@@ -375,9 +381,10 @@ class WhatsAppController extends Controller
     {
         ApiHelper::respondIfOptions();
         ApiHelper::allowedMethodsPost();
-        
-
         $payload = ApiHelper::getJsonBody();
+
+        $payload['customerApiId'] = ApiHelper::getCustomerIdFromSession($payload['customerApiId'] ?? null);
+
         $this->validateRequired($payload, ['customerApiId', 'items']);
 
         $items = $payload['items'] ?? [];

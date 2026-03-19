@@ -3,6 +3,14 @@
 
 RewriteEngine On
 
+# Pasar el header Authorization a PHP (necesario para JWT)
+# Apache no pasa automáticamente este header por seguridad
+RewriteCond %{HTTP:Authorization} .
+RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Alternativa para compatibilidad adicional
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+
 # Configurar tipos MIME
 AddType application/json .json
 

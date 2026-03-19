@@ -1,5 +1,8 @@
 <?php
 
+require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
+
+use \Models\CustomerRegistryModel;
 class ApiHelper
 {
     private static array $sessionConfig;
@@ -142,5 +145,25 @@ class ApiHelper
                 'message' => "El contenido de metadata excede {$maxSize} bytes"
             ], 413);
         }
+    }
+
+    public static function getCustomerIdFromSession($default = null): ?string
+    {
+        return $GLOBALS['customer_jwt_customer_id'] ?? $default;
+    }
+
+    public static function getBillingIdByCustomerIdFromSession($default = null): ?string
+    {
+        $customerId = $GLOBALS['customer_jwt_customer_id'] ?? $default;
+
+        if ($customerId === null) {
+            return null;
+        }
+
+        $customerModel = new CustomerRegistryModel();
+        $customer = $customerModel->getCustomer($customerId) ?? null;
+        
+        return $customer['billingId'] ?? null;
+
     }
 }

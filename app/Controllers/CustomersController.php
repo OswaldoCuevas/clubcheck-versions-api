@@ -399,6 +399,8 @@ class CustomersController extends Controller
             $customerId = isset($_GET['customerId']) ? (string) $_GET['customerId'] : '';
         }
 
+        $customerId = ApiHelper::getCustomerIdFromSession($customerId) ?? $customerId;
+
         $customerId = trim(rawurldecode((string) $customerId));
 
         if ($customerId === '') {
@@ -432,6 +434,8 @@ class CustomersController extends Controller
         if ($customerApiId === '' && isset($payload['customerIdApi'])) {
             $customerApiId = trim((string) $payload['customerIdApi']);
         }
+
+        $customerApiId = ApiHelper::getCustomerIdFromSession($customerApiId) ?? $customerApiId;
 
         if ($customerApiId === '') {
             ApiHelper::respond([
@@ -487,6 +491,8 @@ class CustomersController extends Controller
             $customerApiId = trim((string) $payload['customerIdApi']);
         }
 
+    $customerApiId = ApiHelper::getCustomerIdFromSession($customerApiId) ?? $customerApiId;
+
         if ($customerApiId === '') {
             ApiHelper::respond([
                 'error' => 'El campo customerApiId es obligatorio'
@@ -529,6 +535,8 @@ class CustomersController extends Controller
 
         $payload = ApiHelper::getJsonBody();
         $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
+
+        $customerId = ApiHelper::getCustomerIdFromSession($customerId) ?? $customerId;
 
         $existing = $customerId !== '' ? $this->customerRegistry->getCustomer($customerId) : null;
 
@@ -915,6 +923,7 @@ class CustomersController extends Controller
         $payload = ApiHelper::getJsonBody();
 
         $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
+        $customerId = ApiHelper::getCustomerIdFromSession($customerId) ?? $customerId;
         if ($customerId === '') {
             ApiHelper::respond([
                 'error' => 'El campo customerId es obligatorio'
@@ -1006,6 +1015,7 @@ class CustomersController extends Controller
         $payload = ApiHelper::getJsonBody();
 
         $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
+        $customerId = ApiHelper::getCustomerIdFromSession($customerId) ?? $customerId;
         $name = isset($payload['name']) ? trim((string) $payload['name']) : '';
         $email = isset($payload['email']) ? trim((string) $payload['email']) : '';
         $billingId = array_key_exists('billingId', $payload) ? trim((string) $payload['billingId']) : null;
@@ -1157,6 +1167,8 @@ class CustomersController extends Controller
         $token = isset($payload['token']) ? trim((string) $payload['token']) : '';
         $deviceName = array_key_exists('deviceName', $payload) ? trim((string) $payload['deviceName']) : null;
 
+         $customerId = ApiHelper::getCustomerIdFromSession($customerId) ?? $customerId;
+
         if ($customerId === '' || $token === '') {
             ApiHelper::respond([
                 'error' => 'Los campos customerId y token son obligatorios'
@@ -1196,6 +1208,8 @@ class CustomersController extends Controller
         ApiHelper::allowedMethodsGet();
 
         $customerId = $customerId ?? (isset($_GET['customerId']) ? trim((string) $_GET['customerId']) : '');
+
+        $customerId = ApiHelper::getCustomerIdFromSession($customerId) ?? $customerId;
 
         if ($customerId === '') {
             ApiHelper::respond([
@@ -1248,19 +1262,29 @@ class CustomersController extends Controller
         // Extraer token del Authorization header o del body
         $token = null;
         
-        // Intentar obtener del header Authorization
-        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
-        if (preg_match('/Bearer\s+(\S+)/', $authHeader, $matches)) {
+        // 1. Intentar obtener del header Authorization usando apache_request_headers
+        if (function_exists('apache_request_headers')) {
+            $headers = apache_request_headers();
+            $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+        } elseif (function_exists('getallheaders')) {
+            $headers = getallheaders();
+            $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+        } else {
+            // 2. Fallback a $_SERVER
+            $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? null;
+        }
+        
+        if ($authHeader && preg_match('/Bearer\s+(\S+)/', $authHeader, $matches)) {
             $token = $matches[1];
         }
         
-        // Si no hay token en header, intentar del body
+        // 3. Si no hay token en header, intentar del body
         if (!$token) {
             $payload = ApiHelper::getJsonBody();
             $token = isset($payload['token']) ? trim((string) $payload['token']) : '';
         }
         
-        // También permitir token como query parameter (para GET requests)
+        // 4. También permitir token como query parameter (para GET requests)
         if (!$token && isset($_GET['token'])) {
             $token = trim((string) $_GET['token']);
         }

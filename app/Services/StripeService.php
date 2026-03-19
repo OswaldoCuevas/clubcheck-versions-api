@@ -616,6 +616,33 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId): a
         $newAmount = $newPrice->unit_amount ?? 0;
         $isUpgrade = $newAmount > $currentAmount;
 
+        // Si la suscripción está marcada para cancelar, no hay upcoming invoice
+        // En ese caso, devolvemos un preview manual basado en el nuevo precio
+        if ($subscription->cancel_at_period_end) {
+            $currency = strtoupper($newPrice->currency ?? 'mxn');
+            
+            return [
+                'success' => true,
+                'preview' => [
+                    'amount_due' => $newAmount,
+                    'amount_due_formatted' => $this->formatMoney($newAmount, $currency),
+                    'currency' => $currency,
+                    'proration_amount' => 0,
+                    'proration_formatted' => $this->formatMoney(0, $currency),
+                    'credit_balance' => 0,
+                    'new_plan_amount' => $newAmount,
+                    'new_plan_formatted' => $this->formatMoney($newAmount, $currency),
+                    'current_plan_amount' => $currentAmount,
+                    'current_plan_formatted' => $this->formatMoney($currentAmount, $currency),
+                    'billing_date' => date('Y-m-d', $subscription->current_period_end ?? time()),
+                    'is_upgrade' => $isUpgrade,
+                    'immediate_charge' => false,
+                    'new_plan_name' => $newPrice->nickname ?? $newPrice->lookup_key ?? 'Plan',
+                    'note' => 'La facturación se reactivará al cambiar de plan'
+                ]
+            ];
+        }
+
         // Crear una invoice preview (upcoming invoice) con el nuevo precio
         // Nota: upcoming() es un método especial que no está en StripeClient, usar la clase estática
         $invoice = $this->stripe->invoices->createPreview([

@@ -73,6 +73,7 @@ class StripeController extends Controller
     public function getCustomer(string $customerId): void
     {
         ApiHelper::allowedMethodsGet();
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
         $result = $this->stripeService->getCustomer($customerId);
         ApiHelper::respond($result, $result['success'] ? 200 : 404);
     }
@@ -87,7 +88,7 @@ class StripeController extends Controller
     {
         ApiHelper::allowedMethodsPut();
         $input = ApiHelper::getJsonBody();
-
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
         $result = $this->stripeService->updateCustomer(
             $customerId,
             $input['name'] ?? null,
@@ -115,6 +116,8 @@ class StripeController extends Controller
         $input = ApiHelper::getJsonBody();
         $this->requireFields($input, ['token_id']);
 
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
+
         $result = $this->stripeService->addCard($customerId, $input['token_id']);
         ApiHelper::respond($result, $result['success'] ? 201 : 400);
     }
@@ -126,6 +129,7 @@ class StripeController extends Controller
     public function listCards(string $customerId): void
     {
         ApiHelper::allowedMethodsGet();
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
         $result = $this->stripeService->listCards($customerId);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
@@ -137,6 +141,7 @@ class StripeController extends Controller
     public function deleteCard(string $customerId, string $cardId): void
     {
         ApiHelper::allowedMethodsDelete();
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
         $success = $this->stripeService->deleteCard($customerId, $cardId);
         ApiHelper::respond([
             'success' => $success,
@@ -151,6 +156,7 @@ class StripeController extends Controller
     public function setDefaultCard(string $customerId, string $cardId): void
     {
         ApiHelper::allowedMethodsPut();
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
         $result = $this->stripeService->setDefaultCard($customerId, $cardId);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
@@ -168,6 +174,8 @@ class StripeController extends Controller
     {
         ApiHelper::allowedMethodsPost();
         $input = ApiHelper::getJsonBody();
+
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
 
         // Resolver price_id desde lookup_key si se proporciona
         $priceId = $input['price_id'] ?? null;
@@ -192,6 +200,7 @@ class StripeController extends Controller
     public function getActiveSubscription(string $customerId): void
     {
         ApiHelper::allowedMethodsGet();
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
         $result = $this->stripeService->getActiveSubscription($customerId);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
@@ -383,6 +392,7 @@ class StripeController extends Controller
     public function getCurrentPlan(string $customerId): void
     {
         ApiHelper::allowedMethodsGet();
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
         $result = $this->stripeService->getCurrentPlan($customerId);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
@@ -441,6 +451,8 @@ class StripeController extends Controller
     {
         ApiHelper::allowedMethodsPost();
         $input = ApiHelper::getJsonBody();
+
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
 
         $priceId = $input['price_id'] ?? null;
         if (empty($priceId) && !empty($input['plan_lookup_key'])) {
