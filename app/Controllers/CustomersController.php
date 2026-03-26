@@ -28,6 +28,7 @@ require_once __DIR__ . '/../Models/MigrationsDesktopModel.php';
 require_once __DIR__ . '/../Models/BarcodeLookupCacheDesktopModel.php';
 require_once __DIR__ . '/../Helpers/ApiHelper.php';
 require_once __DIR__ . '/../Services/StripeService.php';
+require_once __DIR__ . '/../Services/JwtService.php';
 
 use Core\Controller;
 use Models\CustomerRegistryModel;
@@ -55,6 +56,7 @@ use Models\MigrationsDesktopModel;
 use Models\BarcodeLookupCacheDesktopModel;
 use App\Services\StripeService;
 use ApiHelper;
+use App\Services\JwtService;
 
 class CustomersController extends Controller
 {
@@ -826,12 +828,37 @@ class CustomersController extends Controller
                 'customer' => $result['customer'],
             ], 200);
         }
+        // crear token de jwt para el cliente registrado
+        $jwtTokenService = new JwtService();
+        $jwtToken = $jwtTokenService->createToken([
+            'cid' => $result['customer']['customerId'],           // Customer ID
+            'mkt' => $token,         // Machine Token (GUID)
+            'typ' => 'customer',            // Tipo de token
+        ],0); // token válido por 7 días
+
+         // Si $expiresIn es null, usar default. Si es 0, sin caducidad
+        $expiration = 0;
+        $expiresAt = null;
+        $db = new \Database();
+        // Almacenar el JWT en la base de datos
+        $db->update(
+            'Customers',
+            [
+                'TokenJwt' => $jwtToken,
+                'TokenJwtCreatedAt' => date('Y-m-d H:i:s'),
+                'TokenJwtExpiresAt' => $expiresAt ? date('Y-m-d H:i:s', $expiresAt) : null,
+            ],
+            'Id = ?',
+            [$result['customer']['customerId']]
+        );
+
 
         ApiHelper::respond([
             'found' => false,
             'registered' => true,
             'customer' => $result['customer'],
             'accessKey' => $result['accessKey'] ?? null,
+            'apiToken' => $jwtToken,
         ], 201);
     }
 
@@ -898,6 +925,30 @@ class CustomersController extends Controller
             throw $e;
         }
 
+         // crear token de jwt para el cliente registrado
+        $jwtTokenService = new JwtService();
+        $jwtToken = $jwtTokenService->createToken([
+            'cid' => $customer['customerId'],           // Customer ID
+            'mkt' => $token,         // Machine Token (GUID)
+            'typ' => 'customer',            // Tipo de token
+        ],0); // token válido por 7 días
+
+         // Si $expiresIn es null, usar default. Si es 0, sin caducidad
+        $expiration = 0;
+        $expiresAt = null;
+        $db = new \Database();
+        // Almacenar el JWT en la base de datos
+        $db->update(
+            'Customers',
+            [
+                'TokenJwt' => $jwtToken,
+                'TokenJwtCreatedAt' => date('Y-m-d H:i:s'),
+                'TokenJwtExpiresAt' => $expiresAt ? date('Y-m-d H:i:s', $expiresAt) : null,
+            ],
+            'Id = ?',
+            [$customer['customerId']]
+        );
+
         ApiHelper::respond([
             'status' => 'success',
             'customer' => [
@@ -907,7 +958,9 @@ class CustomersController extends Controller
                 'email' => $customer['email'],
                 'billingId' => $customer['billingId'],
                 'token' => $customer['token'],
+                
             ],
+            'apiToken' => $jwtToken,
         ]);
     }
 
