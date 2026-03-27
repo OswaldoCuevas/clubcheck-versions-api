@@ -51,7 +51,7 @@ $router->any('/api/customers/:customerId', 'CustomersController', 'getCustomer',
 $router->any('/api/customers/token', 'CustomersController', 'customerToken'); // NO
 $router->any('/api/customers/token/register', 'CustomersController', 'registerToken', ['customer_jwt']);
 $router->any('/api/customers/token/await', 'CustomersController', 'awaitToken');// NO
-$router->any('/api/customers/jwt/validate', 'CustomersController', 'validateJwtToken',['customer_jwt']);
+$router->any('/api/customers/jwt/validate', 'CustomersController', 'validateJwtToken');
 $router->any('/api/customers/desktop/pull', 'CustomersController', 'pullDesktop', ['customer_jwt']);
 $router->any('/api/customers/desktop/push', 'CustomersController', 'pushDesktop', ['customer_jwt']);
 $router->any('/api/customers/messages-sends-at-month/:customerId', 'CustomersController', 'getMessagesSendsAtMonth', ['customer_jwt']);

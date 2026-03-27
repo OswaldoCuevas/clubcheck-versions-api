@@ -891,6 +891,8 @@ class CustomersController extends Controller
 
         try {
             $customer = $this->customerRegistry->loginWithAccessKey($email, $accessKey, $deviceName, $ipAddress, $token);
+
+            $subscription = $this->stripeService->getActiveSubscription($customer['billingId']);
         } catch (\InvalidArgumentException $e) {
             ApiHelper::respond([
                 'error' => 'Debes proporcionar email y accessKey válidos'
@@ -961,6 +963,7 @@ class CustomersController extends Controller
                 
             ],
             'apiToken' => $jwtToken,
+            'subscriptionId' => $subscription ? ($subscription['subscription']['id'] ?? null) : null,
         ]);
     }
 
@@ -1313,7 +1316,8 @@ class CustomersController extends Controller
         }
 
         // Extraer token del Authorization header o del body
-        $token = null;
+        $payload = ApiHelper::getJsonBody();
+        $token = $payload['token'] ?? null;
         
         // 1. Intentar obtener del header Authorization usando apache_request_headers
         if (function_exists('apache_request_headers')) {
@@ -1327,7 +1331,7 @@ class CustomersController extends Controller
             $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? null;
         }
         
-        if ($authHeader && preg_match('/Bearer\s+(\S+)/', $authHeader, $matches)) {
+        if ($authHeader && preg_match('/Bearer\s+(\S+)/', $authHeader, $matches) && !$token) {
             $token = $matches[1];
         }
         
