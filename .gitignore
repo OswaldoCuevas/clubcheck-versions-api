@@ -25,6 +25,7 @@ Thumbs.db
 .env.production
 .env.staging
 config/secrets.php
+.htaccess
 
 # Logs y archivos temporales
 # ===========================================
