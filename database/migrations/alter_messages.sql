@@ -1,5 +1,6 @@
 -- sea actulaiza la tabla  SentMessagesDesktop agragando em DateSent tipo datetime
-ALTER TABLE SentMessagesDesktop ADD COLUMN DateSent DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER SentDay;
+-- se agregar solo si el campo DateSent no existe
+ALTER TABLE SentMessagesDesktop ADD COLUMN IF NOT EXISTS DateSent DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER SentDay;
 
 -- Creacion de tabla MessageSent
 CREATE TABLE MessageSent (
