@@ -1,2 +1,2 @@
  -- se agrega el nuevo campo IsPLanBasic a la tabla de clientes para poder identificar si el cliente tiene el plan básico o no, esto con el fin de limitar el número de mensajes que puede enviar al mes
-ALTER TABLE customers ADD COLUMN IsPlanBasic BOOLEAN NOT NULL DEFAULT FALSE AFTER AccessKeyHash;
+ALTER TABLE Customers ADD COLUMN IsPlanBasic BOOLEAN NOT NULL DEFAULT FALSE AFTER AccessKeyHash;
