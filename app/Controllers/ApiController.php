@@ -41,7 +41,9 @@ class ApiController extends Controller
             $baseUrl = \Core\UrlHelper::absoluteUrl('');
             
             $versionData['downloadUrl'] = $baseUrl . '/api/download';
+            $versionData['downloadUrl'] = str_replace('//api', '/api', $versionData['downloadUrl']); // Asegurar formato correcto
             $versionData['checkUpdateUrl'] = $baseUrl . '/api/check-update';
+            $versionData['checkUpdateUrl'] = str_replace('//api', '/api', $versionData['checkUpdateUrl']); // Asegurar formato correcto
             $versionData['directUrl'] = $versionData['url'] ?? ''; // URL directa al archivo
             
             // Verificar si el archivo existe físicamente
