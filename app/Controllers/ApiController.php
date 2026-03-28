@@ -125,6 +125,11 @@ class ApiController extends Controller
         // Obtener versión desde la base de datos
         $versionData = $this->versionModel->getLatestVersion();
 
+        // Obtener el nombre y ruta del archivo
+        require_once __DIR__ . '/../Helpers/FileHelper.php';
+        $fileName = getAppFileName($versionData['latestVersion']);
+        $filePath = findExistingAppFile($versionData['latestVersion']) ?: (__DIR__ . '/../../uploads/' . $fileName);
+
         // Verificar que el archivo existe
         if (!file_exists($filePath)) {
             http_response_code(404);
