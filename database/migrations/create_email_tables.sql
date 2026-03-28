@@ -40,7 +40,7 @@ CREATE TABLE `EmailCodes` (
     `EmailTypeId` INT UNSIGNED NOT NULL COMMENT 'FK to EmailTypes',
     `Subject` VARCHAR(255) NULL COMMENT 'Email subject',
     `Body` TEXT NULL COMMENT 'Email body (HTML)',
-    `CustomerApiId` VARCHAR(64) NULL COMMENT 'FK to customers (optional)',
+    `CustomerApiId` VARCHAR(64) NULL COMMENT 'FK to Customers (optional)',
     `AdminId` VARCHAR(36) NULL COMMENT 'Admin ID related (optional)',
     `UserId` BIGINT UNSIGNED NULL COMMENT 'FK to Users (optional)',
     `SentAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'When the email was sent',
@@ -64,7 +64,7 @@ CREATE TABLE `EmailCodes` (
     INDEX `idx_EmailCodes_IsUsed` (`IsUsed`),
     INDEX `idx_EmailCodes_Pending` (`Email`, `EmailTypeId`, `IsUsed`, `ExpiresAt`),
     CONSTRAINT `fk_EmailCodes_EmailType` FOREIGN KEY (`EmailTypeId`) REFERENCES `EmailTypes`(`Id`) ON DELETE RESTRICT,
-    CONSTRAINT `fk_EmailCodes_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_EmailCodes_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE SET NULL,
     CONSTRAINT `fk_EmailCodes_User` FOREIGN KEY (`UserId`) REFERENCES `Users`(`Id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

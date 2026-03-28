@@ -14,6 +14,6 @@ CREATE TABLE MessageSent (
     ErrorMessage VARCHAR(255),
     PRIMARY KEY (`Id`),
     INDEX `idx_MessageSent_CustomerApiId` (`CustomerApiId`),
-    CONSTRAINT `fk_MessageSent_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE
+    CONSTRAINT `fk_MessageSent_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE
 );
 
