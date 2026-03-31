@@ -36,6 +36,7 @@ $router->any('/logout', 'AuthController', 'logout');
 $router->get('/api/version', 'ApiController', 'version');
 $router->get('/api/check-update', 'ApiController', 'checkUpdate');
 $router->get('/api/download', 'ApiController', 'download');
+$router->get('/api/download-zip', 'ApiController', 'downloadZip'); // Descarga pública del ZIP
 
 // Rutas para sesiones de clientes (aplicación de escritorio)
 $router->any('/api/customers/sessions/start', 'CustomersController', 'startSession');// NO
