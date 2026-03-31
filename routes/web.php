@@ -115,7 +115,7 @@ $router->any('/generate-password', 'ToolsController', 'generatePassword');
 
 // ==================== STRIPE ====================
 // Configuración pública (clave pública para el cliente)
-$router->get('/api/customers/stripe/config', 'StripeController', 'getPublicConfig', ['customer_jwt']);
+$router->get('/api/customers/stripe/config', 'StripeController', 'getPublicConfig');
 
 // Clientes
 $router->post('/api/customers/stripe/customers', 'StripeController', 'createCustomer', ['customer_jwt']);

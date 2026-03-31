@@ -73,7 +73,7 @@ return [
     ]
     : [
         'free' => [
-            'name' => 'Free',
+            'name' => 'Plan Start',
             'lookup_key' => 'free',
             'rules' => [
                 'enable_fingerprint' => true,
@@ -84,20 +84,8 @@ return [
                 'max_partners' => 50,
             ],
         ],
-        'essential_monthly' => [
-            'name' => 'Esencial',
-            'lookup_key' => 'essential_monthly',
-            'rules' => [
-                'enable_fingerprint' => true,
-                'enable_qr' => true,
-                'max_messages' => 16,
-                'max_members_actives' => 20,
-                'products_to_sale' => 10,
-                'max_partners' => 50,
-            ],
-        ],
         'intermediate_monthly' => [
-            'name' => 'Intermedio',
+            'name' => 'Plan Growth',
             'lookup_key' => 'intermediate_monthly',
             'rules' => [
                 'enable_fingerprint' => true,
@@ -109,13 +97,37 @@ return [
             ],
         ],
         'professional_monthly' => [
-            'name' => 'Profesional',
+            'name' => 'Plan Pro',
             'lookup_key' => 'professional_monthly',
             'rules' => [
                 'enable_fingerprint' => true,
                 'enable_qr' => true,
                 'max_messages' => 900,
                 'max_members_actives' => 300,
+                'products_to_sale' => null,  // ilimitado
+                'max_partners' => null,       // ilimitado
+            ],
+        ],
+        'business_monthly' => [
+            'name' => 'Plan Business',
+            'lookup_key' => 'business_monthly',
+            'rules' => [
+                'enable_fingerprint' => true,
+                'enable_qr' => true,
+                'max_messages' => 1600,
+                'max_members_actives' => 500,
+                'products_to_sale' => null,  // ilimitado
+                'max_partners' => null,       // ilimitado
+            ],
+        ],
+        'enterprise_monthly' => [
+            'name' => 'Plan Enterprise',
+            'lookup_key' => 'enterprise_monthly',
+            'rules' => [
+                'enable_fingerprint' => true,
+                'enable_qr' => true,
+                'max_messages' => 3100,
+                'max_members_actives' => 1000,
                 'products_to_sale' => null,  // ilimitado
                 'max_partners' => null,       // ilimitado
             ],
