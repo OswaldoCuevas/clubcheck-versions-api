@@ -49,9 +49,9 @@ O desde phpMyAdmin / Adminer:
 USE `clubcheck`;
 
 ALTER TABLE `AppVersions` 
-ADD COLUMN `ZipUrl` TEXT NULL AFTER `Sha256`,
-ADD COLUMN `ZipSha256` CHAR(64) NULL AFTER `ZipUrl`,
-ADD COLUMN `ZipFileSize` BIGINT UNSIGNED NULL AFTER `ZipSha256`;
+ADD COLUMN `SetupUrl` TEXT NULL AFTER `Sha256`,
+ADD COLUMN `SetupSha256` CHAR(64) NULL AFTER `SetupUrl`,
+ADD COLUMN `SetupFileSize` BIGINT UNSIGNED NULL AFTER `SetupSha256`;
 ```
 
 ### 2. Verificar los Cambios
@@ -63,9 +63,9 @@ DESCRIBE AppVersions;
 ```
 
 Deberías ver las nuevas columnas:
-- `ZipUrl` (TEXT)
-- `ZipSha256` (CHAR(64))
-- `ZipFileSize` (BIGINT UNSIGNED)
+- `SetupUrl` (TEXT)
+- `SetupSha256` (CHAR(64))
+- `SetupFileSize` (BIGINT UNSIGNED)
 
 ### 3. Probar la Funcionalidad
 
@@ -73,18 +73,18 @@ Deberías ver las nuevas columnas:
 2. **Inicia sesión** con una cuenta que tenga permisos de subida
 3. **Sube una nueva versión**:
    - Completa el campo de versión (ej: 1.2.3.4)
-   - Selecciona el archivo .exe
-   - Selecciona el archivo .zip *(ahora obligatorio)*
+   - Selecciona el archivo EXE principal
+   - Selecciona el archivo Setup (instalador .exe) *(ahora obligatorio)*
    - Agrega notas de versión (opcional)
-   - Haz clic en "Subir Nueva Versión (EXE + ZIP)"
+   - Haz clic en "Subir Nueva Versión (EXE + Setup)"
 
 4. **Verifica las descargas públicas**:
    - EXE: `http://tu-servidor/clubcheck/api/download`
-   - ZIP: `http://tu-servidor/clubcheck/api/download-zip` *(nueva ruta pública)*
+   - Setup: `http://tu-servidor/clubcheck/api/download-setup` *(nueva ruta pública)*
 
 5. **Verifica la API**:
-   - `http://tu-servidor/clubcheck/api/version` (debería mostrar información del ZIP)
-   - `http://tu-servidor/clubcheck/api/check-update` (incluye URLs del ZIP)
+   - `http://tu-servidor/clubcheck/api/version` (debería mostrar información del Setup)
+   - `http://tu-servidor/clubcheck/api/check-update` (incluye URLs del Setup)
 
 ---
 
@@ -94,34 +94,38 @@ Deberías ver las nuevas columnas:
 - ✅ `database/migrations/001_add_zip_fields_to_app_versions.sql` *(nuevo)*
 
 ### Configuración
-- ✅ `config/app.php` - Permite extensiones .zip
+- ✅ `config/app.php` - Solo permite extensiones .exe
 
 ### Modelos
-- ✅ `app/Models/VersionModel.php` - Maneja campos ZIP
+- ✅ `app/Models/VersionModel.php` - Maneja campos Setup
 
 ### Controladores
-- ✅ `app/Controllers/HomeController.php` - Procesa subida de ZIP
-- ✅ `app/Controllers/ApiController.php` - Añade endpoint downloadZip()
+- ✅ `app/Controllers/HomeController.php` - Procesa subida de Setup
+- ✅ `app/Controllers/ApiController.php` - Añade endpoint downloadSetup()
 
 ### Vistas
-- ✅ `app/Views/home/index.php` - Campo de subida de ZIP + visualización
+- ✅ `app/Views/home/index.php` - Campo de subida de Setup + visualización
 
 ### Rutas
-- ✅ `routes/web.php` - Nueva ruta `/api/download-zip`
+- ✅ `routes/web.php` - Nueva ruta `/api/download-setup`
 
 ---
 
 ## Notas Importantes
 
 ### Compatibilidad hacia atrás
-- Las versiones antiguas sin ZIP seguirán funcionando
-- El campo ZIP es obligatorio solo para **nuevas subidas**
-- Las versiones existentes en la BD sin ZIP mostrarán valores vacíos
+- Las versiones antiguas sin Setup seguirán funcionando
+- El campo Setup es obligatorio solo para **nuevas subidas**
+- Las versiones existentes en la BD sin Setup mostrarán valores vacíos
 
 ### Seguridad
-- El archivo ZIP es de **descarga pública** (sin autenticación)
+- El archivo Setup es de **descarga pública** (sin autenticación)
 - El archivo EXE mantiene su descarga pública existente
 - La subida de archivos requiere autenticación y permisos
+
+### Tipos de archivo
+- **EXE principal**: ClubCheck-X.X.X.X.exe (aplicación ejecutable)
+- **Setup/Instalador**: ClubCheckSetup-X.X.X.X.exe (instalador del sistema)
 
 ### Tamaño de archivos
 - Los límites de subida están configurados en `config/app.php`
@@ -136,28 +140,28 @@ Deberías ver las nuevas columnas:
 **Causa**: La migración no se ejecutó correctamente.
 **Solución**: Ejecuta manualmente el script SQL de migración.
 
-### Error al subir: "El archivo ZIP es obligatorio"
-**Causa**: El formulario ahora requiere ambos archivos.
-**Solución**: Asegúrate de seleccionar tanto el .exe como el .zip antes de subir.
+### Error: "El archivo Setup es obligatorio"
+**Causa**: El formulario ahora requiere ambos archivos EXE.
+**Solución**: Asegúrate de seleccionar tanto el EXE principal como el Setup antes de subir.
 
-### Error 404 al descargar ZIP
-**Causa**: No hay archivo ZIP en el servidor o la ruta no existe.
+### Error 404 al descargar Setup
+**Causa**: No hay archivo Setup en el servidor o la ruta no existe.
 **Solución**: 
-- Verifica que el archivo exista en `/uploads/ClubCheck-{version}.zip`
-- Verifica que la ruta `/api/download-zip` esté configurada en `routes/web.php`
+- Verifica que el archivo exista en `/uploads/ClubCheckSetup-{version}.exe`
+- Verifica que la ruta `/api/download-setup` esté configurada en `routes/web.php`
 
-### El ZIP no se muestra en la información de versión
+### El Setup no se muestra en la información de versión
 **Causa**: La versión fue subida antes de aplicar estos cambios.
-**Solución**: Sube una nueva versión con ambos archivos (EXE + ZIP).
+**Solución**: Sube una nueva versión con ambos archivos (EXE + Setup).
 
 ---
 
 ## Próximos Pasos
 
 1. Aplicar la migración de base de datos
-2. Probar subida de nueva versión con EXE + ZIP
+2. Probar subida de nueva versión con EXE principal + Setup
 3. Verificar descargas públicas funcionando
-4. Actualizar aplicaciones cliente para usar el nuevo endpoint de ZIP
+4. Actualizar aplicaciones cliente para usar el nuevo endpoint de Setup
 
 ---
 
@@ -168,4 +172,4 @@ Si encuentras algún problema, verifica:
 - Permisos de escritura en carpeta `uploads/`
 - Configuración de PHP (`upload_max_filesize`, `post_max_size`)
 
-¡Listo! El gestor ahora soporta archivos ZIP obligatorios con descarga pública. 🎉
+¡Listo! El gestor ahora soporta archivos Setup (instaladores) obligatorios con descarga pública. 🎉

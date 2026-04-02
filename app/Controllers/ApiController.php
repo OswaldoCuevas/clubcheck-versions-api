@@ -42,12 +42,12 @@ class ApiController extends Controller
             
             $versionData['downloadUrl'] = $baseUrl . '/api/download';
             $versionData['downloadUrl'] = str_replace('//api', '/api', $versionData['downloadUrl']); // Asegurar formato correcto
-            $versionData['downloadZipUrl'] = $baseUrl . '/api/download-zip';
-            $versionData['downloadZipUrl'] = str_replace('//api', '/api', $versionData['downloadZipUrl']); // Asegurar formato correcto
+            $versionData['downloadSetupUrl'] = $baseUrl . '/api/download-setup';
+            $versionData['downloadSetupUrl'] = str_replace('//api', '/api', $versionData['downloadSetupUrl']); // Asegurar formato correcto
             $versionData['checkUpdateUrl'] = $baseUrl . '/api/check-update';
             $versionData['checkUpdateUrl'] = str_replace('//api', '/api', $versionData['checkUpdateUrl']); // Asegurar formato correcto
             $versionData['directUrl'] = $versionData['url'] ?? ''; // URL directa al archivo
-            $versionData['directZipUrl'] = $versionData['zipUrl'] ?? ''; // URL directa al ZIP
+            $versionData['directSetupUrl'] = $versionData['setupUrl'] ?? ''; // URL directa al Setup
             
             // Verificar si el archivo EXE existe físicamente
             require_once __DIR__ . '/../Helpers/FileHelper.php';
@@ -60,14 +60,14 @@ class ApiController extends Controller
                 $versionData['fileDate'] = filemtime($filePath);
             }
             
-            // Verificar si el archivo ZIP existe físicamente
-            if (!empty($versionData['zipUrl'])) {
-                $zipFileName = "ClubCheck-{$versionData['latestVersion']}.zip";
-                $zipFilePath = __DIR__ . '/../../uploads/' . $zipFileName;
-                $versionData['zipFileExists'] = file_exists($zipFilePath);
+            // Verificar si el archivo Setup existe físicamente
+            if (!empty($versionData['setupUrl'])) {
+                $setupFileName = "ClubCheckSetup-{$versionData['latestVersion']}.exe";
+                $setupFilePath = __DIR__ . '/../../uploads/' . $setupFileName;
+                $versionData['setupFileExists'] = file_exists($setupFilePath);
                 
-                if ($versionData['zipFileExists'] && empty($versionData['zipFileSize'])) {
-                    $versionData['zipFileSize'] = filesize($zipFilePath);
+                if ($versionData['setupFileExists'] && empty($versionData['setupFileSize'])) {
+                    $versionData['setupFileSize'] = filesize($setupFilePath);
                 }
             }
         }
@@ -117,9 +117,9 @@ class ApiController extends Controller
                 require_once __DIR__ . '/../Core/UrlHelper.php';
                 $baseUrl = \Core\UrlHelper::absoluteUrl('');
                 $response['downloadUrl'] = $baseUrl . '/api/download';
-                $response['downloadZipUrl'] = $baseUrl . '/api/download-zip';
+                $response['downloadSetupUrl'] = $baseUrl . '/api/download-setup';
                 $response['url'] = $versionData['url'] ?? '';
-                $response['zipUrl'] = $versionData['zipUrl'] ?? '';
+                $response['setupUrl'] = $versionData['setupUrl'] ?? '';
                 
                 // Información adicional del archivo EXE
                 require_once __DIR__ . '/../Helpers/FileHelper.php';
@@ -130,19 +130,19 @@ class ApiController extends Controller
                     $response['checksum'] = hash_file('sha256', $filePath);
                 }
                 
-                // Información adicional del archivo ZIP
-                if (!empty($versionData['zipUrl'])) {
-                    $response['zipFileSize'] = $versionData['zipFileSize'] ?? null;
-                    $response['zipSha256'] = $versionData['zipSha256'] ?? '';
+                // Información adicional del archivo Setup
+                if (!empty($versionData['setupUrl'])) {
+                    $response['setupFileSize'] = $versionData['setupFileSize'] ?? null;
+                    $response['setupSha256'] = $versionData['setupSha256'] ?? '';
                     
-                    $zipFileName = "ClubCheck-{$serverVersion}.zip";
-                    $zipFilePath = __DIR__ . '/../../uploads/' . $zipFileName;
-                    if (file_exists($zipFilePath)) {
-                        if (empty($response['zipFileSize'])) {
-                            $response['zipFileSize'] = filesize($zipFilePath);
+                    $setupFileName = "ClubCheckSetup-{$serverVersion}.exe";
+                    $setupFilePath = __DIR__ . '/../../uploads/' . $setupFileName;
+                    if (file_exists($setupFilePath)) {
+                        if (empty($response['setupFileSize'])) {
+                            $response['setupFileSize'] = filesize($setupFilePath);
                         }
-                        if (empty($response['zipSha256'])) {
-                            $response['zipSha256'] = hash_file('sha256', $zipFilePath);
+                        if (empty($response['setupSha256'])) {
+                            $response['setupSha256'] = hash_file('sha256', $setupFilePath);
                         }
                     }
                 }
@@ -230,35 +230,35 @@ class ApiController extends Controller
         }
     }
 
-    public function downloadZip()
+    public function downloadSetup()
     {
         // Obtener versión desde la base de datos
         $versionData = $this->versionModel->getLatestVersion();
 
-        // Verificar que haya información de ZIP en la base de datos
-        if (empty($versionData['zipUrl'])) {
+        // Verificar que haya información de Setup en la base de datos
+        if (empty($versionData['setupUrl'])) {
             http_response_code(404);
             header('Content-Type: application/json');
             echo json_encode([
-                'error' => 'Archivo ZIP no encontrado',
-                'message' => 'No hay archivo ZIP disponible para la versión actual',
+                'error' => 'Archivo Setup no encontrado',
+                'message' => 'No hay archivo Setup disponible para la versión actual',
                 'version' => $versionData['latestVersion']
             ]);
             exit;
         }
 
-        // Obtener el nombre y ruta del archivo ZIP
-        $zipFileName = "ClubCheck-{$versionData['latestVersion']}.zip";
-        $zipFilePath = __DIR__ . '/../../uploads/' . $zipFileName;
+        // Obtener el nombre y ruta del archivo Setup
+        $setupFileName = "ClubCheckSetup-{$versionData['latestVersion']}.exe";
+        $setupFilePath = __DIR__ . '/../../uploads/' . $setupFileName;
 
         // Verificar que el archivo existe
-        if (!file_exists($zipFilePath)) {
+        if (!file_exists($setupFilePath)) {
             http_response_code(404);
             header('Content-Type: application/json');
             echo json_encode([
                 'error' => 'Archivo no encontrado',
-                'message' => 'El archivo ZIP no existe en el servidor',
-                'expectedFile' => $zipFileName,
+                'message' => 'El archivo Setup no existe en el servidor',
+                'expectedFile' => $setupFileName,
                 'version' => $versionData['latestVersion']
             ]);
             exit;
@@ -273,12 +273,12 @@ class ApiController extends Controller
             header('Access-Control-Allow-Origin: *');
             
             $fileInfo = [
-                'filename' => $zipFileName,
+                'filename' => $setupFileName,
                 'version' => $versionData['latestVersion'],
-                'size' => filesize($zipFilePath),
-                'checksum' => hash_file('sha256', $zipFilePath),
-                'lastModified' => filemtime($zipFilePath),
-                'url' => $versionData['zipUrl'] ?? '',
+                'size' => filesize($setupFilePath),
+                'checksum' => hash_file('sha256', $setupFilePath),
+                'lastModified' => filemtime($setupFilePath),
+                'url' => $versionData['setupUrl'] ?? '',
                 'releaseNotes' => $versionData['releaseNotes'] ?? '',
                 'mandatory' => $versionData['mandatory'] ?? false
             ];
@@ -286,12 +286,12 @@ class ApiController extends Controller
             echo json_encode($fileInfo, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
             exit;
         } else {
-            // Descarga directa del archivo ZIP (comportamiento por defecto)
-            $fileSize = filesize($zipFilePath);
+            // Descarga directa del archivo Setup (comportamiento por defecto)
+            $fileSize = filesize($setupFilePath);
             
-            // Headers para descarga de archivo ZIP
-            header('Content-Type: application/zip');
-            header('Content-Disposition: attachment; filename="' . $zipFileName . '"');
+            // Headers para descarga de archivo Setup
+            header('Content-Type: application/octet-stream');
+            header('Content-Disposition: attachment; filename="' . $setupFileName . '"');
             header('Content-Length: ' . $fileSize);
             header('Cache-Control: must-revalidate');
             header('Pragma: public');
@@ -299,7 +299,7 @@ class ApiController extends Controller
 
             // Leer y enviar el archivo en chunks para archivos grandes
             $chunkSize = 8192;
-            $handle = fopen($zipFilePath, 'rb');
+            $handle = fopen($setupFilePath, 'rb');
             
             if ($handle === false) {
                 http_response_code(500);

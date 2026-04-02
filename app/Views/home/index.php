@@ -104,32 +104,32 @@ $customScripts = '
             });
         }
         
-        // Drag and drop functionality para ZIP
-        const zipLabel = document.querySelector("label[for=\'zipFile\']");
-        const zipInput = document.getElementById("zipFile");
+        // Drag and drop functionality para Setup
+        const setupLabel = document.querySelector("label[for=\'setupFile\']");
+        const setupInput = document.getElementById("setupFile");
         
-        if (zipLabel && zipInput) {
-            zipLabel.addEventListener("dragover", function(e) {
+        if (setupLabel && setupInput) {
+            setupLabel.addEventListener("dragover", function(e) {
                 e.preventDefault();
                 this.style.borderColor = "#3498db";
                 this.style.background = "#e3f2fd";
             });
             
-            zipLabel.addEventListener("dragleave", function(e) {
+            setupLabel.addEventListener("dragleave", function(e) {
                 e.preventDefault();
                 this.style.borderColor = "#adb5bd";
                 this.style.background = "#f8f9fa";
             });
             
-            zipLabel.addEventListener("drop", function(e) {
+            setupLabel.addEventListener("drop", function(e) {
                 e.preventDefault();
                 this.style.borderColor = "#adb5bd";
                 this.style.background = "#f8f9fa";
                 
                 const files = e.dataTransfer.files;
                 if (files.length > 0) {
-                    zipInput.files = files;
-                    updateFileName(zipInput, "zipFileName");
+                    setupInput.files = files;
+                    updateFileName(setupInput, "setupFileName");
                 }
             });
         }
@@ -220,13 +220,13 @@ ob_start();
                                 </small>
                             </div>
                         <?php endif; ?>
-                        <?php if (!empty($currentVersion['zipUrl'])): ?>
+                        <?php if (!empty($currentVersion['setupUrl'])): ?>
                             <div class="mt-2">
                                 <small style="color: #6c757d;">
-                                    <i class="fas fa-file-archive me-1"></i>
-                                    <strong>Archivo ZIP:</strong> Disponible
-                                    <?php if (!empty($currentVersion['zipFileSize'])): ?>
-                                        (<?= number_format($currentVersion['zipFileSize'] / 1024 / 1024, 2) ?> MB)
+                                    <i class="fas fa-download me-1"></i>
+                                    <strong>Setup disponible:</strong> Sí
+                                    <?php if (!empty($currentVersion['setupFileSize'])): ?>
+                                        (<?= number_format($currentVersion['setupFileSize'] / 1024 / 1024, 2) ?> MB)
                                     <?php endif; ?>
                                 </small>
                             </div>
@@ -273,22 +273,22 @@ ob_start();
                         
                         <div class="mb-4">
                             <label class="form-label" style="color: #2c3e50; font-weight: 500;">
-                                <i class="fas fa-file-archive me-2"></i>
-                                Archivo ZIP <span style="color: #e74c3c;">*</span>
+                                <i class="fas fa-download me-2"></i>
+                                Archivo Setup (Instalador) <span style="color: #e74c3c;">*</span>
                             </label>
                             <div class="file-upload-wrapper">
-                                <input type="file" id="zipFile" name="zipFile" accept=".zip" 
-                                       class="file-upload-input" required onchange="updateFileName(this, 'zipFileName')">
-                                <label for="zipFile" class="file-upload-label">
+                                <input type="file" id="setupFile" name="setupFile" accept=".exe" 
+                                       class="file-upload-input" required onchange="updateFileName(this, 'setupFileName')">
+                                <label for="setupFile" class="file-upload-label">
                                     <i class="fas fa-cloud-upload-alt fa-2x mb-2" style="color: #95a5a6;"></i>
                                     <div>
-                                        <strong style="color: #2c3e50;">Haz clic para seleccionar el archivo .zip</strong>
+                                        <strong style="color: #2c3e50;">Haz clic para seleccionar el archivo Setup.exe</strong>
                                         <div style="color: #6c757d;" class="mt-1">o arrastra y suelta aquí</div>
                                     </div>
-                                    <div id="zipFileName" class="mt-2" style="color: #27ae60; display: none;"></div>
+                                    <div id="setupFileName" class="mt-2" style="color: #27ae60; display: none;"></div>
                                 </label>
                             </div>
-                            <div class="form-text" style="color: #6c757d;">El archivo ZIP será descargable públicamente por todos los usuarios</div>
+                            <div class="form-text" style="color: #6c757d;">El archivo Setup será descargable públicamente por todos los usuarios</div>
                         </div>
                         
                         <div class="mb-4">
@@ -313,7 +313,7 @@ ob_start();
                         <div class="d-grid">
                             <button type="submit" class="btn btn-primary btn-lg">
                                 <i class="fas fa-upload me-2"></i>
-                                Subir Nueva Versión (EXE + ZIP)
+                                Subir Nueva Versión (EXE + Setup)
                             </button>
                         </div>
                     </form>
@@ -352,9 +352,9 @@ ob_start();
                     <i class="fas fa-download me-1"></i>
                     Descargar EXE
                 </a>
-                <a href="<?= app_url('/api/download-zip') ?>" class="btn btn-outline-success me-2" target="_blank">
-                    <i class="fas fa-file-archive me-1"></i>
-                    Descargar ZIP
+                <a href="<?= app_url('/api/download-setup') ?>" class="btn btn-outline-success me-2" target="_blank">
+                    <i class="fas fa-download me-1"></i>
+                    Descargar Setup
                 </a>
                 <a href="<?= app_url('/uploads/') ?>" class="btn btn-outline-light">
                     <i class="fas fa-folder me-1"></i>

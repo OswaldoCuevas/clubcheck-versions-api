@@ -96,16 +96,16 @@ class HomeController extends Controller
             ];
         }
         
-        // Validar archivo ZIP
-        if (!isset($_FILES['zipFile']) || $_FILES['zipFile']['error'] !== UPLOAD_ERR_OK) {
+        // Validar archivo Setup (segundo EXE)
+        if (!isset($_FILES['setupFile']) || $_FILES['setupFile']['error'] !== UPLOAD_ERR_OK) {
             return [
-                'message' => 'Error al subir el archivo ZIP. Es obligatorio.',
+                'message' => 'Error al subir el archivo Setup. Es obligatorio.',
                 'type' => 'error'
             ];
         }
         
         $exeFile = $_FILES['exeFile'];
-        $zipFile = $_FILES['zipFile'];
+        $setupFile = $_FILES['setupFile'];
         
         // Validar extensión EXE
         $exeExt = strtolower(pathinfo($exeFile['name'], PATHINFO_EXTENSION));
@@ -116,11 +116,11 @@ class HomeController extends Controller
             ];
         }
         
-        // Validar extensión ZIP
-        $zipExt = strtolower(pathinfo($zipFile['name'], PATHINFO_EXTENSION));
-        if ($zipExt !== 'zip') {
+        // Validar extensión Setup (también debe ser EXE)
+        $setupExt = strtolower(pathinfo($setupFile['name'], PATHINFO_EXTENSION));
+        if ($setupExt !== 'exe') {
             return [
-                'message' => 'El archivo comprimido debe ser .zip',
+                'message' => 'El archivo Setup debe ser .exe',
                 'type' => 'error'
             ];
         }
@@ -128,15 +128,15 @@ class HomeController extends Controller
         // Generar nombres de archivos
         require_once __DIR__ . '/../Helpers/FileHelper.php';
         $exeFileName = getAppFileName($version);
-        $zipFileName = "ClubCheck-{$version}.zip";
+        $setupFileName = "ClubCheckSetup-{$version}.exe";
         
         $exeFilePath = $this->uploadDir . $exeFileName;
-        $zipFilePath = $this->uploadDir . $zipFileName;
+        $setupFilePath = $this->uploadDir . $setupFileName;
         
         $isReplacement = false;
         
         // Si los archivos ya existen, crear backups y eliminarlos
-        if (file_exists($exeFilePath) || file_exists($zipFilePath)) {
+        if (file_exists($exeFilePath) || file_exists($setupFilePath)) {
             $isReplacement = true;
             $timestamp = time();
             
@@ -154,15 +154,15 @@ class HomeController extends Controller
                 }
             }
             
-            // Backup del ZIP si existe
-            if (file_exists($zipFilePath)) {
-                $backupPath = $this->uploadDir . 'backup_' . $timestamp . '_' . $zipFileName;
-                if (copy($zipFilePath, $backupPath)) {
-                    error_log("Backup creado para {$zipFileName}: " . basename($backupPath));
+            // Backup del Setup si existe
+            if (file_exists($setupFilePath)) {
+                $backupPath = $this->uploadDir . 'backup_' . $timestamp . '_' . $setupFileName;
+                if (copy($setupFilePath, $backupPath)) {
+                    error_log("Backup creado para {$setupFileName}: " . basename($backupPath));
                 }
-                if (!unlink($zipFilePath)) {
+                if (!unlink($setupFilePath)) {
                     return [
-                        'message' => 'No se pudo eliminar el archivo ZIP existente',
+                        'message' => 'No se pudo eliminar el archivo Setup existente',
                         'type' => 'error'
                     ];
                 }
@@ -177,32 +177,32 @@ class HomeController extends Controller
             ];
         }
         
-        // Mover archivo ZIP
-        if (!move_uploaded_file($zipFile['tmp_name'], $zipFilePath)) {
-            // Si falla el ZIP, eliminar el EXE ya subido
+        // Mover archivo Setup
+        if (!move_uploaded_file($setupFile['tmp_name'], $setupFilePath)) {
+            // Si falla el Setup, eliminar el EXE ya subido
             unlink($exeFilePath);
             return [
-                'message' => 'Error al guardar el archivo ZIP',
+                'message' => 'Error al guardar el archivo Setup',
                 'type' => 'error'
             ];
         }
         
         // Calcular SHA256 de ambos archivos
         $exeSha256 = hash_file('sha256', $exeFilePath);
-        $zipSha256 = hash_file('sha256', $zipFilePath);
-        $zipFileSize = filesize($zipFilePath);
+        $setupSha256 = hash_file('sha256', $setupFilePath);
+        $setupFileSize = filesize($setupFilePath);
         
         // Generar URLs de los archivos
         $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
         $baseUrl = $protocol . '://' . $host . dirname($_SERVER['REQUEST_URI'] ?? '/');
         $exeFileUrl = $baseUrl . '/uploads/' . $exeFileName;
-        $zipFileUrl = $baseUrl . '/uploads/' . $zipFileName;
+        $setupFileUrl = $baseUrl . '/uploads/' . $setupFileName;
         
         // Actualizar base de datos
         $uploadDateTime = date('Y-m-d H:i:s'); // Formato MySQL
         
-        if ($this->versionModel->saveVersion($version, $exeFileUrl, $exeSha256, $mandatory, $releaseNotes, $uploadDateTime, $zipFileUrl, $zipSha256, $zipFileSize)) {
+        if ($this->versionModel->saveVersion($version, $exeFileUrl, $exeSha256, $mandatory, $releaseNotes, $uploadDateTime, $setupFileUrl, $setupSha256, $setupFileSize)) {
             // Limpiar backups antiguos (mantener solo los últimos 5)
             $this->cleanOldBackups();
             
@@ -213,14 +213,14 @@ class HomeController extends Controller
                 ];
             } else {
                 return [
-                    'message' => "Versión {$version} subida exitosamente (EXE y ZIP)",
+                    'message' => "Versión {$version} subida exitosamente (EXE + Setup)",
                     'type' => 'success'
                 ];
             }
         } else {
             // Si falla la BD, eliminar los archivos subidos
             unlink($exeFilePath);
-            unlink($zipFilePath);
+            unlink($setupFilePath);
             return [
                 'message' => 'Error al guardar la información de versión en la base de datos',
                 'type' => 'error'
