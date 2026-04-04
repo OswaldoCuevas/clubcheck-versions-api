@@ -4,18 +4,22 @@ namespace Controllers;
 
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Models/VersionModel.php';
+require_once __DIR__ . '/../Models/DownloadLogModel.php';
 
 use Core\Controller;
 use Models\VersionModel;
+use Models\DownloadLogModel;
 
 class ApiController extends Controller
 {
     private $versionModel;
+    private $downloadLogModel;
 
     public function __construct()
     {
         parent::__construct();
         $this->versionModel = new VersionModel();
+        $this->downloadLogModel = new DownloadLogModel();
     }
 
     public function version()
@@ -201,6 +205,14 @@ class ApiController extends Controller
             // Descarga directa del archivo ejecutable (comportamiento por defecto)
             $fileSize = filesize($filePath);
             
+            // Registrar la descarga
+            $this->downloadLogModel->logDownload(
+                'exe',
+                $versionData['latestVersion'],
+                $fileName,
+                $fileSize
+            );
+            
             // Headers para descarga de archivo
             header('Content-Type: application/octet-stream');
             header('Content-Disposition: attachment; filename="' . $fileName . '"');
@@ -288,6 +300,14 @@ class ApiController extends Controller
         } else {
             // Descarga directa del archivo Setup (comportamiento por defecto)
             $fileSize = filesize($setupFilePath);
+            
+            // Registrar la descarga
+            $this->downloadLogModel->logDownload(
+                'setup',
+                $versionData['latestVersion'],
+                $setupFileName,
+                $fileSize
+            );
             
             // Headers para descarga de archivo Setup
             header('Content-Type: application/octet-stream');
