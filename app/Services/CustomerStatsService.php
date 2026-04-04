@@ -22,6 +22,21 @@ class CustomerStatsService extends Model
     }
 
     /**
+     * Ejecuta una consulta de conteo de forma segura.
+     * Si la tabla o columna no existe, devuelve 0.
+     */
+    private function safeCount(string $sql, array $params = []): int
+    {
+        try {
+            $row = $this->db->fetchOne($sql, $params);
+            return (int) ($row['total'] ?? 0);
+        } catch (\Throwable $e) {
+            error_log('CustomerStatsService query error: ' . $e->getMessage());
+            return 0;
+        }
+    }
+
+    /**
      * Obtiene estadísticas de un cliente específico.
      */
     public function getCustomerStats(string $customerApiId): array
@@ -50,22 +65,31 @@ class CustomerStatsService extends Model
      */
     public function getAllCustomersStats(): array
     {
-        $customers = $this->db->fetchAll('SELECT Id, Name, Email, PlanCode, IsActive, LastSeen, CreatedAt FROM Customers ORDER BY Name ASC');
+        try {
+            $customers = $this->db->fetchAll('SELECT Id, Name, Email, PlanCode, IsActive, LastSeen, CreatedAt FROM Customers ORDER BY Name ASC');
+        } catch (\Throwable $e) {
+            error_log('CustomerStatsService getAllCustomersStats error: ' . $e->getMessage());
+            return [];
+        }
+        
+        if (!is_array($customers)) {
+            return [];
+        }
         
         $result = [];
         foreach ($customers as $customer) {
-            $customerApiId = $customer['Id'];
+            $customerApiId = $customer['Id'] ?? '';
             $stats = $this->getCustomerStats($customerApiId);
             
             $result[] = [
                 'customer' => [
-                    'customerId' => $customer['Id'],
-                    'name' => $customer['Name'],
-                    'email' => $customer['Email'],
-                    'planCode' => $customer['PlanCode'],
+                    'customerId' => $customer['Id'] ?? '',
+                    'name' => $customer['Name'] ?? '',
+                    'email' => $customer['Email'] ?? '',
+                    'planCode' => $customer['PlanCode'] ?? null,
                     'isActive' => (bool) ($customer['IsActive'] ?? 1),
-                    'lastSeen' => $customer['LastSeen'],
-                    'createdAt' => $customer['CreatedAt'],
+                    'lastSeen' => $customer['LastSeen'] ?? null,
+                    'createdAt' => $customer['CreatedAt'] ?? null,
                 ],
                 'stats' => $stats,
             ];
@@ -98,16 +122,15 @@ class CustomerStatsService extends Model
 
     private function countUsers(string $customerApiId): int
     {
-        $row = $this->db->fetchOne(
+        return $this->safeCount(
             'SELECT COUNT(*) AS total FROM usersdesktop WHERE CustomerApiId = ? AND (Removed = 0 OR Removed IS NULL)',
             [$customerApiId]
         );
-        return (int) ($row['total'] ?? 0);
     }
 
     private function countActiveSubscriptions(string $customerApiId): int
     {
-        $row = $this->db->fetchOne(
+        return $this->safeCount(
             'SELECT COUNT(*) AS total FROM subscriptionsdesktop 
              WHERE CustomerApiId = ? 
              AND (Removed = 0 OR Removed IS NULL) 
@@ -115,51 +138,46 @@ class CustomerStatsService extends Model
              AND (EndingDate IS NULL OR EndingDate >= CURDATE())',
             [$customerApiId]
         );
-        return (int) ($row['total'] ?? 0);
     }
 
     private function countTotalSubscriptions(string $customerApiId): int
     {
-        $row = $this->db->fetchOne(
+        return $this->safeCount(
             'SELECT COUNT(*) AS total FROM subscriptionsdesktop WHERE CustomerApiId = ? AND (Removed = 0 OR Removed IS NULL)',
             [$customerApiId]
         );
-        return (int) ($row['total'] ?? 0);
     }
 
     private function countProducts(string $customerApiId): int
     {
-        $row = $this->db->fetchOne(
+        return $this->safeCount(
             'SELECT COUNT(*) AS total FROM productdesktop WHERE CustomerApiId = ? AND (IsDeleted = 0 OR IsDeleted IS NULL)',
             [$customerApiId]
         );
-        return (int) ($row['total'] ?? 0);
     }
 
     private function countAttendances(string $customerApiId): int
     {
-        $row = $this->db->fetchOne(
+        return $this->safeCount(
             'SELECT COUNT(*) AS total FROM attendancesdesktop WHERE CustomerApiId = ? AND (Removed = 0 OR Removed IS NULL)',
             [$customerApiId]
         );
-        return (int) ($row['total'] ?? 0);
     }
 
     private function countTodayAttendances(string $customerApiId): int
     {
-        $row = $this->db->fetchOne(
+        return $this->safeCount(
             'SELECT COUNT(*) AS total FROM attendancesdesktop 
              WHERE CustomerApiId = ? 
              AND (Removed = 0 OR Removed IS NULL) 
              AND DATE(CheckIn) = CURDATE()',
             [$customerApiId]
         );
-        return (int) ($row['total'] ?? 0);
     }
 
     private function countMonthlyAttendances(string $customerApiId): int
     {
-        $row = $this->db->fetchOne(
+        return $this->safeCount(
             'SELECT COUNT(*) AS total FROM attendancesdesktop 
              WHERE CustomerApiId = ? 
              AND (Removed = 0 OR Removed IS NULL) 
@@ -167,12 +185,11 @@ class CustomerStatsService extends Model
              AND YEAR(CheckIn) = YEAR(CURDATE())',
             [$customerApiId]
         );
-        return (int) ($row['total'] ?? 0);
     }
 
     private function countMessagesSentThisMonth(string $customerApiId): int
     {
-        $row = $this->db->fetchOne(
+        return $this->safeCount(
             'SELECT COUNT(*) AS total FROM MessageSent 
              WHERE CustomerApiId = ? 
              AND Successful = 1 
@@ -180,7 +197,6 @@ class CustomerStatsService extends Model
              AND YEAR(DateSent) = YEAR(CURDATE())',
             [$customerApiId]
         );
-        return (int) ($row['total'] ?? 0);
     }
 
     // =============================================
@@ -189,70 +205,61 @@ class CustomerStatsService extends Model
 
     private function countTotalCustomers(): int
     {
-        $row = $this->db->fetchOne('SELECT COUNT(*) AS total FROM Customers');
-        return (int) ($row['total'] ?? 0);
+        return $this->safeCount('SELECT COUNT(*) AS total FROM Customers');
     }
 
     private function countActiveCustomers(): int
     {
-        $row = $this->db->fetchOne('SELECT COUNT(*) AS total FROM Customers WHERE IsActive = 1');
-        return (int) ($row['total'] ?? 0);
+        return $this->safeCount('SELECT COUNT(*) AS total FROM Customers WHERE IsActive = 1');
     }
 
     private function countAllUsers(): int
     {
-        $row = $this->db->fetchOne('SELECT COUNT(*) AS total FROM usersdesktop WHERE Removed = 0 OR Removed IS NULL');
-        return (int) ($row['total'] ?? 0);
+        return $this->safeCount('SELECT COUNT(*) AS total FROM usersdesktop WHERE Removed = 0 OR Removed IS NULL');
     }
 
     private function countAllSubscriptions(): int
     {
-        $row = $this->db->fetchOne('SELECT COUNT(*) AS total FROM subscriptionsdesktop WHERE Removed = 0 OR Removed IS NULL');
-        return (int) ($row['total'] ?? 0);
+        return $this->safeCount('SELECT COUNT(*) AS total FROM subscriptionsdesktop WHERE Removed = 0 OR Removed IS NULL');
     }
 
     private function countAllActiveSubscriptions(): int
     {
-        $row = $this->db->fetchOne(
+        return $this->safeCount(
             'SELECT COUNT(*) AS total FROM subscriptionsdesktop 
              WHERE (Removed = 0 OR Removed IS NULL) 
              AND (Finished = 0 OR Finished IS NULL)
              AND (EndingDate IS NULL OR EndingDate >= CURDATE())'
         );
-        return (int) ($row['total'] ?? 0);
     }
 
     private function countAllProducts(): int
     {
-        $row = $this->db->fetchOne('SELECT COUNT(*) AS total FROM productdesktop WHERE IsDeleted = 0 OR IsDeleted IS NULL');
-        return (int) ($row['total'] ?? 0);
+        return $this->safeCount('SELECT COUNT(*) AS total FROM productdesktop WHERE IsDeleted = 0 OR IsDeleted IS NULL');
     }
 
     private function countAllAttendances(): int
     {
-        $row = $this->db->fetchOne('SELECT COUNT(*) AS total FROM attendancesdesktop WHERE Removed = 0 OR Removed IS NULL');
-        return (int) ($row['total'] ?? 0);
+        return $this->safeCount('SELECT COUNT(*) AS total FROM attendancesdesktop WHERE Removed = 0 OR Removed IS NULL');
     }
 
     private function countAllTodayAttendances(): int
     {
-        $row = $this->db->fetchOne(
+        return $this->safeCount(
             'SELECT COUNT(*) AS total FROM attendancesdesktop 
              WHERE (Removed = 0 OR Removed IS NULL) 
              AND DATE(CheckIn) = CURDATE()'
         );
-        return (int) ($row['total'] ?? 0);
     }
 
     private function countAllMonthlyMessages(): int
     {
-        $row = $this->db->fetchOne(
+        return $this->safeCount(
             'SELECT COUNT(*) AS total FROM MessageSent 
              WHERE Successful = 1 
              AND MONTH(DateSent) = MONTH(CURDATE()) 
              AND YEAR(DateSent) = YEAR(CURDATE())'
         );
-        return (int) ($row['total'] ?? 0);
     }
 
     private function emptyStats(): array

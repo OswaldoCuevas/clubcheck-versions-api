@@ -5,12 +5,14 @@ namespace Controllers;
 use Core\Controller;
 use Models\CustomerRegistryModel;
 use Models\WhatsAppConfigurationModel;
+use Models\DownloadLogModel;
 use App\Services\WhatsAppService;
 use App\Services\CustomerStatsService;
 
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
 require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
+require_once __DIR__ . '/../Models/DownloadLogModel.php';
 require_once __DIR__ . '/../Services/WhatsAppService.php';
 require_once __DIR__ . '/../Services/CustomerStatsService.php';
 
@@ -1074,10 +1076,26 @@ class AdminController extends Controller
         $this->requirePermission('admin_access');
 
         $currentUser = $this->userModel->getCurrentUser();
-        $statsService = new CustomerStatsService();
-
-        $globalStats = $statsService->getGlobalStats();
-        $customersStats = $statsService->getAllCustomersStats();
+        
+        try {
+            $statsService = new CustomerStatsService();
+            $globalStats = $statsService->getGlobalStats();
+            $customersStats = $statsService->getAllCustomersStats();
+        } catch (\Throwable $e) {
+            error_log('CustomerStats error: ' . $e->getMessage());
+            $globalStats = [
+                'totalCustomers' => 0,
+                'activeCustomers' => 0,
+                'totalUsers' => 0,
+                'totalSubscriptions' => 0,
+                'totalActiveSubscriptions' => 0,
+                'totalProducts' => 0,
+                'totalAttendances' => 0,
+                'todayAttendances' => 0,
+                'monthlyMessages' => 0,
+            ];
+            $customersStats = [];
+        }
 
         $data = [
             'currentUser' => $currentUser,
@@ -1106,16 +1124,23 @@ class AdminController extends Controller
             $this->json(['error' => 'Method not allowed'], 405);
         }
 
-        $statsService = new CustomerStatsService();
+        try {
+            $statsService = new CustomerStatsService();
+            $globalStats = $statsService->getGlobalStats();
+            $customersStats = $statsService->getAllCustomersStats();
 
-        $globalStats = $statsService->getGlobalStats();
-        $customersStats = $statsService->getAllCustomersStats();
-
-        $this->json([
-            'global' => $globalStats,
-            'customers' => $customersStats,
-            'generatedAt' => date('Y-m-d H:i:s'),
-        ]);
+            $this->json([
+                'global' => $globalStats,
+                'customers' => $customersStats,
+                'generatedAt' => date('Y-m-d H:i:s'),
+            ]);
+        } catch (\Throwable $e) {
+            error_log('CustomerStatsJson error: ' . $e->getMessage());
+            $this->json([
+                'error' => 'Error al obtener estadísticas',
+                'debug' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
@@ -1139,20 +1164,128 @@ class AdminController extends Controller
             $this->json(['error' => 'customerId es obligatorio'], 422);
         }
 
-        $registry = new CustomerRegistryModel();
-        $customer = $registry->getCustomer($customerId);
+        try {
+            $registry = new CustomerRegistryModel();
+            $customer = $registry->getCustomer($customerId);
 
-        if (!$customer) {
-            $this->json(['error' => 'Cliente no encontrado'], 404);
+            if (!$customer) {
+                $this->json(['error' => 'Cliente no encontrado'], 404);
+            }
+
+            $statsService = new CustomerStatsService();
+            $stats = $statsService->getCustomerStats($customerId);
+
+            $this->json([
+                'customer' => $customer,
+                'stats' => $stats,
+                'generatedAt' => date('Y-m-d H:i:s'),
+            ]);
+        } catch (\Throwable $e) {
+            error_log('CustomerStatsDetailJson error: ' . $e->getMessage());
+            $this->json([
+                'error' => 'Error al obtener estadísticas del cliente',
+                'debug' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    // ==================== HISTORIAL DE DESCARGAS ====================
+
+    /**
+     * GET /admin/downloads
+     * Vista: Historial de descargas agrupado por IP
+     */
+    public function downloads()
+    {
+        $this->requirePermission('admin_access');
+
+        $currentUser = $this->userModel->getCurrentUser();
+        $downloadLogModel = new DownloadLogModel();
+        
+        // Obtener parámetros de paginación y búsqueda
+        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+        $perPage = isset($_GET['perPage']) ? max(10, min(100, (int) $_GET['perPage'])) : 20;
+        $searchIp = isset($_GET['ip']) ? trim($_GET['ip']) : null;
+        
+        // Obtener datos
+        $downloads = $downloadLogModel->getDownloadsGroupedByIp($page, $perPage, $searchIp);
+        $summary = $downloadLogModel->getDownloadsSummary();
+
+        $data = [
+            'currentUser' => $currentUser,
+            'title' => 'Historial de Descargas - ClubCheck',
+            'downloads' => $downloads,
+            'summary' => $summary,
+            'searchIp' => $searchIp,
+            'isAuthenticated' => true,
+        ];
+
+        $this->view('admin/downloads', $data);
+    }
+
+    /**
+     * GET /admin/api/downloads
+     * API: Obtiene el historial de descargas paginado y agrupado por IP
+     */
+    public function downloadsJson()
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
         }
 
-        $statsService = new CustomerStatsService();
-        $stats = $statsService->getCustomerStats($customerId);
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $downloadLogModel = new DownloadLogModel();
+        
+        // Obtener parámetros
+        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+        $perPage = isset($_GET['perPage']) ? max(10, min(100, (int) $_GET['perPage'])) : 20;
+        $searchIp = isset($_GET['ip']) ? trim($_GET['ip']) : null;
+        
+        // Obtener datos
+        $downloads = $downloadLogModel->getDownloadsGroupedByIp($page, $perPage, $searchIp ?: null);
+        $summary = $downloadLogModel->getDownloadsSummary();
 
         $this->json([
-            'customer' => $customer,
-            'stats' => $stats,
+            'downloads' => $downloads,
+            'summary' => $summary,
             'generatedAt' => date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    /**
+     * GET /admin/api/downloads/ip/:ipAddress
+     * API: Obtiene el detalle de descargas de una IP específica
+     */
+    public function downloadsByIpJson(string $ipAddress)
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $ipAddress = urldecode(trim($ipAddress));
+
+        if ($ipAddress === '') {
+            $this->json(['error' => 'IP es obligatoria'], 422);
+        }
+
+        $downloadLogModel = new DownloadLogModel();
+        $downloads = $downloadLogModel->getDownloadsByIp($ipAddress);
+
+        $this->json([
+            'ipAddress' => $ipAddress,
+            'count' => count($downloads),
+            'downloads' => $downloads,
         ]);
     }
 }

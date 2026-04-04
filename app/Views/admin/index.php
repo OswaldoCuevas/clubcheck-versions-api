@@ -193,6 +193,24 @@ ob_start();
                                             </div>
                                         </div>
                                     </div>
+                                    <div class="col-md-6">
+                                        <div class="card h-100 border-0 shadow-sm hover-shadow">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex align-items-center mb-3">
+                                                    <span class="icon-circle text-white me-3" style="background-color: #17a2b8;">
+                                                        <i class="fas fa-download"></i>
+                                                    </span>
+                                                    <div>
+                                                        <h5 class="card-title mb-1">Historial de Descargas</h5>
+                                                        <small class="text-muted">Registro de descargas por IP y versión</small>
+                                                    </div>
+                                                </div>
+                                                <a href="<?= app_url('/admin/downloads') ?>" class="btn mt-auto" style="background-color: #17a2b8; color: white;">
+                                                    Ver historial <i class="fas fa-download ms-2"></i>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
