@@ -109,6 +109,11 @@ $router->post('/admin/api/jwt-tokens/revoke', 'AdminController', 'revokeJwtToken
 $router->get('/admin/api/jwt-tokens/customer/:customerId/ips', 'AdminController', 'customerIpsJson');// NO, Administrativo
 $router->post('/admin/api/jwt-tokens/ips/:id/flag', 'AdminController', 'flagIp');// NO, Administrativo
 
+// Customer Stats Admin
+$router->get('/admin/customer-stats', 'AdminController', 'customerStats');// NO, Administrativo
+$router->get('/admin/api/customer-stats', 'AdminController', 'customerStatsJson');// NO, Administrativo
+$router->get('/admin/api/customer-stats/:customerId', 'AdminController', 'customerStatsDetailJson');// NO, Administrativo
+
 // Rutas de herramientas
 $router->any('/password-generator', 'ToolsController', 'passwordGenerator');
 $router->any('/quick-hash', 'ToolsController', 'quickHash');

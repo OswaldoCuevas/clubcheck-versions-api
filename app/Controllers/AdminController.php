@@ -6,11 +6,13 @@ use Core\Controller;
 use Models\CustomerRegistryModel;
 use Models\WhatsAppConfigurationModel;
 use App\Services\WhatsAppService;
+use App\Services\CustomerStatsService;
 
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
 require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
 require_once __DIR__ . '/../Services/WhatsAppService.php';
+require_once __DIR__ . '/../Services/CustomerStatsService.php';
 
 class AdminController extends Controller
 {
@@ -1060,6 +1062,97 @@ class AdminController extends Controller
         $this->json([
             'success' => true,
             'message' => $flagged ? 'IP marcada como sospechosa' : 'Marca de IP eliminada'
+        ]);
+    }
+
+    /**
+     * GET /admin/customer-stats
+     * Vista: Estadísticas de clientes
+     */
+    public function customerStats()
+    {
+        $this->requirePermission('admin_access');
+
+        $currentUser = $this->userModel->getCurrentUser();
+        $statsService = new CustomerStatsService();
+
+        $globalStats = $statsService->getGlobalStats();
+        $customersStats = $statsService->getAllCustomersStats();
+
+        $data = [
+            'currentUser' => $currentUser,
+            'title' => 'Estadísticas de Clientes - ClubCheck',
+            'globalStats' => $globalStats,
+            'customersStats' => $customersStats,
+            'isAuthenticated' => true,
+        ];
+
+        $this->view('admin/customer-stats', $data);
+    }
+
+    /**
+     * GET /admin/api/customer-stats
+     * API: Obtiene estadísticas de todos los clientes en JSON
+     */
+    public function customerStatsJson()
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $statsService = new CustomerStatsService();
+
+        $globalStats = $statsService->getGlobalStats();
+        $customersStats = $statsService->getAllCustomersStats();
+
+        $this->json([
+            'global' => $globalStats,
+            'customers' => $customersStats,
+            'generatedAt' => date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    /**
+     * GET /admin/api/customer-stats/:customerId
+     * API: Obtiene estadísticas de un cliente específico
+     */
+    public function customerStatsDetailJson(string $customerId)
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $customerId = trim($customerId);
+        if ($customerId === '') {
+            $this->json(['error' => 'customerId es obligatorio'], 422);
+        }
+
+        $registry = new CustomerRegistryModel();
+        $customer = $registry->getCustomer($customerId);
+
+        if (!$customer) {
+            $this->json(['error' => 'Cliente no encontrado'], 404);
+        }
+
+        $statsService = new CustomerStatsService();
+        $stats = $statsService->getCustomerStats($customerId);
+
+        $this->json([
+            'customer' => $customer,
+            'stats' => $stats,
+            'generatedAt' => date('Y-m-d H:i:s'),
         ]);
     }
 }

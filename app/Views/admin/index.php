@@ -175,6 +175,24 @@ ob_start();
                                             </div>
                                         </div>
                                     </div>
+                                    <div class="col-md-6">
+                                        <div class="card h-100 border-0 shadow-sm hover-shadow">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex align-items-center mb-3">
+                                                    <span class="icon-circle bg-purple text-white me-3" style="background-color: #6f42c1;">
+                                                        <i class="fas fa-chart-bar"></i>
+                                                    </span>
+                                                    <div>
+                                                        <h5 class="card-title mb-1">Estadísticas de Clientes</h5>
+                                                        <small class="text-muted">Usuarios, membresías, productos y asistencias</small>
+                                                    </div>
+                                                </div>
+                                                <a href="<?= app_url('/admin/customer-stats') ?>" class="btn mt-auto" style="background-color: #6f42c1; color: white;">
+                                                    Ver estadísticas <i class="fas fa-chart-bar ms-2"></i>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
