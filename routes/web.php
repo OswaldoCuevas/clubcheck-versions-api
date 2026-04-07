@@ -36,6 +36,7 @@ $router->any('/logout', 'AuthController', 'logout');
 $router->get('/api/version', 'ApiController', 'version');
 $router->get('/api/check-update', 'ApiController', 'checkUpdate');
 $router->get('/api/download', 'ApiController', 'download');
+$router->get('/api/download-setup', 'ApiController', 'downloadSetup'); // Descarga pública del Setup
 
 // Rutas para sesiones de clientes (aplicación de escritorio)
 $router->any('/api/customers/sessions/start', 'CustomersController', 'startSession');// NO
@@ -107,6 +108,16 @@ $router->post('/admin/api/jwt-tokens/create', 'AdminController', 'createJwtToken
 $router->post('/admin/api/jwt-tokens/revoke', 'AdminController', 'revokeJwtToken');// NO, Administrativo
 $router->get('/admin/api/jwt-tokens/customer/:customerId/ips', 'AdminController', 'customerIpsJson');// NO, Administrativo
 $router->post('/admin/api/jwt-tokens/ips/:id/flag', 'AdminController', 'flagIp');// NO, Administrativo
+
+// Customer Stats Admin
+$router->get('/admin/customer-stats', 'AdminController', 'customerStats');// NO, Administrativo
+$router->get('/admin/api/customer-stats', 'AdminController', 'customerStatsJson');// NO, Administrativo
+$router->get('/admin/api/customer-stats/:customerId', 'AdminController', 'customerStatsDetailJson');// NO, Administrativo
+
+// Downloads History Admin
+$router->get('/admin/downloads', 'AdminController', 'downloads');// NO, Administrativo
+$router->get('/admin/api/downloads', 'AdminController', 'downloadsJson');// NO, Administrativo
+$router->get('/admin/api/downloads/ip/:ipAddress', 'AdminController', 'downloadsByIpJson');// NO, Administrativo
 
 // Rutas de herramientas
 $router->any('/password-generator', 'ToolsController', 'passwordGenerator');

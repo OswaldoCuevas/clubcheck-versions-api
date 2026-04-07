@@ -6,7 +6,7 @@ require_once __DIR__ . '/BaseDesktopSyncModel.php';
 
 class CashRegisterDesktopModel extends BaseDesktopSyncModel
 {
-    protected string $table = 'cashregisterdesktop';
+    protected string $table = 'CashRegisterDesktop';
     protected string $primaryKey = 'Id';
     protected bool $autoIncrement = false;
     protected array $columns = [

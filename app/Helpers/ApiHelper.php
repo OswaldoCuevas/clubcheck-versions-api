@@ -152,18 +152,18 @@ class ApiHelper
         return $GLOBALS['customer_jwt_customer_id'] ?? $default;
     }
 
-    public static function getBillingIdByCustomerIdFromSession($default = null): ?string
+    public static function getBillingIdByCustomerIdFromSession($billingIdDefault = null): ?string
     {
-        $customerId = $GLOBALS['customer_jwt_customer_id'] ?? $default;
+        $customerId = $GLOBALS['customer_jwt_customer_id'] ?? null;
 
         if ($customerId === null) {
-            return null;
+            return $billingIdDefault;
         }
 
         $customerModel = new CustomerRegistryModel();
         $customer = $customerModel->getCustomer($customerId) ?? null;
         
-        return $customer['billingId'] ?? null;
+        return $customer['billingId'] ?? $billingIdDefault;
 
     }
 }

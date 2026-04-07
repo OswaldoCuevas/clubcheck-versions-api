@@ -67,28 +67,28 @@ class StripeController extends Controller
     }
 
     /**
-     * GET /api/stripe/customers/:customerId
+     * GET /api/stripe/customers/:billingId
      * Obtiene información de un cliente
      */
-    public function getCustomer(string $customerId): void
+    public function getCustomer(string $billingId): void
     {
         ApiHelper::allowedMethodsGet();
-        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
         $result = $this->stripeService->getCustomer($customerId);
         ApiHelper::respond($result, $result['success'] ? 200 : 404);
     }
 
     /**
-     * PUT /api/stripe/customers/:customerId
+     * PUT /api/stripe/customers/:billingId
      * Actualiza datos de un cliente
      * 
      * Body: { "name": "Juan Actualizado", "email": "nuevo@email.com" }
      */
-    public function updateCustomer(string $customerId): void
+    public function updateCustomer(string $billingId): void
     {
         ApiHelper::allowedMethodsPut();
         $input = ApiHelper::getJsonBody();
-        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
         $result = $this->stripeService->updateCustomer(
             $customerId,
             $input['name'] ?? null,
@@ -110,13 +110,13 @@ class StripeController extends Controller
      * IMPORTANTE: El token debe ser generado por el cliente usando Stripe SDK,
      * NUNCA envíes datos de tarjeta a este endpoint.
      */
-    public function addCard(string $customerId): void
+    public function addCard(string $billingId): void
     {
         ApiHelper::allowedMethodsPost();
         $input = ApiHelper::getJsonBody();
         $this->requireFields($input, ['token_id']);
 
-        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
 
         $result = $this->stripeService->addCard($customerId, $input['token_id']);
         ApiHelper::respond($result, $result['success'] ? 201 : 400);
@@ -126,10 +126,10 @@ class StripeController extends Controller
      * GET /api/stripe/customers/:customerId/cards
      * Lista todas las tarjetas de un cliente
      */
-    public function listCards(string $customerId): void
+    public function listCards(string $billingId): void
     {
         ApiHelper::allowedMethodsGet();
-        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
         $result = $this->stripeService->listCards($customerId);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
@@ -138,10 +138,10 @@ class StripeController extends Controller
      * DELETE /api/stripe/customers/:customerId/cards/:cardId
      * Elimina una tarjeta
      */
-    public function deleteCard(string $customerId, string $cardId): void
+    public function deleteCard(string $billingId, string $cardId): void
     {
         ApiHelper::allowedMethodsDelete();
-        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
         $success = $this->stripeService->deleteCard($customerId, $cardId);
         ApiHelper::respond([
             'success' => $success,
@@ -153,10 +153,10 @@ class StripeController extends Controller
      * PUT /api/stripe/customers/:customerId/cards/:cardId/default
      * Establece una tarjeta como predeterminada
      */
-    public function setDefaultCard(string $customerId, string $cardId): void
+    public function setDefaultCard(string $billingId, string $cardId): void
     {
         ApiHelper::allowedMethodsPut();
-        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
         $result = $this->stripeService->setDefaultCard($customerId, $cardId);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
@@ -170,12 +170,12 @@ class StripeController extends Controller
      * Body: { "price_id": "price_xxx", "trial_days": 30 }
      * O usando lookup_key: { "plan_lookup_key": "professional_monthly", "trial_days": 30 }
      */
-    public function createSubscription(string $customerId): void
+    public function createSubscription(string $billingId): void
     {
         ApiHelper::allowedMethodsPost();
         $input = ApiHelper::getJsonBody();
 
-        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
 
         // Resolver price_id desde lookup_key si se proporciona
         $priceId = $input['price_id'] ?? null;
@@ -197,10 +197,10 @@ class StripeController extends Controller
      * GET /api/stripe/customers/:customerId/subscriptions/active
      * Obtiene la suscripción activa del cliente
      */
-    public function getActiveSubscription(string $customerId): void
+    public function getActiveSubscription(string $billingId): void
     {
         ApiHelper::allowedMethodsGet();
-        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
         $result = $this->stripeService->getActiveSubscription($customerId);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
@@ -389,10 +389,10 @@ class StripeController extends Controller
      *   }
      * }
      */
-    public function getCurrentPlan(string $customerId): void
+    public function getCurrentPlan(string $billingId): void
     {
         ApiHelper::allowedMethodsGet();
-        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
         $result = $this->stripeService->getCurrentPlan($customerId);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
@@ -447,12 +447,12 @@ class StripeController extends Controller
      * Body: { "plan_lookup_key": "professional_monthly", "trial_days": 0 }
      * O: { "price_id": "price_xxx", "trial_days": 0 }
      */
-    public function previewNewSubscription(string $customerId): void
+    public function previewNewSubscription(string $billingId): void
     {
         ApiHelper::allowedMethodsPost();
         $input = ApiHelper::getJsonBody();
 
-        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession();
+        $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
 
         $priceId = $input['price_id'] ?? null;
         if (empty($priceId) && !empty($input['plan_lookup_key'])) {

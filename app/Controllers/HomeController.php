@@ -88,91 +88,141 @@ class HomeController extends Controller
             ];
         }
         
+        // Validar archivo EXE
         if (!isset($_FILES['exeFile']) || $_FILES['exeFile']['error'] !== UPLOAD_ERR_OK) {
             return [
-                'message' => 'Error al subir el archivo',
+                'message' => 'Error al subir el archivo EXE. Es obligatorio.',
                 'type' => 'error'
             ];
         }
         
-        $file = $_FILES['exeFile'];
-        
-        // Validar extensión
-        $fileExt = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        if ($fileExt !== 'exe') {
+        // Validar archivo Setup (segundo EXE)
+        if (!isset($_FILES['setupFile']) || $_FILES['setupFile']['error'] !== UPLOAD_ERR_OK) {
             return [
-                'message' => 'Solo se permiten archivos .exe',
+                'message' => 'Error al subir el archivo Setup. Es obligatorio.',
                 'type' => 'error'
             ];
         }
         
-        // Generar nombre del archivo usando helper
+        $exeFile = $_FILES['exeFile'];
+        $setupFile = $_FILES['setupFile'];
+        
+        // Validar extensión EXE
+        $exeExt = strtolower(pathinfo($exeFile['name'], PATHINFO_EXTENSION));
+        if ($exeExt !== 'exe') {
+            return [
+                'message' => 'El archivo ejecutable debe ser .exe',
+                'type' => 'error'
+            ];
+        }
+        
+        // Validar extensión Setup (también debe ser EXE)
+        $setupExt = strtolower(pathinfo($setupFile['name'], PATHINFO_EXTENSION));
+        if ($setupExt !== 'exe') {
+            return [
+                'message' => 'El archivo Setup debe ser .exe',
+                'type' => 'error'
+            ];
+        }
+        
+        // Generar nombres de archivos
         require_once __DIR__ . '/../Helpers/FileHelper.php';
-        $fileName = getAppFileName($version);
-        $filePath = $this->uploadDir . $fileName;
+        $exeFileName = getAppFileName($version);
+        $setupFileName = "ClubCheckSetup-{$version}.exe";
+        
+        $exeFilePath = $this->uploadDir . $exeFileName;
+        $setupFilePath = $this->uploadDir . $setupFileName;
         
         $isReplacement = false;
         
-        // Si el archivo ya existe, crear backup y eliminarlo
-        if (file_exists($filePath)) {
+        // Si los archivos ya existen, crear backups y eliminarlos
+        if (file_exists($exeFilePath) || file_exists($setupFilePath)) {
             $isReplacement = true;
-            $backupPath = $this->uploadDir . 'backup_' . time() . '_' . $fileName;
+            $timestamp = time();
             
-            // Crear backup del archivo anterior
-            if (copy($filePath, $backupPath)) {
-                error_log("Backup creado para {$fileName}: " . basename($backupPath));
+            // Backup del EXE si existe
+            if (file_exists($exeFilePath)) {
+                $backupPath = $this->uploadDir . 'backup_' . $timestamp . '_' . $exeFileName;
+                if (copy($exeFilePath, $backupPath)) {
+                    error_log("Backup creado para {$exeFileName}: " . basename($backupPath));
+                }
+                if (!unlink($exeFilePath)) {
+                    return [
+                        'message' => 'No se pudo eliminar el archivo EXE existente',
+                        'type' => 'error'
+                    ];
+                }
             }
             
-            // Eliminar archivo existente
-            if (!unlink($filePath)) {
-                return [
-                    'message' => 'No se pudo eliminar el archivo existente',
-                    'type' => 'error'
-                ];
-            } else {
-                error_log("Archivo existente eliminado: {$fileName}");
+            // Backup del Setup si existe
+            if (file_exists($setupFilePath)) {
+                $backupPath = $this->uploadDir . 'backup_' . $timestamp . '_' . $setupFileName;
+                if (copy($setupFilePath, $backupPath)) {
+                    error_log("Backup creado para {$setupFileName}: " . basename($backupPath));
+                }
+                if (!unlink($setupFilePath)) {
+                    return [
+                        'message' => 'No se pudo eliminar el archivo Setup existente',
+                        'type' => 'error'
+                    ];
+                }
             }
         }
         
-        // Mover archivo nuevo
-        if (move_uploaded_file($file['tmp_name'], $filePath)) {
-            // Calcular SHA256
-            $sha256 = hash_file('sha256', $filePath);
+        // Mover archivo EXE
+        if (!move_uploaded_file($exeFile['tmp_name'], $exeFilePath)) {
+            return [
+                'message' => 'Error al guardar el archivo EXE',
+                'type' => 'error'
+            ];
+        }
+        
+        // Mover archivo Setup
+        if (!move_uploaded_file($setupFile['tmp_name'], $setupFilePath)) {
+            // Si falla el Setup, eliminar el EXE ya subido
+            unlink($exeFilePath);
+            return [
+                'message' => 'Error al guardar el archivo Setup',
+                'type' => 'error'
+            ];
+        }
+        
+        // Calcular SHA256 de ambos archivos
+        $exeSha256 = hash_file('sha256', $exeFilePath);
+        $setupSha256 = hash_file('sha256', $setupFilePath);
+        $setupFileSize = filesize($setupFilePath);
+        
+        // Generar URLs de los archivos
+        $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $baseUrl = $protocol . '://' . $host . dirname($_SERVER['REQUEST_URI'] ?? '/');
+        $exeFileUrl = $baseUrl . '/uploads/' . $exeFileName;
+        $setupFileUrl = $baseUrl . '/uploads/' . $setupFileName;
+        
+        // Actualizar base de datos
+        $uploadDateTime = date('Y-m-d H:i:s'); // Formato MySQL
+        
+        if ($this->versionModel->saveVersion($version, $exeFileUrl, $exeSha256, $mandatory, $releaseNotes, $uploadDateTime, $setupFileUrl, $setupSha256, $setupFileSize)) {
+            // Limpiar backups antiguos (mantener solo los últimos 5)
+            $this->cleanOldBackups();
             
-            // URL del archivo
-            $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
-            $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-            $baseUrl = $protocol . '://' . $host . dirname($_SERVER['REQUEST_URI'] ?? '/');
-            $fileUrl = $baseUrl . '/uploads/' . $fileName;
-            
-            // Actualizar base de datos
-            $uploadDateTime = date('Y-m-d H:i:s'); // Formato MySQL
-            
-            if ($this->versionModel->saveVersion($version, $fileUrl, $sha256, $mandatory, $releaseNotes, $uploadDateTime)) {
-                // Limpiar backups antiguos (mantener solo los últimos 5)
-                $this->cleanOldBackups();
-                
-                if ($isReplacement) {
-                    return [
-                        'message' => "Versión {$version} reemplazada exitosamente. El archivo anterior fue respaldado automáticamente.",
-                        'type' => 'success'
-                    ];
-                } else {
-                    return [
-                        'message' => "Versión {$version} subida exitosamente",
-                        'type' => 'success'
-                    ];
-                }
+            if ($isReplacement) {
+                return [
+                    'message' => "Versión {$version} reemplazada exitosamente. Los archivos anteriores fueron respaldados automáticamente.",
+                    'type' => 'success'
+                ];
             } else {
                 return [
-                    'message' => 'Error al guardar la información de versión en la base de datos',
-                    'type' => 'error'
+                    'message' => "Versión {$version} subida exitosamente (EXE + Setup)",
+                    'type' => 'success'
                 ];
             }
-
         } else {
+            // Si falla la BD, eliminar los archivos subidos
+            unlink($exeFilePath);
+            unlink($setupFilePath);
             return [
-                'message' => 'Error al guardar el archivo',
+                'message' => 'Error al guardar la información de versión en la base de datos',
                 'type' => 'error'
             ];
         }

@@ -72,7 +72,7 @@ function stripe(): \App\Services\StripeService
 /**
  * Obtiene la configuración de Stripe
  */
-function stripe_config(string $key = null, $default = null)
+function stripe_config(?string $key = null, $default = null)
 {
     static $config = null;
     

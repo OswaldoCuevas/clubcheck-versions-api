@@ -81,6 +81,7 @@ abstract class BaseDesktopSyncModel extends Model
                 $result['success'] = true;
             } catch (\Throwable $e) {
                 $this->log(sprintf('sync_push_error_%s: %s', $this->table, $e->getMessage()), 'error');
+                $result['messageError'] = $e->getMessage();
             }
 
             $results[] = $result;

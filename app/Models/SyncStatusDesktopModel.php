@@ -6,7 +6,7 @@ require_once __DIR__ . '/BaseDesktopSyncModel.php';
 
 class SyncStatusDesktopModel extends BaseDesktopSyncModel
 {
-    protected string $table = 'syncstatusdesktop';
+    protected string $table = 'SyncStatusDesktop';
     protected string $primaryKey = 'Id';
     protected bool $autoIncrement = false;
     protected array $columns = [

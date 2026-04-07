@@ -6,7 +6,7 @@ require_once __DIR__ . '/BaseDesktopSyncModel.php';
 
 class SubscriptionPeriodDesktopModel extends BaseDesktopSyncModel
 {
-    protected string $table = 'subscriptionperioddesktop';
+    protected string $table = 'SubscriptionPeriodDesktop';
     protected string $primaryKey = 'Id';
     protected bool $autoIncrement = false;
     protected array $columns = [
