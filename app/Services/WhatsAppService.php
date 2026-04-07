@@ -158,7 +158,6 @@ class WhatsAppService
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlError = curl_error($ch);
-        curl_close($ch);
 
         if ($curlError) {
             return self::createResult(false, "Error de conexión: {$curlError}", null, 0);
@@ -669,7 +668,6 @@ class WhatsAppService
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlError = curl_error($ch);
-        curl_close($ch);
 
         if ($curlError) {
             return [
@@ -753,7 +751,6 @@ class WhatsAppService
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlError = curl_error($ch);
-        curl_close($ch);
 
         if ($curlError) {
             return [
@@ -869,7 +866,6 @@ class WhatsAppService
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlError = curl_error($ch);
-        curl_close($ch);
 
         if ($curlError) {
             return [
@@ -981,7 +977,6 @@ class WhatsAppService
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlError = curl_error($ch);
-        curl_close($ch);
 
         if ($curlError) {
             return [
@@ -1035,7 +1030,6 @@ class WhatsAppService
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlError = curl_error($ch);
-        curl_close($ch);
 
         if ($curlError) {
             return [
