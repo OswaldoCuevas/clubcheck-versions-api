@@ -242,7 +242,7 @@ CREATE TABLE `UsersDesktop` (
     INDEX `idx_UsersDesktop_Code` (`Code`),
     INDEX `idx_UsersDesktop_Fullname` (`Fullname`),
     INDEX `idx_UsersDesktop_FullnameSearch` (`FullnameSearch`),
-    CONSTRAINT `fk_UsersDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE
+    CONSTRAINT `fk_UsersDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
@@ -265,7 +265,7 @@ CREATE TABLE `SubscriptionsDesktop` (
     INDEX `idx_SubscriptionsDesktop_CustomerApiId` (`CustomerApiId`),
     INDEX `idx_SubscriptionsDesktop_EndingDate` (`EndingDate`),
     INDEX `idx_SubscriptionsDesktop_UserId` (`UserId`),
-    CONSTRAINT `fk_SubscriptionsDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_SubscriptionsDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE,
     CONSTRAINT `fk_SubscriptionsDesktop_Users` FOREIGN KEY (`UserId`) REFERENCES `UsersDesktop`(`Id`) ON DELETE CASCADE
 )  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- ----------------------------
@@ -282,7 +282,7 @@ CREATE TABLE `AttendancesDesktop` (
     INDEX `idx_AttendancesDesktop_CustomerApiId` (`CustomerApiId`),
     INDEX `idx_AttendancesDesktop_UserId` (`UserId`),
     INDEX `idx_AttendancesDesktop_CheckIn` (`CheckIn`),
-    CONSTRAINT `fk_AttendancesDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_AttendancesDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE,
     CONSTRAINT `fk_AttendancesDesktop_Users` FOREIGN KEY (`UserId`) REFERENCES `UsersDesktop`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- ----------------------------
@@ -304,7 +304,7 @@ CREATE TABLE `AdministratorsDesktop` (
     INDEX `idx_AdministratorsDesktop_CustomerApiId` (`CustomerApiId`),
     UNIQUE INDEX `idx_AdministratorsDesktop_Username_Customer` (`Username`, `CustomerApiId`),
     INDEX `idx_AdministratorsDesktop_Email` (`Email`),
-    CONSTRAINT `fk_AdministratorsDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE
+    CONSTRAINT `fk_AdministratorsDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- ----------------------------
 DROP TABLE IF EXISTS `SendEmailsAdminDesktop`;
@@ -323,7 +323,7 @@ CREATE TABLE `SendEmailsAdminDesktop` (
     PRIMARY KEY (`Id`),
     INDEX `idx_SendEmailsAdminDesktop_CustomerApiId` (`CustomerApiId`),
     INDEX `idx_SendEmailsAdminDesktop_Pending` (`AdminId`, `Type`, `Confirmed`),
-    CONSTRAINT `fk_SendEmailsAdminDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_SendEmailsAdminDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE,
     CONSTRAINT `fk_SendEmailsAdminDesktop_Administrators` FOREIGN KEY (`AdminId`) REFERENCES `AdministratorsDesktop`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- ----------------------------
@@ -340,7 +340,7 @@ CREATE TABLE `HistoryOperationsDesktop` (
     INDEX `idx_HistoryOperationsDesktop_CustomerApiId` (`CustomerApiId`),
     INDEX `idx_HistoryOperationsDesktop_DatetimeOperation` (`DatetimeOperation`),
     INDEX `idx_HistoryOperationsDesktop_AdminId` (`AdminId`),
-    CONSTRAINT `fk_HistoryOperationsDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_HistoryOperationsDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE,
     CONSTRAINT `fk_HistoryOperationsDesktop_Administrators` FOREIGN KEY (`AdminId`) REFERENCES `AdministratorsDesktop`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- ----------------------------
@@ -359,7 +359,7 @@ CREATE TABLE `InfoMySubscriptionDesktop` (
     PRIMARY KEY (`Id`),
     INDEX `idx_InfoMySubscriptionDesktop_CustomerApiId` (`CustomerApiId`),
     INDEX `idx_InfoMySubscriptionDesktop_CustomerId` (`CustomerId`),
-    CONSTRAINT `fk_InfoMySubscriptionDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE
+    CONSTRAINT `fk_InfoMySubscriptionDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- ----------------------------
 DROP TABLE IF EXISTS `WhatsappDesktop`;
@@ -373,7 +373,7 @@ CREATE TABLE `WhatsappDesktop` (
     PRIMARY KEY (`Id`),
     INDEX `idx_WhatsappDesktop_CustomerApiId` (`CustomerApiId`),
     INDEX `idx_WhatsappDesktop_SubscriptionId` (`SubscriptionId`),
-    CONSTRAINT `fk_WhatsappDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_WhatsappDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE,
     CONSTRAINT `fk_WhatsappDesktop_Subscriptions` FOREIGN KEY (`SubscriptionId`) REFERENCES `SubscriptionsDesktop`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- ----------------------------
@@ -391,7 +391,7 @@ CREATE TABLE `AppSettingsDesktop` (
     `Sync` TINYINT DEFAULT 0,
     PRIMARY KEY (`Id`),
     INDEX `idx_AppSettingsDesktop_CustomerApiId` (`CustomerApiId`),
-    CONSTRAINT `fk_AppSettingsDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE
+    CONSTRAINT `fk_AppSettingsDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- ----------------------------
 DROP TABLE IF EXISTS `SentMessagesDesktop`;
@@ -411,7 +411,7 @@ CREATE TABLE `SentMessagesDesktop` (
     INDEX `idx_SentMessagesDesktop_CustomerApiId` (`CustomerApiId`),
     INDEX `idx_SentMessagesDesktop_UserId` (`UserId`),
     INDEX `idx_SentMessagesDesktop_SentDay` (`SentDay`),
-    CONSTRAINT `fk_SentMessagesDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_SentMessagesDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE,
     CONSTRAINT `fk_SentMessagesDesktop_Users` FOREIGN KEY (`UserId`) REFERENCES `UsersDesktop`(`Id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -439,7 +439,7 @@ CREATE TABLE `ProductDesktop` (
     INDEX `idx_ProductDesktop_Name` (`Name`),
     INDEX `idx_ProductDesktop_NameSearch` (`NameSearch`),
     INDEX `idx_ProductDesktop_Active` (`Active`),
-    CONSTRAINT `fk_ProductDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE
+    CONSTRAINT `fk_ProductDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
@@ -462,7 +462,7 @@ CREATE TABLE `ProductPriceDesktop` (
     INDEX `idx_ProductPriceDesktop_CustomerApiId` (`CustomerApiId`),
     INDEX `idx_ProductPriceDesktop_ProductId` (`ProductId`),
     INDEX `idx_ProductPriceDesktop_Active` (`Active`),
-    CONSTRAINT `fk_ProductPriceDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_ProductPriceDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE,
     CONSTRAINT `fk_ProductPriceDesktop_Product` FOREIGN KEY (`ProductId`) REFERENCES `ProductDesktop`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -487,7 +487,7 @@ CREATE TABLE `ProductStockDesktop` (
     INDEX `idx_ProductStockDesktop_CustomerApiId` (`CustomerApiId`),
     INDEX `idx_ProductStockDesktop_ProductId` (`ProductId`),
     INDEX `idx_ProductStockDesktop_MovementType` (`MovementType`),
-    CONSTRAINT `fk_ProductStockDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_ProductStockDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE,
     CONSTRAINT `fk_ProductStockDesktop_Product` FOREIGN KEY (`ProductId`) REFERENCES `ProductDesktop`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -518,7 +518,7 @@ CREATE TABLE `CashRegisterDesktop` (
     INDEX `idx_CashRegisterDesktop_CustomerApiId` (`CustomerApiId`),
     INDEX `idx_CashRegisterDesktop_OpenedAt` (`OpenedAt`),
     INDEX `idx_CashRegisterDesktop_IsOpen` (`IsOpen`),
-    CONSTRAINT `fk_CashRegisterDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE
+    CONSTRAINT `fk_CashRegisterDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
@@ -554,7 +554,7 @@ CREATE TABLE `SaleTicketDesktop` (
     UNIQUE INDEX `idx_SaleTicketDesktop_Folio_Customer` (`Folio`, `CustomerApiId`),
     INDEX `idx_SaleTicketDesktop_SaleDate` (`SaleDate`),
     INDEX `idx_SaleTicketDesktop_CashRegisterId` (`CashRegisterId`),
-    CONSTRAINT `fk_SaleTicketDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_SaleTicketDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE,
     CONSTRAINT `fk_SaleTicketDesktop_CashRegister` FOREIGN KEY (`CashRegisterId`) REFERENCES `CashRegisterDesktop`(`Id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -586,7 +586,7 @@ CREATE TABLE `SaleTicketItemDesktop` (
     INDEX `idx_SaleTicketItemDesktop_SaleTicketId` (`SaleTicketId`),
     INDEX `idx_SaleTicketItemDesktop_ProductId` (`ProductId`),
     INDEX `idx_SaleTicketItemDesktop_SubscriptionId` (`SubscriptionId`),
-    CONSTRAINT `fk_SaleTicketItemDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_SaleTicketItemDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE,
     CONSTRAINT `fk_SaleTicketItemDesktop_SaleTicket` FOREIGN KEY (`SaleTicketId`) REFERENCES `SaleTicketDesktop`(`Id`) ON DELETE CASCADE,
     CONSTRAINT `fk_SaleTicketItemDesktop_Product` FOREIGN KEY (`ProductId`) REFERENCES `ProductDesktop`(`Id`) ON DELETE SET NULL,
     CONSTRAINT `fk_SaleTicketItemDesktop_Subscription` FOREIGN KEY (`SubscriptionId`) REFERENCES `SubscriptionsDesktop`(`Id`) ON DELETE SET NULL
@@ -612,7 +612,7 @@ CREATE TABLE `SubscriptionPeriodDesktop` (
     INDEX `idx_SubscriptionPeriodDesktop_CustomerApiId` (`CustomerApiId`),
     INDEX `idx_SubscriptionPeriodDesktop_Active` (`Active`),
     INDEX `idx_SubscriptionPeriodDesktop_IsDeleted` (`IsDeleted`),
-    CONSTRAINT `fk_SubscriptionPeriodDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE
+    CONSTRAINT `fk_SubscriptionPeriodDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
@@ -627,7 +627,7 @@ CREATE TABLE `SyncStatusDesktop` (
     `UpdatedAt` DATETIME NULL,
     PRIMARY KEY (`Id`),
     INDEX `idx_SyncStatusDesktop_CustomerApiId` (`CustomerApiId`),
-    CONSTRAINT `fk_SyncStatusDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE
+    CONSTRAINT `fk_SyncStatusDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
@@ -640,7 +640,7 @@ CREATE TABLE `MigrationsDesktop` (
     `Code` VARCHAR(100) NULL,
     PRIMARY KEY (`Id`),
     INDEX `idx_MigrationsDesktop_CustomerApiId` (`CustomerApiId`),
-    CONSTRAINT `fk_MigrationsDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE
+    CONSTRAINT `fk_MigrationsDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
@@ -658,7 +658,7 @@ CREATE TABLE `BarcodeLookupCacheDesktop` (
     PRIMARY KEY (`Id`),
     INDEX `idx_BarcodeLookupCacheDesktop_CustomerApiId` (`CustomerApiId`),
     INDEX `idx_BarcodeLookupCacheDesktop_Barcode` (`Barcode`),
-    CONSTRAINT `fk_BarcodeLookupCacheDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `customers`(`Id`) ON DELETE CASCADE
+    CONSTRAINT `fk_BarcodeLookupCacheDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
@@ -997,3 +997,4 @@ ON DUPLICATE KEY UPDATE
   `IsMandatory` = VALUES(`IsMandatory`),
   `ReleaseNotes` = VALUES(`ReleaseNotes`),
   `UploadDate` = VALUES(`UploadDate`);
+
