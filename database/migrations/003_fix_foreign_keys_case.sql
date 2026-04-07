@@ -162,3 +162,104 @@ ALTER TABLE `BarcodeLookupCacheDesktop`
 ALTER TABLE `BarcodeLookupCacheDesktop`
   ADD CONSTRAINT `fk_BarcodeLookupCacheDesktop_Customer` 
   FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE;
+
+-- =====================================================
+-- PARTE 2: Corregir FK entre tablas Desktop
+-- (tablas Desktop que referencian a otras tablas Desktop)
+-- =====================================================
+
+-- SubscriptionsDesktop -> UsersDesktop
+ALTER TABLE `SubscriptionsDesktop` 
+  DROP FOREIGN KEY IF EXISTS `fk_SubscriptionsDesktop_Users`;
+
+ALTER TABLE `SubscriptionsDesktop`
+  ADD CONSTRAINT `fk_SubscriptionsDesktop_Users` 
+  FOREIGN KEY (`UserId`) REFERENCES `UsersDesktop`(`Id`) ON DELETE CASCADE;
+
+-- AttendancesDesktop -> UsersDesktop
+ALTER TABLE `AttendancesDesktop` 
+  DROP FOREIGN KEY IF EXISTS `fk_AttendancesDesktop_Users`;
+
+ALTER TABLE `AttendancesDesktop`
+  ADD CONSTRAINT `fk_AttendancesDesktop_Users` 
+  FOREIGN KEY (`UserId`) REFERENCES `UsersDesktop`(`Id`) ON DELETE CASCADE;
+
+-- SendEmailsAdminDesktop -> AdministratorsDesktop
+ALTER TABLE `SendEmailsAdminDesktop` 
+  DROP FOREIGN KEY IF EXISTS `fk_SendEmailsAdminDesktop_Administrators`;
+
+ALTER TABLE `SendEmailsAdminDesktop`
+  ADD CONSTRAINT `fk_SendEmailsAdminDesktop_Administrators` 
+  FOREIGN KEY (`AdminId`) REFERENCES `AdministratorsDesktop`(`Id`) ON DELETE CASCADE;
+
+-- HistoryOperationsDesktop -> AdministratorsDesktop
+ALTER TABLE `HistoryOperationsDesktop` 
+  DROP FOREIGN KEY IF EXISTS `fk_HistoryOperationsDesktop_Administrators`;
+
+ALTER TABLE `HistoryOperationsDesktop`
+  ADD CONSTRAINT `fk_HistoryOperationsDesktop_Administrators` 
+  FOREIGN KEY (`AdminId`) REFERENCES `AdministratorsDesktop`(`Id`) ON DELETE CASCADE;
+
+-- WhatsappDesktop -> SubscriptionsDesktop
+ALTER TABLE `WhatsappDesktop` 
+  DROP FOREIGN KEY IF EXISTS `fk_WhatsappDesktop_Subscriptions`;
+
+ALTER TABLE `WhatsappDesktop`
+  ADD CONSTRAINT `fk_WhatsappDesktop_Subscriptions` 
+  FOREIGN KEY (`SubscriptionId`) REFERENCES `SubscriptionsDesktop`(`Id`) ON DELETE CASCADE;
+
+-- SentMessagesDesktop -> UsersDesktop
+ALTER TABLE `SentMessagesDesktop` 
+  DROP FOREIGN KEY IF EXISTS `fk_SentMessagesDesktop_Users`;
+
+ALTER TABLE `SentMessagesDesktop`
+  ADD CONSTRAINT `fk_SentMessagesDesktop_Users` 
+  FOREIGN KEY (`UserId`) REFERENCES `UsersDesktop`(`Id`) ON DELETE SET NULL;
+
+-- ProductPriceDesktop -> ProductDesktop
+ALTER TABLE `ProductPriceDesktop` 
+  DROP FOREIGN KEY IF EXISTS `fk_ProductPriceDesktop_Product`;
+
+ALTER TABLE `ProductPriceDesktop`
+  ADD CONSTRAINT `fk_ProductPriceDesktop_Product` 
+  FOREIGN KEY (`ProductId`) REFERENCES `ProductDesktop`(`Id`) ON DELETE CASCADE;
+
+-- ProductStockDesktop -> ProductDesktop
+ALTER TABLE `ProductStockDesktop` 
+  DROP FOREIGN KEY IF EXISTS `fk_ProductStockDesktop_Product`;
+
+ALTER TABLE `ProductStockDesktop`
+  ADD CONSTRAINT `fk_ProductStockDesktop_Product` 
+  FOREIGN KEY (`ProductId`) REFERENCES `ProductDesktop`(`Id`) ON DELETE CASCADE;
+
+-- SaleTicketDesktop -> CashRegisterDesktop
+ALTER TABLE `SaleTicketDesktop` 
+  DROP FOREIGN KEY IF EXISTS `fk_SaleTicketDesktop_CashRegister`;
+
+ALTER TABLE `SaleTicketDesktop`
+  ADD CONSTRAINT `fk_SaleTicketDesktop_CashRegister` 
+  FOREIGN KEY (`CashRegisterId`) REFERENCES `CashRegisterDesktop`(`Id`) ON DELETE SET NULL;
+
+-- SaleTicketItemDesktop -> SaleTicketDesktop
+ALTER TABLE `SaleTicketItemDesktop` 
+  DROP FOREIGN KEY IF EXISTS `fk_SaleTicketItemDesktop_SaleTicket`;
+
+ALTER TABLE `SaleTicketItemDesktop`
+  ADD CONSTRAINT `fk_SaleTicketItemDesktop_SaleTicket` 
+  FOREIGN KEY (`SaleTicketId`) REFERENCES `SaleTicketDesktop`(`Id`) ON DELETE CASCADE;
+
+-- SaleTicketItemDesktop -> ProductDesktop
+ALTER TABLE `SaleTicketItemDesktop` 
+  DROP FOREIGN KEY IF EXISTS `fk_SaleTicketItemDesktop_Product`;
+
+ALTER TABLE `SaleTicketItemDesktop`
+  ADD CONSTRAINT `fk_SaleTicketItemDesktop_Product` 
+  FOREIGN KEY (`ProductId`) REFERENCES `ProductDesktop`(`Id`) ON DELETE SET NULL;
+
+-- SaleTicketItemDesktop -> SubscriptionsDesktop
+ALTER TABLE `SaleTicketItemDesktop` 
+  DROP FOREIGN KEY IF EXISTS `fk_SaleTicketItemDesktop_Subscription`;
+
+ALTER TABLE `SaleTicketItemDesktop`
+  ADD CONSTRAINT `fk_SaleTicketItemDesktop_Subscription` 
+  FOREIGN KEY (`SubscriptionId`) REFERENCES `SubscriptionsDesktop`(`Id`) ON DELETE SET NULL;
