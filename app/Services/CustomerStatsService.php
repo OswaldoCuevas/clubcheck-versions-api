@@ -123,7 +123,7 @@ class CustomerStatsService extends Model
     private function countUsers(string $customerApiId): int
     {
         return $this->safeCount(
-            'SELECT COUNT(*) AS total FROM usersdesktop WHERE CustomerApiId = ? AND (Removed = 0 OR Removed IS NULL)',
+            'SELECT COUNT(*) AS total FROM UsersDesktop WHERE CustomerApiId = ? AND (Removed = 0 OR Removed IS NULL)',
             [$customerApiId]
         );
     }
@@ -131,7 +131,7 @@ class CustomerStatsService extends Model
     private function countActiveSubscriptions(string $customerApiId): int
     {
         return $this->safeCount(
-            'SELECT COUNT(*) AS total FROM subscriptionsdesktop 
+            'SELECT COUNT(*) AS total FROM SubscriptionsDesktop 
              WHERE CustomerApiId = ? 
              AND (Removed = 0 OR Removed IS NULL) 
              AND (Finished = 0 OR Finished IS NULL)
@@ -143,7 +143,7 @@ class CustomerStatsService extends Model
     private function countTotalSubscriptions(string $customerApiId): int
     {
         return $this->safeCount(
-            'SELECT COUNT(*) AS total FROM subscriptionsdesktop WHERE CustomerApiId = ? AND (Removed = 0 OR Removed IS NULL)',
+            'SELECT COUNT(*) AS total FROM SubscriptionsDesktop WHERE CustomerApiId = ? AND (Removed = 0 OR Removed IS NULL)',
             [$customerApiId]
         );
     }
@@ -151,7 +151,7 @@ class CustomerStatsService extends Model
     private function countProducts(string $customerApiId): int
     {
         return $this->safeCount(
-            'SELECT COUNT(*) AS total FROM productdesktop WHERE CustomerApiId = ? AND (IsDeleted = 0 OR IsDeleted IS NULL)',
+            'SELECT COUNT(*) AS total FROM ProductDesktop WHERE CustomerApiId = ? AND (IsDeleted = 0 OR IsDeleted IS NULL)',
             [$customerApiId]
         );
     }
@@ -159,7 +159,7 @@ class CustomerStatsService extends Model
     private function countAttendances(string $customerApiId): int
     {
         return $this->safeCount(
-            'SELECT COUNT(*) AS total FROM attendancesdesktop WHERE CustomerApiId = ? AND (Removed = 0 OR Removed IS NULL)',
+            'SELECT COUNT(*) AS total FROM AttendancesDesktop WHERE CustomerApiId = ? AND (Removed = 0 OR Removed IS NULL)',
             [$customerApiId]
         );
     }
@@ -167,7 +167,7 @@ class CustomerStatsService extends Model
     private function countTodayAttendances(string $customerApiId): int
     {
         return $this->safeCount(
-            'SELECT COUNT(*) AS total FROM attendancesdesktop 
+            'SELECT COUNT(*) AS total FROM AttendancesDesktop 
              WHERE CustomerApiId = ? 
              AND (Removed = 0 OR Removed IS NULL) 
              AND DATE(CheckIn) = CURDATE()',
@@ -178,7 +178,7 @@ class CustomerStatsService extends Model
     private function countMonthlyAttendances(string $customerApiId): int
     {
         return $this->safeCount(
-            'SELECT COUNT(*) AS total FROM attendancesdesktop 
+            'SELECT COUNT(*) AS total FROM AttendancesDesktop 
              WHERE CustomerApiId = ? 
              AND (Removed = 0 OR Removed IS NULL) 
              AND MONTH(CheckIn) = MONTH(CURDATE()) 
@@ -215,18 +215,18 @@ class CustomerStatsService extends Model
 
     private function countAllUsers(): int
     {
-        return $this->safeCount('SELECT COUNT(*) AS total FROM usersdesktop WHERE Removed = 0 OR Removed IS NULL');
+        return $this->safeCount('SELECT COUNT(*) AS total FROM UsersDesktop WHERE Removed = 0 OR Removed IS NULL');
     }
 
     private function countAllSubscriptions(): int
     {
-        return $this->safeCount('SELECT COUNT(*) AS total FROM subscriptionsdesktop WHERE Removed = 0 OR Removed IS NULL');
+        return $this->safeCount('SELECT COUNT(*) AS total FROM SubscriptionsDesktop WHERE Removed = 0 OR Removed IS NULL');
     }
 
     private function countAllActiveSubscriptions(): int
     {
         return $this->safeCount(
-            'SELECT COUNT(*) AS total FROM subscriptionsdesktop 
+            'SELECT COUNT(*) AS total FROM SubscriptionsDesktop 
              WHERE (Removed = 0 OR Removed IS NULL) 
              AND (Finished = 0 OR Finished IS NULL)
              AND (EndingDate IS NULL OR EndingDate >= CURDATE())'
@@ -235,18 +235,18 @@ class CustomerStatsService extends Model
 
     private function countAllProducts(): int
     {
-        return $this->safeCount('SELECT COUNT(*) AS total FROM productdesktop WHERE IsDeleted = 0 OR IsDeleted IS NULL');
+        return $this->safeCount('SELECT COUNT(*) AS total FROM ProductDesktop WHERE IsDeleted = 0 OR IsDeleted IS NULL');
     }
 
     private function countAllAttendances(): int
     {
-        return $this->safeCount('SELECT COUNT(*) AS total FROM attendancesdesktop WHERE Removed = 0 OR Removed IS NULL');
+        return $this->safeCount('SELECT COUNT(*) AS total FROM AttendancesDesktop WHERE Removed = 0 OR Removed IS NULL');
     }
 
     private function countAllTodayAttendances(): int
     {
         return $this->safeCount(
-            'SELECT COUNT(*) AS total FROM attendancesdesktop 
+            'SELECT COUNT(*) AS total FROM AttendancesDesktop 
              WHERE (Removed = 0 OR Removed IS NULL) 
              AND DATE(CheckIn) = CURDATE()'
         );
