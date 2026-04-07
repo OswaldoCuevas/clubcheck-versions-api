@@ -4,26 +4,26 @@
 -- Las FK apuntan a `customers` pero la tabla real es `Customers`
 
 -- UsersDesktop
-ALTER TABLE `usersdesktop` 
+ALTER TABLE `UsersDesktop` 
   DROP FOREIGN KEY IF EXISTS `fk_UsersDesktop_Customer`;
 
-ALTER TABLE `usersdesktop`
+ALTER TABLE `UsersDesktop`
   ADD CONSTRAINT `fk_UsersDesktop_Customer` 
   FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE;
 
 -- SubscriptionsDesktop
-ALTER TABLE `subscriptionsdesktop` 
+ALTER TABLE `SubscriptionsDesktop` 
   DROP FOREIGN KEY IF EXISTS `fk_SubscriptionsDesktop_Customer`;
 
-ALTER TABLE `subscriptionsdesktop`
+ALTER TABLE `SubscriptionsDesktop`
   ADD CONSTRAINT `fk_SubscriptionsDesktop_Customer` 
   FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE;
 
 -- AttendancesDesktop
-ALTER TABLE `attendancesdesktop` 
+ALTER TABLE `AttendancesDesktop` 
   DROP FOREIGN KEY IF EXISTS `fk_AttendancesDesktop_Customer`;
 
-ALTER TABLE `attendancesdesktop`
+ALTER TABLE `AttendancesDesktop`
   ADD CONSTRAINT `fk_AttendancesDesktop_Customer` 
   FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE;
 
@@ -52,10 +52,10 @@ ALTER TABLE `HistoryOperationsDesktop`
   FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE;
 
 -- InfoMySubscriptionDesktop
-ALTER TABLE `infomysubscriptiondesktop` 
+ALTER TABLE `InfoMySubscriptionDesktop` 
   DROP FOREIGN KEY IF EXISTS `fk_InfoMySubscriptionDesktop_Customer`;
 
-ALTER TABLE `infomysubscriptiondesktop`
+ALTER TABLE `InfoMySubscriptionDesktop`
   ADD CONSTRAINT `fk_InfoMySubscriptionDesktop_Customer` 
   FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE;
 
@@ -84,10 +84,10 @@ ALTER TABLE `SentMessagesDesktop`
   FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE;
 
 -- ProductDesktop
-ALTER TABLE `productdesktop` 
+ALTER TABLE `ProductDesktop` 
   DROP FOREIGN KEY IF EXISTS `fk_ProductDesktop_Customer`;
 
-ALTER TABLE `productdesktop`
+ALTER TABLE `ProductDesktop`
   ADD CONSTRAINT `fk_ProductDesktop_Customer` 
   FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE;
 
