@@ -6,7 +6,7 @@ require_once __DIR__ . '/BaseDesktopSyncModel.php';
 
 class SentMessagesDesktopModel extends BaseDesktopSyncModel
 {
-    protected string $table = 'sentmessagesdesktop';
+    protected string $table = 'SentMessagesDesktop';
     protected string $primaryKey = 'Id';
     protected bool $autoIncrement = false;
     protected array $columns = [

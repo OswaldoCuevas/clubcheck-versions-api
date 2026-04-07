@@ -6,7 +6,7 @@ require_once __DIR__ . '/BaseDesktopSyncModel.php';
 
 class ProductPriceDesktopModel extends BaseDesktopSyncModel
 {
-    protected string $table = 'productpricedesktop';
+    protected string $table = 'ProductPriceDesktop';
     protected string $primaryKey = 'Id';
     protected bool $autoIncrement = false;
     protected array $columns = [

@@ -6,7 +6,7 @@ require_once __DIR__ . '/BaseDesktopSyncModel.php';
 
 class HistoryOperationsDesktopModel extends BaseDesktopSyncModel
 {
-    protected string $table = 'historyoperationsdesktop';
+    protected string $table = 'HistoryOperationsDesktop';
     protected string $primaryKey = 'Id';
     protected bool $autoIncrement = false;
     protected array $columns = [
