@@ -107,6 +107,152 @@ class AdminController extends Controller
         ]);
     }
 
+    public function saveCustomerJson()
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
+
+        $registry = new CustomerRegistryModel();
+
+        // Validar si el cliente existe
+        $existing = $customerId !== '' ? $registry->getCustomer($customerId) : null;
+
+        // Construir atributos a guardar
+        $attributes = [];
+
+        if (array_key_exists('name', $payload)) {
+            $attributes['name'] = $payload['name'] !== null ? trim((string) $payload['name']) : null;
+        }
+
+        if (array_key_exists('email', $payload)) {
+            $email = $payload['email'];
+            if ($email !== null && $email !== '') {
+                $email = trim((string) $email);
+                if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    $this->json(['error' => 'Formato de correo inválido'], 422);
+                }
+            } else {
+                $email = null;
+            }
+            $attributes['email'] = $email;
+        }
+
+        if (array_key_exists('phone', $payload)) {
+            $phone = $payload['phone'];
+            $attributes['phone'] = $phone !== null ? trim((string) $phone) : null;
+        }
+
+        if (array_key_exists('deviceName', $payload)) {
+            $deviceName = $payload['deviceName'];
+            $attributes['deviceName'] = $deviceName !== null ? trim((string) $deviceName) : null;
+        }
+
+        if (array_key_exists('billingId', $payload)) {
+            $billingId = $payload['billingId'];
+            if ($billingId !== null) {
+                $billingId = trim((string) $billingId);
+            }
+            $attributes['billingId'] = $billingId === '' ? null : $billingId;
+        }
+
+        if (array_key_exists('planCode', $payload)) {
+            $planCode = $payload['planCode'];
+            if ($planCode !== null && $planCode !== '') {
+                $planCode = trim((string) $planCode);
+                if (mb_strlen($planCode) > 50) {
+                    $this->json(['error' => 'El PlanCode debe tener máximo 50 caracteres'], 422);
+                }
+            } else {
+                $planCode = null;
+            }
+            $attributes['planCode'] = $planCode;
+        }
+
+        if (array_key_exists('token', $payload)) {
+            $token = $payload['token'];
+            $attributes['token'] = $token !== null ? trim((string) $token) : null;
+        }
+
+        if (array_key_exists('isActive', $payload)) {
+            $attributes['isActive'] = (bool) $payload['isActive'];
+        }
+
+        // Validar que se enviaron atributos
+        if (empty($attributes)) {
+            $this->json(['error' => 'No se enviaron atributos'], 422);
+        }
+
+        // Si es un nuevo cliente, validar campos obligatorios
+        if ($existing === null) {
+            if (!array_key_exists('name', $attributes) || $attributes['name'] === null || $attributes['name'] === '') {
+                $this->json(['error' => 'El nombre es obligatorio al crear un cliente'], 422);
+            }
+
+            // Generar ID automático si no se proporcionó
+            if ($customerId === '') {
+                $customerId = $this->generateCustomerId();
+            }
+        }
+
+        try {
+            if ($existing === null) {
+                // Crear nuevo cliente usando upsertCustomer
+                $customer = $registry->upsertCustomer($customerId, $attributes);
+                
+                $response = [
+                    'status' => 'created',
+                    'customer' => $customer,
+                ];
+
+                // El accessKey se genera en upsertCustomer cuando es un cliente nuevo
+                // Pero no se devuelve en el resultado del método, así que no podemos mostrarlo aquí
+                // El admin deberá usar regenerateAccessKey si lo necesita
+
+                $this->json($response, 201);
+            } else {
+                // Actualizar cliente existente
+                $customer = $registry->upsertCustomer($customerId, $attributes);
+
+                $this->json([
+                    'status' => 'updated',
+                    'customer' => $customer,
+                ]);
+            }
+        } catch (\RuntimeException $e) {
+            if ($e->getMessage() === 'email_already_registered') {
+                $this->json([
+                    'error' => 'El correo ya está registrado para otro cliente',
+                    'code' => 'email_conflict',
+                ], 409);
+            }
+
+            $this->json([
+                'error' => 'Error al guardar el cliente: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function generateCustomerId(): string
+    {
+        try {
+            $random = bin2hex(random_bytes(16));
+        } catch (\Throwable $e) {
+            $random = hash('sha256', uniqid('', true));
+        }
+
+        return 'cus_' . substr($random, 0, 32);
+    }
+
     public function apiDocs()
     {
         $this->requirePermission('admin_access');

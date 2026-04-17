@@ -89,6 +89,7 @@ $router->get('/api/customers/whatsapp/business-profile', 'WhatsAppController', '
 $router->any('/admin', 'AdminController', 'index');// NO, Administrativo
 $router->get('/admin/customers', 'AdminController', 'customers');// NO, Administrativo
 $router->get('/admin/api/customers', 'AdminController', 'customersJson');// NO, Administrativo
+$router->post('/admin/api/customers/save', 'AdminController', 'saveCustomerJson');// NO, Administrativo
 $router->post('/admin/api/customers/regenerate-access-key', 'AdminController', 'regenerateAccessKey');// NO, Administrativo
 $router->get('/admin/api-docs', 'AdminController', 'apiDocs');// NO, Administrativo
 

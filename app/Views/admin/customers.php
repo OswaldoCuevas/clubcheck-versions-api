@@ -159,7 +159,7 @@ ob_start();
 $initialCustomersJson = json_encode($customers ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 $endpointsJson = json_encode([
     'list' => app_url('/admin/api/customers'),
-    'save' => app_url('/api/customers/save'),
+    'save' => app_url('/admin/api/customers/save'),
     'await' => app_url('/api/customers/token/await'),
     'register' => app_url('/api/customers/token/register'),
     'regenerateAccessKey' => app_url('/admin/api/customers/regenerate-access-key'),
