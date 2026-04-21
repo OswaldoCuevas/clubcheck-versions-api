@@ -90,7 +90,7 @@ return [
             'rules' => [
                 'enable_fingerprint' => true,
                 'enable_qr' => true,
-                'max_messages' => 16,
+                'max_messages' => 5,
                 'max_members_actives' => 20,
                 'products_to_sale' => 10,
                 'max_partners' => 50,

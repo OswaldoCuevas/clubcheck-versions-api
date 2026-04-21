@@ -5,10 +5,12 @@ namespace App\Services;
 require_once __DIR__ . '/../Models/MessageSentModel.php';
 require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
 require_once __DIR__ . '/../../utils/CustomerPermits.php';
+require_once __DIR__ . '/../../utils/GlobalFunctions.php';
 
 use Models\MessageSentModel;
 use Models\WhatsAppConfigurationModel;
 use CustomerPermits;
+use GlobalFunctions;
 
 /**
  * Servicio de WhatsApp Business API
@@ -211,12 +213,17 @@ class WhatsAppService
                 'language' => ['code' => $templateConfig['language']],
                 'components' => [
                     [
+                        'type' => 'header',
+                        'parameters' => [
+                            ['type' => 'text', 'text' => GlobalFunctions::FormatName($clubName).":"],
+                        ],
+                    ],
+                    [
                         'type' => 'body',
                         'parameters' => [
-                            ['type' => 'text', 'text' => $this->sanitize($firstName)],
-                            ['type' => 'text', 'text' => $this->sanitize($clubName)],
-                            ['type' => 'text', 'text' => $this->sanitize($startDate)],
-                            ['type' => 'text', 'text' => $this->sanitize($endDate)],
+                            ['type' => 'text', 'text' => GlobalFunctions::FormatName($firstName)],
+                            ['type' => 'text', 'text' => GlobalFunctions::sanitize($startDate)],
+                            ['type' => 'text', 'text' => GlobalFunctions::sanitize($endDate)],
                         ],
                     ],
                 ],
@@ -258,17 +265,22 @@ class WhatsAppService
                 'language' => ['code' => $templateConfig['language']],
                 'components' => [
                     [
+                        'type' => 'header',
+                        'parameters' => [
+                            ['type' => 'text', 'text' => GlobalFunctions::FormatName($clubName).":"],
+                        ],
+                    ],
+                    [
                         'type' => 'body',
                         'parameters' => [
-                            ['type' => 'text', 'text' => $this->sanitize($clubName)],
-                            ['type' => 'text', 'text' => $this->sanitize($days)],
+                            ['type' => 'text', 'text' => GlobalFunctions::sanitize($days)],
                         ],
                     ],
                 ],
             ],
         ];
 
-        $description = "Aviso de membresía: vence en {$days}. Club: {$clubName}";
+        $description = "Aviso de membresía: vence en {$days}. Club: " . GlobalFunctions::FormatName($clubName);
         return $this->sendAndLog($body, $phone, $description, $customerApiId, $userId, $subscriptionId, $username, $errorMessage);
     }
 
@@ -300,16 +312,16 @@ class WhatsAppService
                 'language' => ['code' => $templateConfig['language']],
                 'components' => [
                     [
-                        'type' => 'body',
+                        'type' => 'header',
                         'parameters' => [
-                            ['type' => 'text', 'text' => $this->sanitize($clubName)],
+                            ['type' => 'text', 'text' => GlobalFunctions::sanitize($clubName).":"],
                         ],
                     ],
                 ],
             ],
         ];
 
-        $description = "Aviso de membresía finalizada. Club: {$clubName}";
+        $description = "Aviso de membresía finalizada. Club: " . GlobalFunctions::FormatName($clubName);
         return $this->sendAndLog($body, $phone, $description, $customerApiId, $userId, $subscriptionId, $username, $errorMessage);
     }
 
@@ -339,10 +351,18 @@ class WhatsAppService
             'template' => [
                 'name' => $templateConfig['name'],
                 'language' => ['code' => $templateConfig['language']],
+                'components' => [
+                    [
+                        'type' => 'header',
+                        'parameters' => [
+                            ['type' => 'text', 'text' => GlobalFunctions::sanitize($clubName).":"],
+                        ],
+                    ],
+                ],
             ],
         ];
 
-        $description = "Aviso de membresía: último día. Club: {$clubName}";
+        $description = "Aviso de membresía: último día. Club: " . GlobalFunctions::FormatName($clubName);
         return $this->sendAndLog($body, $phone, $description, $customerApiId, $userId, $subscriptionId, $username, $errorMessage);
     }
 
@@ -504,11 +524,20 @@ class WhatsAppService
             case 'warning':
             case 'warning_subscription':
                 $days = $parameters['days'] ?? '3';
-                $daysText = $days == 1 ? 'un día' : "{$days} días";
-                return $this->sendWarningTemplate(
+                return $parameters['days'] == 1  
+                ? $this->sendLastDayTemplate(
                     $phone,
                     $clubName,
-                    $daysText,
+                    $customerApiId,
+                    $userId,
+                    $subscriptionId,
+                    $username,
+                    $errorMessage
+                )
+                :  $this->sendWarningTemplate(
+                    $phone,
+                    $clubName,
+                    $days,
                     $customerApiId,
                     $userId,
                     $subscriptionId,
@@ -597,7 +626,7 @@ class WhatsAppService
             $now = new \DateTime('now', new \DateTimeZone('America/Mexico_City'));
             
             $data = [
-                'Id' => $this->generateUuid(),
+                'Id' => GlobalFunctions::generateUuid(),
                 'CustomerApiId' => $customerApiId,
                 'UserId' => $userId,
                 'Username' => $username,
@@ -892,32 +921,6 @@ class WhatsAppService
             'error' => $errorMessage
         ];
     }
-
-    // ==================== UTILIDADES ====================
-
-    /**
-     * Sanitiza texto para templates
-     */
-    private function sanitize(?string $value): string
-    {
-        if ($value === null || trim($value) === '') {
-            return '';
-        }
-        return trim($value);
-    }
-
-    /**
-     * Genera un UUID v4
-     */
-    private function generateUuid(): string
-    {
-        $data = random_bytes(16);
-        $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
-        $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
-        
-        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
-    }
-
     // ==================== CONTEO MENSUAL ====================
 
     /**

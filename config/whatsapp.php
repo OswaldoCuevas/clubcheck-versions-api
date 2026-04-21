@@ -17,20 +17,20 @@ return [
     // Configuración de templates
     'templates' => [
         'subscription' => [
-            'name' => 'subscription',
-            'language' => 'en_US',
+            'name' => 'membership',
+            'language' => 'es_MX',
         ],
         'warning_subscription' => [
-            'name' => 'warning_subscription',
-            'language' => 'en_US',
+            'name' => 'membership_alert',
+            'language' => 'es_MX',
         ],
         'finalized_subscription' => [
-            'name' => 'finalized_subscription',
-            'language' => 'en_US',
+            'name' => 'membership_ended',
+            'language' => 'es_MX',
         ],
         'warning_last_day' => [
-            'name' => 'warning_last_day',
-            'language' => 'en_US',
+            'name' => 'membership_last_day',
+            'language' => 'es_MX',
         ],
     ],
     
