@@ -107,6 +107,41 @@ class AdminController extends Controller
         ]);
     }
 
+    /**
+     * POST|DELETE /admin/api/customers/:customerId
+     * API: Elimina un cliente desde el panel administrativo
+     */
+    public function deleteCustomerJson(string $customerId)
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'DELETE' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $customerId = trim((string) $customerId);
+
+        if ($customerId === '') {
+            $this->json(['error' => 'customerId es obligatorio'], 422);
+        }
+
+        $registry = new CustomerRegistryModel();
+        $deleted = $registry->deleteCustomer($customerId);
+
+        if (!$deleted) {
+            $this->json(['error' => 'Cliente no encontrado'], 404);
+        }
+
+        $this->json([
+            'success' => true,
+            'message' => 'Cliente eliminado correctamente'
+        ]);
+    }
+
     public function saveCustomerJson()
     {
         $this->requirePermission('admin_access');

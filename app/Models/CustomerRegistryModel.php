@@ -957,5 +957,18 @@ class CustomerRegistryModel extends Model
             'expiredJwt' => (int) ($stats['expired_jwt'] ?? 0),
         ];
     }
+
+    public function deleteCustomer(string $customerId): bool
+    {
+        $customerId = $this->normaliseCustomerId($customerId);
+
+        if ($customerId === '') {
+            return false;
+        }
+
+        $this->db->execute_query('DELETE FROM Customers WHERE Id = ?', [$customerId]);
+
+        return $this->db->affected_rows > 0;
+    }
 }
 

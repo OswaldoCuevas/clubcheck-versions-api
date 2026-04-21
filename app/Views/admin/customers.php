@@ -163,6 +163,7 @@ $endpointsJson = json_encode([
     'await' => app_url('/api/customers/token/await'),
     'register' => app_url('/api/customers/token/register'),
     'regenerateAccessKey' => app_url('/admin/api/customers/regenerate-access-key'),
+    'delete' => app_url('/admin/api/customers/:customerId/delete'),
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
 $customStyles = <<<CSS
@@ -354,6 +355,9 @@ ob_start();
                             </button>
                             <button type="button" class="btn btn-sm btn-outline-${customer.isActive ? 'warning' : 'success'}" data-action="toggle-active" title="${customer.isActive ? 'Desactivar cliente' : 'Activar cliente'}">
                                 <i class="${customer.isActive ? 'fas fa-user-slash' : 'fas fa-user-check'}"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" data-action="delete" title="Eliminar cliente">
+                                <i class="fas fa-trash"></i>
                             </button>
                         </div>
                     </td>
@@ -704,8 +708,37 @@ ob_start();
                 case 'toggle-active':
                     toggleActiveStatus(customerId, !customer.isActive);
                     break;
+                case 'delete':
+                    deleteCustomer(customer);
+                    break;
             }
         });
+    }
+
+    async function deleteCustomer(customer) {
+        const confirmed = window.confirm(`¿Eliminar cliente ${customer.name || customer.customerId}? Esta acción no se puede deshacer.`);
+        if (!confirmed) return;
+
+        try {
+            const url = endpoints.delete.replace(':customerId', encodeURIComponent(customer.customerId));
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            const payload = await response.json();
+
+            if (!response.ok) {
+                throw new Error(payload.error || 'No se pudo eliminar el cliente');
+            }
+
+            pushAlert('success', payload.message || 'Cliente eliminado');
+            await fetchCustomers();
+        } catch (error) {
+            console.error(error);
+            pushAlert('danger', error.message || 'Error al eliminar el cliente');
+        }
     }
 
     if (refreshButton) {

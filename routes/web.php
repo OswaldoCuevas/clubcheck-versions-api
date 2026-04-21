@@ -91,6 +91,9 @@ $router->get('/admin/customers', 'AdminController', 'customers');// NO, Administ
 $router->get('/admin/api/customers', 'AdminController', 'customersJson');// NO, Administrativo
 $router->post('/admin/api/customers/save', 'AdminController', 'saveCustomerJson');// NO, Administrativo
 $router->post('/admin/api/customers/regenerate-access-key', 'AdminController', 'regenerateAccessKey');// NO, Administrativo
+// Eliminar cliente (desde panel admin)
+$router->post('/admin/api/customers/:customerId/delete', 'AdminController', 'deleteCustomerJson');// NO, Administrativo
+$router->delete('/admin/api/customers/:customerId', 'AdminController', 'deleteCustomerJson');// NO, Administrativo
 $router->get('/admin/api-docs', 'AdminController', 'apiDocs');// NO, Administrativo
 
 // WhatsApp Admin CRUD
