@@ -262,7 +262,7 @@ class Router
                 'success' => false,
                 'error' => $isProduction ? 'Error interno del servidor' : $e->getMessage(),
                 'error_code' => 'INTERNAL_ERROR',
-                'debug' => $isProduction ? null : [
+                'debug' => !$isProduction ? null : [
                     'file' => $e->getFile(),
                     'line' => $e->getLine(),
                 ]
