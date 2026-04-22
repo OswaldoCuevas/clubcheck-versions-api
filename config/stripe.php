@@ -81,19 +81,7 @@ return [
                 'products_to_sale' => null,  // ilimitado
                 'max_partners' => null,       // ilimitado
             ],
-        ],
-        'test_monthly' => [
-            'name' => 'Plan Test',
-            'lookup_key' => 'test_monthly',
-            'rules' => [
-                'enable_fingerprint' => true,
-                'enable_qr' => true,
-                'max_messages' => 5,
-                'max_members_actives' => 5,
-                'products_to_sale' => 9,  // limitado
-                'max_partners' => 3,       // limitado
-            ],
-        ],
+        ]
     ]
     : [
         'free' => [
