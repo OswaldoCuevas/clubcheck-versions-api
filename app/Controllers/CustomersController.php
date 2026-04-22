@@ -109,7 +109,7 @@ class CustomersController extends Controller
             'subscriptionPeriods' => new SubscriptionPeriodDesktopModel(),
             'syncStatus' => new SyncStatusDesktopModel(),
             // 'migrations' => new MigrationsDesktopModel(),
-            'barcodeLookupCache' => new BarcodeLookupCacheDesktopModel(),
+            //'barcodeLookupCache' => new BarcodeLookupCacheDesktopModel(),
         ];
     }
 
