@@ -260,7 +260,7 @@ class Router
             
             $this->respondJson([
                 'success' => false,
-                'error' => $isProduction ? 'Error interno del servidor' : $e->getMessage(),
+                'error' => !$isProduction ? 'Error interno del servidor' : $e->getMessage(),
                 'error_code' => 'INTERNAL_ERROR',
                 'debug' => !$isProduction ? null : [
                     'file' => $e->getFile(),
