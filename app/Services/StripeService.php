@@ -382,7 +382,7 @@ class StripeService
                         'lookup_key' => $last->items->data[0]->price->lookup_key ?? null,
                         'unit_amount' => $last->items->data[0]->price->unit_amount ?? null,
                         'cancel_at_period_end' => $last->cancel_at_period_end,
-                        'current_period_end' => $last->current_period_end,
+                        'current_period_end' => $last->current_period_end ?? $last->items->data[0]->current_period_end ?? null,
                         'price_name' => $last->items->data[0]->price->nickname ?? null
                     ] : null
                 ];
@@ -400,7 +400,7 @@ class StripeService
                     'lookup_key' => $price->lookup_key ?? null,
                     'unit_amount' => $price->unit_amount ?? null,
                     'cancel_at_period_end' => $active->cancel_at_period_end,
-                    'current_period_end' => $active->current_period_end,
+                    'current_period_end' => $active->current_period_end ?? $active->items->data[0]->current_period_end ?? null,
                     'price_name' => $price->nickname ?? null
 
                 ]
@@ -634,7 +634,7 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId): a
                     'new_plan_formatted' => $this->formatMoney($newAmount, $currency),
                     'current_plan_amount' => $currentAmount,
                     'current_plan_formatted' => $this->formatMoney($currentAmount, $currency),
-                    'billing_date' => date('Y-m-d', $subscription->current_period_end ?? time()),
+                    'billing_date' => date('Y-m-d', $subscription->current_period_end ?? $subscription->items->data[0]->current_period_end ??  time()),
                     'is_upgrade' => $isUpgrade,
                     'immediate_charge' => false,
                     'new_plan_name' => $newPrice->nickname ?? $newPrice->lookup_key ?? 'Plan',

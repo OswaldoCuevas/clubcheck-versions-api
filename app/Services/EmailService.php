@@ -469,8 +469,8 @@ class EmailService
     <title>Restablecer contraseña</title>
 </head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="color: #ffffff; margin: 0; font-size: 28px;">🔐 Restablecer Contraseña</h1>
+    <div style="background: linear-gradient(135deg, #667eea 0%, #667eea 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+        <h1 style="color: #ffffff; margin: 0; font-size: 28px;">Restablecer Contraseña</h1>
     </div>
     
     <div style="background-color: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-radius: 0 0 10px 10px;">
@@ -483,7 +483,7 @@ class EmailService
         </div>
         
         <p style="font-size: 14px; color: #666;">
-            ⏰ Este código expira en <strong>{$expirationMinutes} minutos</strong>.
+            Este código expira en <strong>{$expirationMinutes} minutos</strong>.
         </p>
         
         <p style="font-size: 14px; color: #666;">
@@ -518,8 +518,8 @@ HTML;
     <title>Confirma tu correo</title>
 </head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="color: #ffffff; margin: 0; font-size: 28px;">✉️ Confirma tu Correo</h1>
+    <div style="background: linear-gradient(135deg, #11998e 0%, #11998e 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+        <h1 style="color: #ffffff; margin: 0; font-size: 28px;">Confirma tu Correo</h1>
     </div>
     
     <div style="background-color: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-radius: 0 0 10px 10px;">
@@ -532,7 +532,7 @@ HTML;
         </div>
         
         <p style="font-size: 14px; color: #666;">
-            ⏰ Este código expira en <strong>{$expirationMinutes} minutos</strong>.
+            Este código expira en <strong>{$expirationMinutes} minutos</strong>.
         </p>
         
         <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 25px 0;">

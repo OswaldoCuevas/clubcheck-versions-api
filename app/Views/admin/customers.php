@@ -317,6 +317,7 @@ ob_start();
                     <td>
                         <div class="fw-semibold">${escapeHtml(customer.name || '—')}</div>
                         <div class="text-muted small">ID: ${escapeHtml(customer.customerId)}</div>
+                        <div class="text-muted small">Email: ${escapeHtml(customer.email || '—')}</div>
                         ${billingDisplay ? `<div class="text-muted small">Facturación: ${escapeHtml(billingDisplay)}</div>` : ''}
                         ${planDisplay ? `<div class="text-muted small">Plan: ${escapeHtml(planDisplay)}</div>` : ''}
                         <div class="text-muted small">Equipo: ${escapeHtml(deviceDisplay)}</div>
