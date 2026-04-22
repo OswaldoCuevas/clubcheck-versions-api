@@ -90,7 +90,7 @@ return [
                 'enable_qr' => true,
                 'max_messages' => 3,
                 'max_members_actives' => 5,
-                'products_to_sale' => 2,  // limitado
+                'products_to_sale' => 9,  // limitado
                 'max_partners' => 3,       // limitado
             ],
         ],
