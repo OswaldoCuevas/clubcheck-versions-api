@@ -113,6 +113,93 @@ class CustomersController extends Controller
         ];
     }
 
+    private function normalizeTermsAndConditionsAcceptancePayload($value, bool $required): ?array
+    {
+        if ($value === null) {
+            if ($required) {
+                ApiHelper::respond([
+                    'error' => 'Debes enviar el objeto privacyAcceptance con la aceptación de  términos y condiciones'
+                ], 422);
+            }
+
+            return null;
+        }
+
+        if (!is_array($value)) {
+            ApiHelper::respond([
+                'error' => 'El campo termsAndConditionsAcceptance debe ser un objeto con los datos de aceptación'
+            ], 422);
+        }
+
+        $documentVersion = isset($value['documentVersion']) ? trim((string) $value['documentVersion']) : '';
+        if ($documentVersion === '') {
+            ApiHelper::respond([
+                'error' => 'Debes indicar la versión del documento de términos y condiciones (documentVersion)'
+            ], 422);
+        }
+        if (mb_strlen($documentVersion) > 50) {
+            ApiHelper::respond([
+                'error' => 'documentVersion no puede superar los 50 caracteres'
+            ], 422);
+        }
+
+        $documentUrl = isset($value['documentUrl']) ? trim((string) $value['documentUrl']) : '';
+        if ($documentUrl === '') {
+            ApiHelper::respond([
+                'error' => 'Debes indicar la URL del documento de términos y condiciones aceptado (documentUrl)'
+            ], 422);
+        }
+        if (mb_strlen($documentUrl) > 255) {
+            ApiHelper::respond([
+                'error' => 'documentUrl no puede superar los 255 caracteres'
+            ], 422);
+        }
+
+        $ipAddress = isset($value['ipAddress']) ? trim((string) $value['ipAddress']) : '';
+        if ($ipAddress === '') {
+            ApiHelper::respond([
+                'error' => 'Debes indicar la dirección IP del aceptante (ipAddress)'
+            ], 422);
+        }
+        if (filter_var($ipAddress, FILTER_VALIDATE_IP) === false) {
+            ApiHelper::respond([
+                'error' => 'La dirección IP proporcionada no es válida'
+            ], 422);
+        }
+
+        $acceptedAtRaw = $value['acceptedAt'] ?? null;
+        if ($acceptedAtRaw === null || $acceptedAtRaw === '') {
+            $acceptedAt = date('Y-m-d H:i:s');
+        } elseif (is_numeric($acceptedAtRaw)) {
+            $timestamp = (int) $acceptedAtRaw;
+            $acceptedAt = date('Y-m-d H:i:s', $timestamp);
+        } else {
+            $timestamp = strtotime((string) $acceptedAtRaw);
+            if ($timestamp === false) {
+                ApiHelper::respond([
+                    'error' => 'El campo acceptedAt debe ser una fecha válida'
+                ], 422);
+            }
+            $acceptedAt = date('Y-m-d H:i:s', $timestamp);
+        }
+
+        $userAgent = isset($value['userAgent']) ? trim((string) $value['userAgent']) : null;
+        if ($userAgent !== null && $userAgent === '') {
+            $userAgent = null;
+        }
+        if ($userAgent !== null && mb_strlen($userAgent) > 255) {
+            $userAgent = mb_substr($userAgent, 0, 255);
+        }
+
+        return [
+            'documentVersion' => $documentVersion,
+            'documentUrl' => $documentUrl,
+            'ipAddress' => $ipAddress,
+            'acceptedAt' => $acceptedAt,
+            'userAgent' => $userAgent,
+        ];
+    }
+
     private function normalizePrivacyAcceptancePayload($value, bool $required): ?array
     {
         if ($value === null) {
@@ -544,7 +631,8 @@ class CustomersController extends Controller
 
         $attributes = [];
         $privacyAcceptanceInput = array_key_exists('privacyAcceptance', $payload) ? $payload['privacyAcceptance'] : null;
-
+        $termsAndConditionsInput = array_key_exists('termsAndConditions', $payload) ? $payload['termsAndConditions'] : null;
+        
         if (array_key_exists('name', $payload)) {
             $attributes['name'] = $payload['name'] !== null ? trim((string) $payload['name']) : null;
         }
@@ -620,7 +708,7 @@ class CustomersController extends Controller
             }
 
             $privacyAcceptance = $this->normalizePrivacyAcceptancePayload($privacyAcceptanceInput, true);
-
+            $termsAndConditionsAcceptance = $this->normalizeTermsAndConditionsAcceptancePayload($termsAndConditionsInput, true);
             // Si no se proporciona billingId, crear cliente en Stripe
             if (!array_key_exists('billingId', $attributes) || $attributes['billingId'] === null) {
                 // Validar que tengamos email para crear en Stripe
@@ -660,6 +748,7 @@ class CustomersController extends Controller
                     'token' => $attributes['token'] ?? null,
                     'isActive' => $attributes['isActive'] ?? true,
                     'privacyAcceptance' => $privacyAcceptance,
+                    'termsAndConditionsAcceptance' => $termsAndConditionsAcceptance,
                 ]);
             } catch (\RuntimeException $e) {
                 if ($e->getMessage() === 'email_already_registered') {
@@ -752,6 +841,10 @@ class CustomersController extends Controller
         $phone = $phone !== null && $phone !== '' ? $phone : null;
         $deviceName = $deviceName !== null && $deviceName !== '' ? $deviceName : null;
         $privacyAcceptance = $this->normalizePrivacyAcceptancePayload($privacyAcceptanceInput, true);
+        $termsAndConditionsAcceptance = $this->normalizeTermsAndConditionsAcceptancePayload(
+            array_key_exists('termsAndConditionsAcceptance', $payload) ? $payload['termsAndConditionsAcceptance'] : null,
+            true
+        );
 
         // Verificar si el cliente ya existe localmente
         $existingCustomer = $customerId !== '' ? $this->customerRegistry->getCustomer($customerId) : null;
@@ -802,6 +895,7 @@ class CustomersController extends Controller
                 'deviceName' => $deviceName,
                 'token' => $token,
                 'privacyAcceptance' => $privacyAcceptance,
+                'termsAndConditionsAcceptance' => $termsAndConditionsAcceptance,
             ]);
         } catch (\RuntimeException $e) {
             if ($e->getMessage() === 'email_already_registered') {

@@ -216,6 +216,65 @@ class CustomerRegistryModel extends Model
         ];
     }
 
+     private function normalizeTermsAndConditionsAcceptance(array $payload): array
+    {
+        $documentVersion = isset($payload['documentVersion']) ? trim((string) $payload['documentVersion']) : '';
+        if ($documentVersion === '') {
+            throw new \InvalidArgumentException('terms_and_conditions_document_version_required');
+        }
+        if (mb_strlen($documentVersion) > 50) {
+            throw new \InvalidArgumentException('terms_and_conditions_document_version_too_long');
+        }
+
+        $documentUrl = isset($payload['documentUrl']) ? trim((string) $payload['documentUrl']) : '';
+        if ($documentUrl === '') {
+            throw new \InvalidArgumentException('terms_and_conditions_document_url_required');
+        }
+        if (mb_strlen($documentUrl) > 255) {
+            throw new \InvalidArgumentException('terms_and_conditions_document_url_too_long');
+        }
+
+        $ipAddress = isset($payload['ipAddress']) ? trim((string) $payload['ipAddress']) : '';
+        if ($ipAddress === '') {
+            throw new \InvalidArgumentException('terms_and_conditions_ip_required');
+        }
+        if (mb_strlen($ipAddress) > 45) {
+            throw new \InvalidArgumentException('terms_and_conditions_ip_too_long');
+        }
+
+        $acceptedAtRaw = $payload['acceptedAt'] ?? null;
+        if ($acceptedAtRaw === null || $acceptedAtRaw === '') {
+            $acceptedAt = $this->now();
+        } elseif (is_numeric($acceptedAtRaw)) {
+            $acceptedAt = $this->toDateTime((int) $acceptedAtRaw);
+            if ($acceptedAt === null) {
+                throw new \InvalidArgumentException('terms_and_conditions_invalid_accepted_at');
+            }
+        } else {
+            $timestamp = strtotime((string) $acceptedAtRaw);
+            if ($timestamp === false) {
+                throw new \InvalidArgumentException('terms_and_conditions_invalid_accepted_at');
+            }
+            $acceptedAt = date('Y-m-d H:i:s', $timestamp);
+        }
+
+        $userAgent = isset($payload['userAgent']) ? trim((string) $payload['userAgent']) : null;
+        if ($userAgent !== null && $userAgent === '') {
+            $userAgent = null;
+        }
+        if ($userAgent !== null && mb_strlen($userAgent) > 255) {
+            $userAgent = mb_substr($userAgent, 0, 255);
+        }
+
+        return [
+            'documentVersion' => $documentVersion,
+            'documentUrl' => $documentUrl,
+            'acceptedAt' => $acceptedAt,
+            'ipAddress' => $ipAddress,
+            'userAgent' => $userAgent,
+        ];
+    }
+
     private function hydrateCustomer(array $row): array
     {
         return [
@@ -473,6 +532,19 @@ class CustomerRegistryModel extends Model
         ]);
     }
 
+     private function insertTermsAndConditionsConsent(string $customerId, array $consent): void
+    {
+        $this->db->insert('CustomerTermsAndConditionsConsents', [
+            'CustomerId' => $customerId,
+            'DocumentVersion' => $consent['documentVersion'],
+            'DocumentUrl' => $consent['documentUrl'],
+            'AcceptedAt' => $consent['acceptedAt'],
+            'IpAddress' => $consent['ipAddress'],
+            'UserAgent' => $consent['userAgent'],
+            'CreatedAt' => $this->now(),
+        ]);
+    }
+
     public function registerCustomerIfAbsent(array $payload): array
     {
         $specifiedId = $this->normaliseCustomerId($payload['customerId'] ?? '');
@@ -504,7 +576,12 @@ class CustomerRegistryModel extends Model
             throw new \InvalidArgumentException('privacy_acceptance_required');
         }
 
+        if (!isset($payload['termsAndConditionsAcceptance']['documentVersion']) || trim((string) $payload['termsAndConditionsAcceptance']['documentVersion']) === '') {
+            throw new \InvalidArgumentException('terms_and_conditions_document_version_required');
+        }
+
         $privacyConsent = $this->normalizePrivacyAcceptance($payload['privacyAcceptance']);
+        $termsAndConditions = $this->normalizeTermsAndConditionsAcceptance($payload['termsAndConditionsAcceptance']);
 
         $accessKey = null;
         $accessKeyHash = null;
@@ -527,6 +604,7 @@ class CustomerRegistryModel extends Model
         ]);
 
         $this->insertPrivacyConsent($customerId, $privacyConsent);
+        $this->insertTermsAndConditionsConsent($customerId, $termsAndConditions);
 
         return [
             'found' => false,
