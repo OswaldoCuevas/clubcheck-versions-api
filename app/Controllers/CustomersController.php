@@ -1514,4 +1514,89 @@ class CustomersController extends Controller
 
         return $mapping[$errorCode] ?? 'Error desconocido';
     }
+
+    /**
+     * Endpoint para actualizar la versión del cliente de escritorio
+     * POST /api/customers/update-client-version
+     * 
+     * Requiere autenticación JWT (middleware customer_jwt)
+     * El customerApiId se obtiene automáticamente de la sesión JWT
+     * 
+     * Parámetros del body:
+     * - version (string, requerido): Versión del cliente (máximo 50 caracteres)
+     * 
+     * Respuestas:
+     * - 200: Versión actualizada correctamente
+     * - 400: Error de validación
+     * - 404: Cliente no encontrado
+     * - 422: Parámetros inválidos
+     * - 500: Error del servidor
+     */
+    public function updateClientVersion()
+    {
+        ApiHelper::respondIfOptions();
+
+        ApiHelper::allowedMethodsPost();
+
+        $payload = ApiHelper::getJsonBody();
+        
+        // Obtener el customerId de la sesión JWT
+        $customerApiId = ApiHelper::getCustomerIdFromSession();
+        
+        if (!$customerApiId) {
+            ApiHelper::respond([
+                'error' => 'No se pudo obtener el ID del cliente de la sesión'
+            ], 401);
+        }
+
+        // Validar que se recibió la versión
+        $version = isset($payload['version']) ? trim((string) $payload['version']) : '';
+        
+        if ($version === '') {
+            ApiHelper::respond([
+                'error' => 'El parámetro version es obligatorio'
+            ], 422);
+        }
+
+        // Validar longitud de la versión
+        if (mb_strlen($version) > 50) {
+            ApiHelper::respond([
+                'error' => 'La versión no puede exceder 50 caracteres'
+            ], 422);
+        }
+
+        try {
+            // Actualizar la versión del cliente
+            $customer = $this->customerRegistry->updateClientVersion($customerApiId, $version);
+            
+            if ($customer === null) {
+                ApiHelper::respond([
+                    'error' => 'Cliente no encontrado'
+                ], 404);
+            }
+
+            ApiHelper::respond([
+                'success' => true,
+                'message' => 'Versión del cliente actualizada correctamente',
+                'customerId' => $customer['customerId'],
+                'clientVersion' => $version,
+                'data' => [
+                    'customerId' => $customer['customerId'],
+                    'name' => $customer['name'],
+                    'clientVersion' => $version,
+                ]
+            ]);
+            
+        } catch (\InvalidArgumentException $e) {
+            ApiHelper::respond([
+                'error' => $e->getMessage()
+            ], 422);
+        } catch (\Exception $e) {
+            error_log("Error updating client version: " . $e->getMessage());
+            ApiHelper::respond([
+                'error' => 'Error al actualizar la versión del cliente',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

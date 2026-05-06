@@ -47,14 +47,15 @@ $router->any('/api/customers/save', 'CustomersController', 'saveCustomer', ['cus
 $router->any('/api/customers/register', 'CustomersController', 'registerCustomer');// NO
 $router->any('/api/customers/login', 'CustomersController', 'loginCustomer');// NO
 $router->post('/api/customers/validate', 'CustomersController', 'validateCustomer');// NO
-$router->any('/api/customers', 'CustomersController', 'patchCustomer',['customer_jwt']);
-$router->any('/api/customers/:customerId', 'CustomersController', 'getCustomer', ['customer_jwt']);
 $router->any('/api/customers/token', 'CustomersController', 'customerToken'); // NO
 $router->any('/api/customers/token/register', 'CustomersController', 'registerToken', ['customer_jwt']);
 $router->any('/api/customers/token/await', 'CustomersController', 'awaitToken');// NO
 $router->any('/api/customers/jwt/validate', 'CustomersController', 'validateJwtToken');
+$router->post('/api/customers/update-client-version', 'CustomersController', 'updateClientVersion', ['customer_jwt']);
 $router->any('/api/customers/desktop/pull', 'CustomersController', 'pullDesktop', ['customer_jwt']);
 $router->any('/api/customers/desktop/push', 'CustomersController', 'pushDesktop', ['customer_jwt']);
+$router->any('/api/customers', 'CustomersController', 'patchCustomer',['customer_jwt']);
+$router->any('/api/customers/:customerId', 'CustomersController', 'getCustomer', ['customer_jwt']);
 $router->any('/api/customers/messages-sends-at-month/:customerId', 'CustomersController', 'getMessagesSendsAtMonth', ['customer_jwt']);
 
 // Rutas de mensajes enviados (MessageSent)

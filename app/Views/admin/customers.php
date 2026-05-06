@@ -37,6 +37,7 @@ ob_start();
                                 <tr>
                                     <th scope="col">Cliente</th>
                                     <th scope="col">Token actual</th>
+                                    <th scope="col">Versión</th>
                                     <th scope="col">Estado</th>
                                     <th scope="col">Esperando nuevo token</th>
                                     <th scope="col">Actualizaciones</th>
@@ -45,7 +46,7 @@ ob_start();
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td colspan="6" class="text-center py-5 text-muted">
+                                    <td colspan="7" class="text-center py-5 text-muted">
                                         <i class="fas fa-circle-notch fa-spin me-2"></i>
                                         Cargando clientes...
                                     </td>
@@ -275,7 +276,7 @@ ob_start();
         if (!customers.length) {
             tableBody.innerHTML = `
                 <tr>
-                    <td colspan="6" class="text-center py-5 text-muted">
+                    <td colspan="7" class="text-center py-5 text-muted">
                         <i class="fas fa-users-slash me-2"></i>
                         No hay clientes registrados todavía
                     </td>
@@ -311,6 +312,13 @@ ob_start();
             const deviceDisplay = customer.deviceName ? customer.deviceName : 'Sin dispositivo';
             const billingDisplay = customer.billingId ? customer.billingId : '';
             const planDisplay = customer.planCode ? customer.planCode : '';
+            const clientVersion = customer.clientVersion ? customer.clientVersion : null;
+            const clientVersionHtml = clientVersion
+                ? `<code class="text-success">${escapeHtml(clientVersion)}</code>`
+                : '<span class="text-muted">Sin versión</span>';
+            const versionMeta = customer.clientVersionUpdatedAt
+                ? `<div class="text-muted small">Actualizado ${escapeHtml(relativeTime(customer.clientVersionUpdatedAt))}</div>`
+                : '';
 
             return `
                 <tr data-customer-id="${escapeHtml(customer.customerId)}">
@@ -325,6 +333,10 @@ ob_start();
                     <td>
                         ${tokenHtml}
                         ${tokenMeta}
+                    </td>
+                    <td>
+                        ${clientVersionHtml}
+                        ${versionMeta}
                     </td>
                     <td>
                         ${activeBadge}

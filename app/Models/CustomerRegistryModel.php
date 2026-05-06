@@ -285,6 +285,8 @@ class CustomerRegistryModel extends Model
             'email' => $row['Email'],
             'phone' => $row['Phone'],
             'deviceName' => $row['DeviceName'],
+            'clientVersion' => $row['ClientVersion'] ?? null,
+            'clientVersionUpdatedAt' => $this->fromDateTime($row['ClientVersionUpdatedAt'] ?? null),
             'token' => $row['Token'],
             'isActive' => (bool) ($row['IsActive'] ?? 1),
             'waitingForToken' => (bool) ($row['WaitingForToken'] ?? 0),
@@ -1047,6 +1049,45 @@ class CustomerRegistryModel extends Model
         $this->db->execute_query('DELETE FROM Customers WHERE Id = ?', [$customerId]);
 
         return $this->db->affected_rows > 0;
+    }
+
+    /**
+     * Actualiza la versión del cliente de escritorio
+     * 
+     * @param string $customerId ID del cliente
+     * @param string $version Versión del cliente
+     * @return array|null Los datos actualizados del cliente o null si no existe
+     */
+    public function updateClientVersion(string $customerId, string $version): ?array
+    {
+        $customerId = $this->normaliseCustomerId($customerId);
+
+        if ($customerId === '') {
+            return null;
+        }
+
+        $row = $this->findRawCustomer($customerId);
+
+        if ($row === null) {
+            return null;
+        }
+
+        // Validar y limpiar la versión
+        $version = trim($version);
+        if (mb_strlen($version) > 50) {
+            throw new \InvalidArgumentException('La versión no puede exceder 50 caracteres');
+        }
+
+        // Actualizar la versión
+        $update = [
+            'ClientVersion' => $version,
+            'ClientVersionUpdatedAt' => $this->now(),
+            'UpdatedAt' => $this->now(),
+        ];
+
+        $this->db->update('Customers', $update, 'Id = ?', [$customerId]);
+
+        return $this->getCustomer($customerId);
     }
 }
 
