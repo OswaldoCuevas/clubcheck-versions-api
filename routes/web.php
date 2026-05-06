@@ -118,6 +118,11 @@ $router->get('/admin/customer-stats', 'AdminController', 'customerStats');// NO,
 $router->get('/admin/api/customer-stats', 'AdminController', 'customerStatsJson');// NO, Administrativo
 $router->get('/admin/api/customer-stats/:customerId', 'AdminController', 'customerStatsDetailJson');// NO, Administrativo
 
+// Desktop Tables Admin
+$router->get('/admin/desktop-tables', 'DesktopTablesController', 'index');// NO, Administrativo
+$router->get('/admin/desktop-tables/view', 'DesktopTablesController', 'viewTable');// NO, Administrativo
+$router->get('/admin/desktop-tables/api/data', 'DesktopTablesController', 'getData');// NO, Administrativo
+
 // Downloads History Admin
 $router->get('/admin/downloads', 'AdminController', 'downloads');// NO, Administrativo
 $router->get('/admin/api/downloads', 'AdminController', 'downloadsJson');// NO, Administrativo
