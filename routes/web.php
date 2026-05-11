@@ -164,6 +164,9 @@ $router->get('/api/customers/stripe/prices', 'StripeController', 'listPrices', [
 $router->post('/api/customers/stripe/subscriptions/:subscriptionId/preview', 'StripeController', 'previewPlanChange', ['customer_jwt']);
 $router->post('/api/customers/stripe/customers/:customerId/subscriptions/preview', 'StripeController', 'previewNewSubscription', ['customer_jwt']);
 
+// Cupones
+$router->post('/api/customers/stripe/coupons/validate', 'StripeController', 'validateCoupon');
+
 // ==================== EMAIL ====================
 // Estado y tipos
 $router->get('/api/email/status', 'EmailController', 'status');

@@ -167,8 +167,8 @@ class StripeController extends Controller
      * POST /api/stripe/customers/:customerId/subscriptions
      * Crea una suscripción
      * 
-     * Body: { "price_id": "price_xxx", "trial_days": 30 }
-     * O usando lookup_key: { "plan_lookup_key": "professional_monthly", "trial_days": 30 }
+     * Body: { "price_id": "price_xxx", "trial_days": 30, "coupon_code": "DESCUENTO20" }
+     * O usando lookup_key: { "plan_lookup_key": "professional_monthly", "trial_days": 30, "coupon_code": "DESCUENTO20" }
      */
     public function createSubscription(string $billingId): void
     {
@@ -188,7 +188,8 @@ class StripeController extends Controller
         }
 
         $trialDays = (int)($input['trial_days'] ?? 0);
-        $result = $this->stripeService->createSubscription($customerId, $priceId, $trialDays);
+        $couponCode = $input['coupon_code'] ?? null;
+        $result = $this->stripeService->createSubscription($customerId, $priceId, $trialDays, 'error_if_incomplete', $couponCode);
 
         ApiHelper::respond($result, $result['success'] ? 201 : 400);
     }
@@ -232,8 +233,8 @@ class StripeController extends Controller
      * PUT /api/stripe/subscriptions/:subscriptionId/plan
      * Cambia el plan de una suscripción
      * 
-     * Body: { "price_id": "price_xxx" }
-     * O: { "plan_lookup_key": "professional_monthly" }
+     * Body: { "price_id": "price_xxx", "coupon_code": "DESCUENTO20" }
+     * O: { "plan_lookup_key": "professional_monthly", "coupon_code": "DESCUENTO20" }
      */
     public function changePlan(string $subscriptionId): void
     {
@@ -249,7 +250,8 @@ class StripeController extends Controller
             ApiHelper::respond(['success' => false, 'error' => 'Se requiere price_id o plan_lookup_key válido'], 400);
         }
 
-        $result = $this->stripeService->changePlan($subscriptionId, $priceId);
+        $couponCode = $input['coupon_code'] ?? null;
+        $result = $this->stripeService->changePlan($subscriptionId, $priceId, $couponCode);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
     
@@ -397,12 +399,64 @@ class StripeController extends Controller
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
 
+    // ==================== CUPONES ====================
+
+    /**
+     * POST /api/customers/stripe/coupons/validate
+     * Valida si un cupón existe y está activo
+     * 
+     * Body: { "coupon_code": "DESCUENTO20" }
+     * 
+     * Respuesta exitosa:
+     * {
+     *   "success": true,
+     *   "coupon": {
+     *     "id": "DESCUENTO20",
+     *     "name": "Descuento de Bienvenida",
+     *     "valid": true,
+     *     "discount": {
+     *       "type": "percentage",
+     *       "percent_off": 20,
+     *       "description": "20% de descuento"
+     *     },
+     *     "duration": {
+     *       "duration": "once",
+     *       "description": "Válido solo por el primer pago"
+     *     },
+     *     "expiration": {
+     *       "redeem_by": 1715356800,
+     *       "redeem_by_formatted": "2024-05-10 12:00:00"
+     *     },
+     *     "usage": {
+     *       "max_redemptions": 100,
+     *       "times_redeemed": 45,
+     *       "remaining": 55
+     *     }
+     *   }
+     * }
+     * 
+     * Respuesta de error:
+     * {
+     *   "success": false,
+     *   "error": "El cupón no existe"
+     * }
+     */
+    public function validateCoupon(): void
+    {
+        ApiHelper::allowedMethodsPost();
+        $input = ApiHelper::getJsonBody();
+        $this->requireFields($input, ['coupon_code']);
+
+        $result = $this->stripeService->validateCoupon($input['coupon_code']);
+        ApiHelper::respond($result, $result['success'] ? 200 : 400);
+    }
+
     /**
      * POST /api/customers/stripe/subscriptions/:subscriptionId/preview
      * Obtiene una vista previa del cobro al cambiar de plan (proration)
      * 
-     * Body: { "plan_lookup_key": "professional_monthly" }
-     * O: { "price_id": "price_xxx" }
+     * Body: { "plan_lookup_key": "professional_monthly", "coupon_code": "DESCUENTO20" }
+     * O: { "price_id": "price_xxx", "coupon_code": "DESCUENTO20" }
      * 
      * Respuesta exitosa:
      * {
@@ -436,7 +490,8 @@ class StripeController extends Controller
             ApiHelper::respond(['success' => false, 'error' => 'Se requiere price_id o plan_lookup_key válido'], 400);
         }
 
-        $result = $this->stripeService->previewPlanChange($subscriptionId, $priceId);
+        $couponCode = $input['coupon_code'] ?? null;
+        $result = $this->stripeService->previewPlanChange($subscriptionId, $priceId, $couponCode);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
 
@@ -444,8 +499,8 @@ class StripeController extends Controller
      * POST /api/customers/stripe/customers/:customerId/subscriptions/preview
      * Obtiene una vista previa del cobro para crear una nueva suscripción
      * 
-     * Body: { "plan_lookup_key": "professional_monthly", "trial_days": 0 }
-     * O: { "price_id": "price_xxx", "trial_days": 0 }
+     * Body: { "plan_lookup_key": "professional_monthly", "trial_days": 0, "coupon_code": "DESCUENTO20" }
+     * O: { "price_id": "price_xxx", "trial_days": 0, "coupon_code": "DESCUENTO20" }
      */
     public function previewNewSubscription(string $billingId): void
     {
@@ -464,7 +519,8 @@ class StripeController extends Controller
         }
 
         $trialDays = (int)($input['trial_days'] ?? 0);
-        $result = $this->stripeService->previewNewSubscription($customerId, $priceId, $trialDays);
+        $couponCode = $input['coupon_code'] ?? null;
+        $result = $this->stripeService->previewNewSubscription($customerId, $priceId, $trialDays, $couponCode);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
 }

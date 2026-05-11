@@ -280,16 +280,38 @@ class StripeService
      * @param string $priceId ID del precio/plan
      * @param int $trialDays Días de prueba (0 = sin trial)
      * @param string $paymentBehavior 'default_incomplete' (requiere confirmación) o 'error_if_incomplete' (cobra automáticamente o falla)
+     * @param string|null $couponCode Código de cupón opcional
      */
-    public function createSubscription(string $customerId, string $priceId, int $trialDays = 0, string $paymentBehavior = 'error_if_incomplete'): array
+    public function createSubscription(string $customerId, string $priceId, int $trialDays = 0, string $paymentBehavior = 'error_if_incomplete', ?string $couponCode = null): array
     {
         try {
+            // Validar cupón si se proporcionó
+            $couponInfo = null;
+            if ($couponCode !== null && $couponCode !== '') {
+                $couponValidation = $this->validateCoupon($couponCode);
+                if (!$couponValidation['success']) {
+                    return $couponValidation; // Retornar el error del cupón
+                }
+                $couponInfo = $couponValidation['coupon'];
+            }
+
             $options = [
                 'customer' => $customerId,
                 'items' => [['price' => $priceId]],
                 'payment_behavior' => $paymentBehavior, // 'error_if_incomplete' cobra automáticamente si hay tarjeta
                 'expand' => ['latest_invoice.payment_intent', 'items.data.price']
             ];
+
+            // Aplicar cupón si es válido (usar 'discounts' para compatibilidad con billing_mode flexible)
+            if ($couponInfo) {
+                if ($couponInfo['is_promotion_code']) {
+                    // Si es un promotion code, usar el promotion_code_id
+                    $options['discounts'] = [['promotion_code' => $couponInfo['promotion_code_id']]];
+                } else {
+                    // Si es un cupón directo, usar el coupon_id
+                    $options['discounts'] = [['coupon' => $couponInfo['coupon_id']]];
+                }
+            }
 
             // if ($trialDays > 0) {
             //     $options['trial_period_days'] = $trialDays;
@@ -437,10 +459,24 @@ class StripeService
 
     /**
      * Cambia el plan de una suscripción
+     * 
+     * @param string $subscriptionId ID de la suscripción
+     * @param string $newPriceId ID del nuevo precio/plan
+     * @param string|null $couponCode Código de cupón opcional
      */
-    public function changePlan(string $subscriptionId, string $newPriceId): array
+    public function changePlan(string $subscriptionId, string $newPriceId, ?string $couponCode = null): array
     {
         try {
+            // Validar cupón si se proporcionó
+            $couponInfo = null;
+            if ($couponCode !== null && $couponCode !== '') {
+                $couponValidation = $this->validateCoupon($couponCode);
+                if (!$couponValidation['success']) {
+                    return $couponValidation; // Retornar el error del cupón
+                }
+                $couponInfo = $couponValidation['coupon'];
+            }
+
             $subscription = $this->stripe->subscriptions->retrieve($subscriptionId, [
                 'expand' => ['items.data.price']
             ]);
@@ -460,6 +496,17 @@ class StripeService
                 ];
             } else {
                 $updateOptions['items'][] = ['price' => $newPriceId];
+            }
+
+            // Aplicar cupón si es válido (usar 'discounts' para compatibilidad con billing_mode flexible)
+            if ($couponInfo) {
+                if ($couponInfo['is_promotion_code']) {
+                    // Si es un promotion code, usar el promotion_code_id
+                    $updateOptions['discounts'] = [['promotion_code' => $couponInfo['promotion_code_id']]];
+                } else {
+                    // Si es un cupón directo, usar el coupon_id
+                    $updateOptions['discounts'] = [['coupon' => $couponInfo['coupon_id']]];
+                }
             }
 
             $updated = $this->stripe->subscriptions->update($subscriptionId, $updateOptions);
@@ -541,6 +588,199 @@ class StripeService
 
     // ==================== HELPERS ====================
 
+    // ==================== CUPONES ====================
+
+    /**
+     * Valida si un cupón existe y está activo
+     * 
+     * @param string $couponCode Código del cupón a validar (puede ser un promotion code o un coupon ID)
+     * @return array Información del cupón o error
+     */
+    public function validateCoupon(string $couponCode): array
+    {
+        try {
+            $coupon = null;
+            $promotionCode = null;
+            
+            // Primero intentar buscar como Promotion Code (lo más común para usuarios)
+            try {
+                $promotionCodes = $this->stripe->promotionCodes->all([
+                    'code' => $couponCode,
+                    'active' => true,
+                    'limit' => 1
+                ]);
+                
+                if (!empty($promotionCodes->data)) {
+                    $promotionCode = $promotionCodes->data[0];
+                    
+                    // Obtener el ID del cupón del promotion code
+                    // Puede estar en 'coupon' directamente o en 'promotion.coupon' dependiendo de la versión de Stripe
+                    $couponId = null;
+                    
+                    if (isset($promotionCode->coupon)) {
+                        $couponId = $promotionCode->coupon;
+                    } elseif (isset($promotionCode->promotion) && is_object($promotionCode->promotion)) {
+                        $couponId = $promotionCode->promotion->coupon ?? null;
+                    }
+                    
+                    if (!empty($couponId) && is_string($couponId)) {
+                        // Hacer retrieve directo del cupón usando su ID para obtener toda su información
+                        $coupon = $this->stripe->coupons->retrieve($couponId);
+                    }
+                }
+            } catch (\Exception $e) {
+                // Si falla, intentar como cupón directo
+            }
+            
+            // Si no se encontró como promotion code, intentar como cupón directo
+            if (!$coupon) {
+                $coupon = $this->stripe->coupons->retrieve($couponCode);
+            }
+
+            if (!$coupon->valid) {
+                return [
+                    'success' => false,
+                    'error' => 'El cupón no es válido o ha expirado'
+                ];
+            }
+
+            // Validar si el promotion code está activo y no ha expirado
+            if ($promotionCode) {
+                if (!$promotionCode->active) {
+                    return [
+                        'success' => false,
+                        'error' => 'El código promocional no está activo'
+                    ];
+                }
+                
+                if ($promotionCode->expires_at && $promotionCode->expires_at < time()) {
+                    return [
+                        'success' => false,
+                        'error' => 'El código promocional ha expirado'
+                    ];
+                }
+                
+                // Verificar límites de uso del promotion code
+                if ($promotionCode->max_redemptions) {
+                    if ($promotionCode->times_redeemed >= $promotionCode->max_redemptions) {
+                        return [
+                            'success' => false,
+                            'error' => 'El código promocional ha alcanzado su límite de usos'
+                        ];
+                    }
+                }
+            }
+
+            // Preparar información del descuento
+            $discountInfo = [];
+            
+            if ($coupon->percent_off !== null) {
+                $discountInfo['type'] = 'percentage';
+                $discountInfo['percent_off'] = $coupon->percent_off;
+                $discountInfo['description'] = $coupon->percent_off . '% de descuento';
+            } elseif ($coupon->amount_off !== null) {
+                $discountInfo['type'] = 'fixed';
+                $discountInfo['amount_off'] = $coupon->amount_off;
+                $discountInfo['currency'] = strtoupper($coupon->currency ?? 'mxn');
+                $discountInfo['description'] = $this->formatMoney($coupon->amount_off, $discountInfo['currency']) . ' de descuento';
+            }
+
+            // Información de duración
+            $durationInfo = [
+                'duration' => $coupon->duration
+            ];
+            
+            if ($coupon->duration === 'repeating' && $coupon->duration_in_months) {
+                $durationInfo['duration_in_months'] = $coupon->duration_in_months;
+                $durationInfo['description'] = 'Válido por ' . $coupon->duration_in_months . ' meses';
+            } elseif ($coupon->duration === 'once') {
+                $durationInfo['description'] = 'Válido solo por el primer pago';
+            } elseif ($coupon->duration === 'forever') {
+                $durationInfo['description'] = 'Válido indefinidamente';
+            }
+
+            // Información de expiración (del promotion code o del cupón)
+            $expirationInfo = [];
+            if ($promotionCode && $promotionCode->expires_at) {
+                $expirationInfo['expires_at'] = $promotionCode->expires_at;
+                $expirationInfo['expires_at_formatted'] = date('Y-m-d H:i:s', $promotionCode->expires_at);
+            } elseif ($coupon->redeem_by) {
+                $expirationInfo['redeem_by'] = $coupon->redeem_by;
+                $expirationInfo['redeem_by_formatted'] = date('Y-m-d H:i:s', $coupon->redeem_by);
+            }
+
+            // Límites de uso (del promotion code tiene prioridad)
+            $usageInfo = [];
+            if ($promotionCode) {
+                if ($promotionCode->max_redemptions) {
+                    $usageInfo['max_redemptions'] = $promotionCode->max_redemptions;
+                    $usageInfo['times_redeemed'] = $promotionCode->times_redeemed;
+                    $usageInfo['remaining'] = $promotionCode->max_redemptions - $promotionCode->times_redeemed;
+                }
+            } elseif ($coupon->max_redemptions) {
+                $usageInfo['max_redemptions'] = $coupon->max_redemptions;
+                $usageInfo['times_redeemed'] = $coupon->times_redeemed;
+                $usageInfo['remaining'] = $coupon->max_redemptions - $coupon->times_redeemed;
+                
+                if ($usageInfo['remaining'] <= 0) {
+                    return [
+                        'success' => false,
+                        'error' => 'El cupón ha alcanzado su límite de usos'
+                    ];
+                }
+            }
+
+            return [
+                'success' => true,
+                'coupon' => [
+                    'id' => $coupon->id,
+                    'code' => $promotionCode ? $promotionCode->code : $coupon->id,
+                    'name' => $coupon->name,
+                    'valid' => $coupon->valid,
+                    'discount' => $discountInfo,
+                    'duration' => $durationInfo,
+                    'expiration' => $expirationInfo,
+                    'usage' => $usageInfo,
+                    'is_promotion_code' => $promotionCode !== null,
+                    'promotion_code_id' => $promotionCode ? $promotionCode->id : null,
+                    'coupon_id' => $coupon->id
+                ]
+            ];
+        } catch (\Stripe\Exception\InvalidRequestException $e) {
+            return [
+                'success' => false,
+                'error' => $this->mapCouponError($e->getStripeCode(), $e->getMessage())
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $this->offlineMessage
+            ];
+        }
+    }
+
+    // ==================== HELPERS ====================
+
+    /**
+     * Mapea códigos de error de cupones a mensajes en español
+     */
+    private function mapCouponError(string $code, string $originalMessage = ''): string
+    {
+        $errors = [
+            'resource_missing' => 'El cupón no existe',
+            'coupon_expired' => 'El cupón ha expirado',
+            'invalid_coupon' => 'El cupón no es válido',
+            'coupon_not_valid' => 'El cupón no es válido para este producto'
+        ];
+
+        // Si el mensaje original contiene información sobre expiración
+        if (stripos($originalMessage, 'expired') !== false) {
+            return 'El cupón ha expirado';
+        }
+
+        return $errors[$code] ?? 'El cupón no es válido';
+    }
+
     /**
      * Mapea códigos de error de tarjeta a mensajes en español
      */
@@ -590,11 +830,22 @@ class StripeService
  * 
  * @param string $subscriptionId ID de la suscripción actual
  * @param string $newPriceId ID del nuevo precio/plan
+ * @param string|null $couponCode Código de cupón opcional
  * @return array Resultado con el preview del cobro
  */
-public function previewPlanChange(string $subscriptionId, string $newPriceId): array
+public function previewPlanChange(string $subscriptionId, string $newPriceId, ?string $couponCode = null): array
 {
     try {
+        // Validar cupón si se proporcionó
+        $couponInfo = null;
+        if ($couponCode !== null && $couponCode !== '') {
+            $couponValidation = $this->validateCoupon($couponCode);
+            if (!$couponValidation['success']) {
+                return $couponValidation; // Retornar el error del cupón
+            }
+            $couponInfo = $couponValidation['coupon'];
+        }
+        
         // Obtener la suscripción actual
         $subscription = $this->stripe->subscriptions->retrieve($subscriptionId);
         
@@ -621,11 +872,24 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId): a
         if ($subscription->cancel_at_period_end) {
             $currency = strtoupper($newPrice->currency ?? 'mxn');
             
-            return [
+            // Calcular descuento si hay cupón
+            $discountAmount = 0;
+            $amountDue = $newAmount;
+            
+            if ($couponInfo) {
+                if ($couponInfo['discount']['type'] === 'percentage') {
+                    $discountAmount = (int)(($newAmount * $couponInfo['discount']['percent_off']) / 100);
+                } elseif ($couponInfo['discount']['type'] === 'fixed') {
+                    $discountAmount = $couponInfo['discount']['amount_off'];
+                }
+                $amountDue = max(0, $newAmount - $discountAmount);
+            }
+            
+            $response = [
                 'success' => true,
                 'preview' => [
-                    'amount_due' => $newAmount,
-                    'amount_due_formatted' => $this->formatMoney($newAmount, $currency),
+                    'amount_due' => $amountDue,
+                    'amount_due_formatted' => $this->formatMoney($amountDue, $currency),
                     'currency' => $currency,
                     'proration_amount' => 0,
                     'proration_formatted' => $this->formatMoney(0, $currency),
@@ -641,11 +905,24 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId): a
                     'note' => 'La facturación se reactivará al cambiar de plan'
                 ]
             ];
+            
+            // Agregar información del descuento si hay cupón
+            if ($couponInfo) {
+                $response['preview']['discount'] = [
+                    'coupon_code' => $couponInfo['code'],
+                    'coupon_name' => $couponInfo['name'],
+                    'discount_amount' => $discountAmount,
+                    'discount_amount_formatted' => $this->formatMoney($discountAmount, $currency),
+                    'discount_description' => $couponInfo['discount']['description']
+                ];
+            }
+            
+            return $response;
         }
 
         // Crear una invoice preview (upcoming invoice) con el nuevo precio
         // Nota: upcoming() es un método especial que no está en StripeClient, usar la clase estática
-        $invoice = $this->stripe->invoices->createPreview([
+        $invoicePreviewOptions = [
             'customer' => $subscription->customer,
             'subscription' => $subscriptionId,
             'subscription_details' => [
@@ -657,7 +934,20 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId): a
                 ],
                 'proration_behavior' => 'none',
             ],
-        ]);
+        ];
+
+        // Aplicar cupón si es válido
+        if ($couponInfo) {
+            if ($couponInfo['is_promotion_code']) {
+                // Si es un promotion code, usar el promotion_code_id
+                $invoicePreviewOptions['discounts'] = [['promotion_code' => $couponInfo['promotion_code_id']]];
+            } else {
+                // Si es un cupón directo, usar el coupon_id
+                $invoicePreviewOptions['discounts'] = [['coupon' => $couponInfo['coupon_id']]];
+            }
+        }
+
+        $invoice = $this->stripe->invoices->createPreview($invoicePreviewOptions);
 
         // Calcular el monto del prorrateo
         $prorationAmount = 0;
@@ -669,8 +959,16 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId): a
 
         $currency = strtoupper($invoice->currency ?? 'mxn');
         $amountDue = $invoice->amount_due ?? 0;
+        
+        // Calcular el descuento total aplicado
+        $discountAmount = 0;
+        if ($invoice->total_discount_amounts) {
+            foreach ($invoice->total_discount_amounts as $discount) {
+                $discountAmount += $discount->amount;
+            }
+        }
 
-        return [
+        $response = [
             'success' => true,
             'preview' => [
                 'amount_due' => $amountDue,
@@ -689,6 +987,19 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId): a
                 'new_plan_name' => $newPrice->nickname ?? $newPrice->lookup_key ?? 'Plan',
             ]
         ];
+        
+        // Agregar información del descuento si hay cupón
+        if ($couponInfo && $discountAmount > 0) {
+            $response['preview']['discount'] = [
+                'coupon_code' => $couponInfo['code'],
+                'coupon_name' => $couponInfo['name'],
+                'discount_amount' => $discountAmount,
+                'discount_amount_formatted' => $this->formatMoney($discountAmount, $currency),
+                'discount_description' => $couponInfo['discount']['description']
+            ];
+        }
+
+        return $response;
 
     } catch (\Stripe\Exception\ApiErrorException $e) {
         return [
@@ -709,11 +1020,22 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId): a
  * @param string $customerId ID del cliente
  * @param string $priceId ID del precio/plan
  * @param int $trialDays Días de prueba gratuita
+ * @param string|null $couponCode Código de cupón opcional
  * @return array Resultado con el preview del cobro
  */
-public function previewNewSubscription(string $customerId, string $priceId, int $trialDays = 0): array
+public function previewNewSubscription(string $customerId, string $priceId, int $trialDays = 0, ?string $couponCode = null): array
 {
     try {
+        // Validar cupón si se proporcionó
+        $couponInfo = null;
+        if ($couponCode !== null && $couponCode !== '') {
+            $couponValidation = $this->validateCoupon($couponCode);
+            if (!$couponValidation['success']) {
+                return $couponValidation; // Retornar el error del cupón
+            }
+            $couponInfo = $couponValidation['coupon'];
+        }
+        
         $price = $this->stripe->prices->retrieve($priceId);
         
         if (!$price) {
@@ -723,11 +1045,24 @@ public function previewNewSubscription(string $customerId, string $priceId, int 
         $amount = $price->unit_amount ?? 0;
         $currency = strtoupper($price->currency ?? 'mxn');
         
-        // Si hay días de prueba, el cobro inicial es 0
+        // Calcular el descuento si hay cupón
+        $discountAmount = 0;
         $amountDue = $amount;
+        
+        if ($couponInfo) {
+            if ($couponInfo['discount']['type'] === 'percentage') {
+                // Descuento por porcentaje
+                $discountAmount = (int)(($amount * $couponInfo['discount']['percent_off']) / 100);
+            } elseif ($couponInfo['discount']['type'] === 'fixed') {
+                // Descuento por cantidad fija
+                $discountAmount = $couponInfo['discount']['amount_off'];
+            }
+            $amountDue = max(0, $amount - $discountAmount); // No puede ser negativo
+        }
+        
         $billingDate = date('Y-m-d');
 
-        return [
+        $response = [
             'success' => true,
             'preview' => [
                 'amount_due' => $amountDue,
@@ -746,6 +1081,19 @@ public function previewNewSubscription(string $customerId, string $priceId, int 
                 'new_plan_name' => $price->nickname ?? $price->lookup_key ?? 'Plan',
             ]
         ];
+        
+        // Agregar información del descuento si hay cupón
+        if ($couponInfo) {
+            $response['preview']['discount'] = [
+                'coupon_code' => $couponInfo['code'],
+                'coupon_name' => $couponInfo['name'],
+                'discount_amount' => $discountAmount,
+                'discount_amount_formatted' => $this->formatMoney($discountAmount, $currency),
+                'discount_description' => $couponInfo['discount']['description']
+            ];
+        }
+
+        return $response;
 
     } catch (\Stripe\Exception\ApiErrorException $e) {
         return [
