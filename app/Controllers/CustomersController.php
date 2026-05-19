@@ -1030,9 +1030,9 @@ class CustomersController extends Controller
                 }
             }
             
-            // El plan "free" es permanente (sin expiración)
-            $isPermanent = true;
-            $expiresAt = null;
+            // El plan "free" expira 1 mes después de la fecha actual
+            $isPermanent = false;
+            $expiresAt = strtotime('+1 month');
             
             $token = $this->licenseService->generateLicense(
                 $billingId,

@@ -126,6 +126,35 @@ class WhatsAppService
         return $phone;
     }
 
+    /**
+     * Valida que un número de teléfono tenga un formato válido
+     * 
+     * @param string $phone Número de teléfono a validar
+     * @return bool True si el teléfono es válido, false si no
+     */
+    private function isValidPhoneNumber(string $phone): bool
+    {
+        if (empty($phone)) {
+            return false;
+        }
+
+        // Remover espacios y caracteres especiales
+        $cleanPhone = preg_replace('/[^0-9]/', '', $phone);
+
+        // Validar que solo contenga dígitos después de la limpieza
+        if (empty($cleanPhone) || !ctype_digit($cleanPhone)) {
+            return false;
+        }
+
+        // Validar longitud (mínimo 10 dígitos, máximo 15 para formato internacional)
+        $length = strlen($cleanPhone);
+        if ($length < 10 || $length > 15) {
+            return false;
+        }
+
+        return true;
+    }
+
     // ==================== ENVÍO INTERNO ====================
 
     /**
@@ -200,9 +229,23 @@ class WhatsAppService
         ?string $username = null,
         ?string $errorMessage = null
     ): array {
+        // Validar teléfono
+        if (!$this->isValidPhoneNumber($phone)) {
+            $description = "Bienvenida de membresía (teléfono inválido): {$startDate} - {$endDate}";
+            $result = self::createResult(
+                false,
+                'El número de teléfono no tiene un formato válido.',
+                null,
+                0,
+                $subscriptionId
+            );
+            $this->logMessage($customerApiId, $userId, $username, $phone, $description, $result);
+            return $result;
+        }
+
         $phone = $this->normalizePhone($phone);
         $templateConfig = $this->config['templates']['subscription'];
-
+        
         $body = [
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
@@ -252,6 +295,20 @@ class WhatsAppService
         ?string $username = null,
         ?string $errorMessage = null
     ): array {
+        // Validar teléfono
+        if (!$this->isValidPhoneNumber($phone)) {
+            $description = "Aviso de membresía (teléfono inválido): vence en {$days}";
+            $result = self::createResult(
+                false,
+                'El número de teléfono no tiene un formato válido.',
+                null,
+                0,
+                $subscriptionId
+            );
+            $this->logMessage($customerApiId, $userId, $username, $phone, $description, $result);
+            return $result;
+        }
+
         $phone = $this->normalizePhone($phone);
         $templateConfig = $this->config['templates']['warning_subscription'];
 
@@ -299,6 +356,20 @@ class WhatsAppService
         ?string $username = null,
         ?string $errorMessage = null
     ): array {
+        // Validar teléfono
+        if (!$this->isValidPhoneNumber($phone)) {
+            $description = "Aviso de membresía finalizada (teléfono inválido)";
+            $result = self::createResult(
+                false,
+                'El número de teléfono no tiene un formato válido.',
+                null,
+                0,
+                $subscriptionId
+            );
+            $this->logMessage($customerApiId, $userId, $username, $phone, $description, $result);
+            return $result;
+        }
+
         $phone = $this->normalizePhone($phone);
         $templateConfig = $this->config['templates']['finalized_subscription'];
 
@@ -340,6 +411,20 @@ class WhatsAppService
         ?string $username = null,
         ?string $errorMessage = null
     ): array {
+        // Validar teléfono
+        if (!$this->isValidPhoneNumber($phone)) {
+            $description = "Aviso de último día (teléfono inválido)";
+            $result = self::createResult(
+                false,
+                'El número de teléfono no tiene un formato válido.',
+                null,
+                0,
+                $subscriptionId
+            );
+            $this->logMessage($customerApiId, $userId, $username, $phone, $description, $result);
+            return $result;
+        }
+
         $phone = $this->normalizePhone($phone);
         $templateConfig = $this->config['templates']['warning_last_day'];
 

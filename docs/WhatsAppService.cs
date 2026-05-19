@@ -334,8 +334,45 @@ namespace Gym.Services
 
             return value.Substring(0, maxLength);
         }
+
+        private static bool IsValidPhoneNumber(string phoneNumber)
+        {
+            if (string.IsNullOrWhiteSpace(phoneNumber))
+            {
+                return false;
+            }
+
+            // Remover espacios y caracteres especiales
+            string cleanPhone = phoneNumber.Trim().Replace(" ", "").Replace("-", "").Replace("(", "").Replace(")", "").Replace("+", "");
+
+            // Validar que solo contenga dígitos
+            if (!cleanPhone.All(char.IsDigit))
+            {
+                return false;
+            }
+
+            // Validar longitud (mínimo 10 dígitos, máximo 15 para formato internacional)
+            if (cleanPhone.Length < 10 || cleanPhone.Length > 15)
+            {
+                return false;
+            }
+
+            return true;
+        }
           public static async Task<bool> SendMessageLastDay(string recipientPhone,string customer = "tu club",string? userId = null)
                 {
+            // Validar teléfono
+            if (!IsValidPhoneNumber(recipientPhone))
+            {
+                string invalidMessage = "Número de teléfono inválido: último día de membresía";
+                LogMessageAttempt(userId, recipientPhone, invalidMessage, new WhatsAppMessageResult
+                {
+                    Success = false,
+                    ErrorMessage = "El número de teléfono no tiene un formato válido."
+                });
+                return false;
+            }
+
             string safeCustomer = string.IsNullOrWhiteSpace(customer) ? "tu club" : customer.Trim();
             // Cuerpo de la solicitud JSON
             string jsonBody = @"{
@@ -357,6 +394,18 @@ namespace Gym.Services
 
         public static async Task<bool> SendMessageWarning(string recipientPhone, string customer, string days, string? userId = null)
         {
+            // Validar teléfono
+            if (!IsValidPhoneNumber(recipientPhone))
+            {
+                string invalidMessage = string.Format("Aviso de membresía: vence en {0}", days ?? "unos días");
+                LogMessageAttempt(userId, recipientPhone, invalidMessage, new WhatsAppMessageResult
+                {
+                    Success = false,
+                    ErrorMessage = "El número de teléfono no tiene un formato válido."
+                });
+                return false;
+            }
+
             string safeCustomer = string.IsNullOrWhiteSpace(customer) ? "tu club" : customer.Trim();
             string safeDays = string.IsNullOrWhiteSpace(days) ? "unos días" : days.Trim();
 
@@ -395,6 +444,18 @@ namespace Gym.Services
 
         public static async Task<bool> SendMessageFinished(string recipientPhone, string customer, string? userId = null)
         {
+            // Validar teléfono
+            if (!IsValidPhoneNumber(recipientPhone))
+            {
+                string invalidMessage = "Aviso de membresía finalizada";
+                LogMessageAttempt(userId, recipientPhone, invalidMessage, new WhatsAppMessageResult
+                {
+                    Success = false,
+                    ErrorMessage = "El número de teléfono no tiene un formato válido."
+                });
+                return false;
+            }
+
             string safeCustomer = string.IsNullOrWhiteSpace(customer) ? "tu club" : customer.Trim();
 
             string jsonBody = @"{
@@ -429,6 +490,18 @@ namespace Gym.Services
 
         public static async Task<bool> SendMessageInitSubscription(string recipientPhone, string name, string customer, string StartDate, string end_date, string? userId = null,bool sync = false)
         {
+            // Validar teléfono
+            if (!IsValidPhoneNumber(recipientPhone))
+            {
+                string invalidMessage = string.Format("Bienvenida de membresía: {0} - {1}", StartDate ?? "sin fecha", end_date ?? "sin fecha");
+                LogMessageAttempt(userId, recipientPhone, invalidMessage, new WhatsAppMessageResult
+                {
+                    Success = false,
+                    ErrorMessage = "El número de teléfono no tiene un formato válido."
+                });
+                return false;
+            }
+
             string safeName = string.IsNullOrWhiteSpace(name) ? "Cliente" : name.Trim();
             string safeCustomer = string.IsNullOrWhiteSpace(customer) ? "tu club" : customer.Trim();
             string safeStart = string.IsNullOrWhiteSpace(StartDate) ? "sin fecha" : StartDate.Trim();
@@ -494,6 +567,18 @@ namespace Gym.Services
                 };
                 LogMessageAttempt(userId, phone, message, invalid);
                 return invalid;
+            }
+
+            // Validar formato del teléfono
+            if (!IsValidPhoneNumber(phone))
+            {
+                var invalidFormat = new WhatsAppMessageResult
+                {
+                    Success = false,
+                    ErrorMessage = "El número de teléfono no tiene un formato válido."
+                };
+                LogMessageAttempt(userId, phone, message, invalidFormat);
+                return invalidFormat;
             }
 
             if (totalMessageSendMonth + 1 > StripeService.StripeService.GetRulePlanActive().MaxMessages)
