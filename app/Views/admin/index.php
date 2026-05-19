@@ -229,6 +229,24 @@ ob_start();
                                             </div>
                                         </div>
                                     </div>
+                                    <div class="col-md-6">
+                                        <div class="card h-100 border-0 shadow-sm hover-shadow">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex align-items-center mb-3">
+                                                    <span class="icon-circle text-white me-3" style="background-color: #6610f2;">
+                                                        <i class="fas fa-file-signature"></i>
+                                                    </span>
+                                                    <div>
+                                                        <h5 class="card-title mb-1">Licencias</h5>
+                                                        <small class="text-muted">Historial y generación manual de licencias para clientes</small>
+                                                    </div>
+                                                </div>
+                                                <a href="<?= app_url('/admin/licenses') ?>" class="btn mt-auto" style="background-color: #6610f2; color: white;">
+                                                    Gestionar licencias <i class="fas fa-file-signature ms-2"></i>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

@@ -285,6 +285,14 @@ class StripeService
     public function createSubscription(string $customerId, string $priceId, int $trialDays = 0, string $paymentBehavior = 'error_if_incomplete', ?string $couponCode = null): array
     {
         try {
+            // Obtener información del precio para verificar su tipo
+            $price = $this->stripe->prices->retrieve($priceId);
+            
+            // Si es un precio one-time (permanente), usar createOneTimePayment
+            if ($price->type === 'one_time') {
+                return $this->createOneTimePayment($customerId, $priceId, $couponCode);
+            }
+
             // Validar cupón si se proporcionó
             $couponInfo = null;
             if ($couponCode !== null && $couponCode !== '') {
@@ -294,6 +302,17 @@ class StripeService
                 }
                 $couponInfo = $couponValidation['coupon'];
             }
+
+            // si se mando un cupon y el precio es anual entonces no se acepta
+                if($couponInfo && $priceId ){
+                    $price = $this->stripe->prices->retrieve($priceId);
+                    if($price->recurring && $price->recurring->interval === 'year') {
+                        return [
+                            'success' => false,
+                            'error' => 'Los cupones no son aplicables a planes anuales'
+                        ];
+                    }
+                }
 
             $options = [
                 'customer' => $customerId,
@@ -336,7 +355,7 @@ class StripeService
                 'success' => true,
                 'subscription_id' => $subscription->id,
                 'status' => $subscription->status,
-                'current_period_end' => $subscription->current_period_end
+                'current_period_end' => $subscription->current_period_end ?? $subscription->items->data[0]->current_period_end ?? null
             ];
         } catch (\Stripe\Exception\InvalidRequestException $e) {
             // Error específico de test_clock mismatch
@@ -366,6 +385,16 @@ class StripeService
     }
 
     /**
+     * Obtiene por el lookup_key las reglas y límites de un plan para aplicar las restricciones correspondientes en la aplicación
+     */
+    public function getPlanRulesByLookupKey(string $lookupKey): ?array
+    {
+        $config = require __DIR__ . '/../../config/stripe.php';
+        $plansConfig = $config['plans'] ?? [];
+        return $plansConfig[$lookupKey] ?? null;
+    }
+
+    /**
      * Obtiene la suscripción activa de un cliente, si no se encuentra devuelve la ultima suscripción aunque esté cancelada
      */
     public function getActiveSubscription(string $customerId): array
@@ -385,12 +414,34 @@ class StripeService
                 }
             }
 
+            $permanentLicense = null;
+            try {
+                $customer = $this->stripe->customers->retrieve($customerId);
+                $permanentLicensePriceId = $customer->metadata->permanent_license_price_id ?? null;
+                if ($permanentLicensePriceId) {
+                    $permPrice = $this->stripe->prices->retrieve($permanentLicensePriceId);
+                    $permanentLicense = [
+                        'id' => null,
+                        'status' => 'active',
+                        'lookup_key' => $permPrice->lookup_key ?? null,
+                        'unit_amount' => $permPrice->unit_amount ?? null,
+                        'cancel_at_period_end' => false,
+                        'current_period_end' => null,
+                        'price_name' => $permPrice->nickname ?? null,
+                        'is_permanent_license' => true,
+                    ];
+                }
+            } catch (\Exception $e) {
+                // No interrumpir si falla la consulta de licencia permanente
+            }
+
             if (!$active) {
                 if(count($subscriptions->data) === 0) {
                     return [
                         'success' => true,
                         'has_subscription' => false,
-                        'subscription' => null
+                        'subscription' => null,
+                        'permanent_license' => $permanentLicense
                     ];
                     
                 }
@@ -406,9 +457,12 @@ class StripeService
                         'cancel_at_period_end' => $last->cancel_at_period_end,
                         'current_period_end' => $last->current_period_end ?? $last->items->data[0]->current_period_end ?? null,
                         'price_name' => $last->items->data[0]->price->nickname ?? null
-                    ] : null
+                    ] : null,
+                    'permanent_license' => $permanentLicense
                 ];
             }
+
+
 
             $price = $active->items->data[0]->price ?? null;
             
@@ -423,7 +477,8 @@ class StripeService
                     'unit_amount' => $price->unit_amount ?? null,
                     'cancel_at_period_end' => $active->cancel_at_period_end,
                     'current_period_end' => $active->current_period_end ?? $active->items->data[0]->current_period_end ?? null,
-                    'price_name' => $price->nickname ?? null
+                    'price_name' => $price->nickname ?? null,
+                    'permanent_license' => $permanentLicense
 
                 ]
             ];
@@ -447,7 +502,10 @@ class StripeService
 
             return [
                 'success' => true,
-                'subscription_id' => $subscription->id
+                'subscription_id' => $subscription->id,
+                'current_period_end' => $subscription->current_period_end ?? $subscription->items->data[0]->current_period_end ?? null,
+                'status' => $subscription->status,
+                'cancel_at_period_end' => $subscription->cancel_at_period_end
             ];
         } catch (\Exception $e) {
             return [
@@ -467,6 +525,20 @@ class StripeService
     public function changePlan(string $subscriptionId, string $newPriceId, ?string $couponCode = null): array
     {
         try {
+            // Obtener información del nuevo precio
+            $newPrice = $this->stripe->prices->retrieve($newPriceId);
+            
+            // Si es un precio one-time, no se puede "cambiar" a él desde una suscripción
+            // Se debe cancelar la suscripción y crear un pago único por separado
+            if ($newPrice->type === 'one_time') {
+                return [
+                    'success' => false,
+                    'error' => 'No se puede cambiar una suscripción a un plan permanente. Debe cancelar la suscripción y adquirir el plan permanente por separado.',
+                    'requires_separate_purchase' => true,
+                    'price_id' => $newPriceId
+                ];
+            }
+
             // Validar cupón si se proporcionó
             $couponInfo = null;
             if ($couponCode !== null && $couponCode !== '') {
@@ -477,15 +549,35 @@ class StripeService
                 $couponInfo = $couponValidation['coupon'];
             }
 
+              // si se mando un cupon y el precio es anual entonces no se acepta
+                if($couponInfo && $newPriceId ){
+                    $price = $this->stripe->prices->retrieve($newPriceId);
+                    if($price->recurring && $price->recurring->interval === 'year') {
+                        return [
+                            'success' => false,
+                            'error' => 'Los cupones no son aplicables a planes anuales'
+                        ];
+                    }
+                }
+
             $subscription = $this->stripe->subscriptions->retrieve($subscriptionId, [
                 'expand' => ['items.data.price']
             ]);
 
             $currentItemId = $subscription->items->data[0]->id ?? null;
 
+            // Determinar si el intervalo de facturación cambia (ej. mensual → anual).
+            // Stripe solo acepta 'unchanged' cuando el intervalo NO cambia.
+            // Si el intervalo cambia se usa 'now' para iniciar el nuevo ciclo inmediatamente.
+            $currentInterval = $subscription->items->data[0]->price->recurring->interval ?? null;
+            $newPrice = $this->stripe->prices->retrieve($newPriceId);
+            $newInterval = $newPrice->recurring->interval ?? null;
+            $intervalChanges = $currentInterval !== $newInterval;
+
             $updateOptions = [
-                'proration_behavior' => 'none',
+                'proration_behavior' => $intervalChanges ? 'create_prorations' : 'none',
                 'cancel_at_period_end' => false,
+                'billing_cycle_anchor' => $intervalChanges ? 'now' : 'unchanged',
                 'items' => []
             ];
 
@@ -513,7 +605,9 @@ class StripeService
 
             return [
                 'success' => true,
-                'subscription_id' => $updated->id
+                'subscription_id' => $updated->id,
+                'current_period_end' => $updated->current_period_end ?? $updated->items->data[0]->current_period_end ?? null,
+                'status' => $updated->status
             ];
         } catch (\Stripe\Exception\CardException $e) {
             return [
@@ -556,6 +650,7 @@ class StripeService
             $prices = $this->stripe->prices->all([
                 'product' => $productId,
                 'active' => true,
+                'limit' => 100,
                 'expand' => ['data.product']
             ]);
 
@@ -707,6 +802,8 @@ class StripeService
             } elseif ($coupon->redeem_by) {
                 $expirationInfo['redeem_by'] = $coupon->redeem_by;
                 $expirationInfo['redeem_by_formatted'] = date('Y-m-d H:i:s', $coupon->redeem_by);
+            }else{
+                $expirationInfo = null;
             }
 
             // Límites de uso (del promotion code tiene prioridad)
@@ -836,6 +933,19 @@ class StripeService
 public function previewPlanChange(string $subscriptionId, string $newPriceId, ?string $couponCode = null): array
 {
     try {
+        // Obtener información del nuevo precio para verificar su tipo
+        $newPrice = $this->stripe->prices->retrieve($newPriceId);
+        
+        // Si es un precio one-time, no se puede cambiar a él desde una suscripción
+        if ($newPrice->type === 'one_time') {
+            return [
+                'success' => false,
+                'error' => 'No se puede cambiar una suscripción a un plan permanente. Debe cancelar la suscripción y adquirir el plan permanente por separado.',
+                'requires_separate_purchase' => true,
+                'price_id' => $newPriceId
+            ];
+        }
+
         // Validar cupón si se proporcionó
         $couponInfo = null;
         if ($couponCode !== null && $couponCode !== '') {
@@ -845,9 +955,22 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId, ?s
             }
             $couponInfo = $couponValidation['coupon'];
         }
+
+        // si se mando un cupon y el precio es anual entonces no se acepta
+        if($couponInfo && $newPriceId ){
+            $price = $this->stripe->prices->retrieve($newPriceId);
+            if($price->recurring && $price->recurring->interval === 'year') {
+                return [
+                    'success' => false,
+                    'error' => 'Los cupones no son aplicables a planes anuales'
+                ];
+            }
+        }
         
         // Obtener la suscripción actual
-        $subscription = $this->stripe->subscriptions->retrieve($subscriptionId);
+        $subscription = $this->stripe->subscriptions->retrieve($subscriptionId, [
+            'expand' => ['items.data.price']
+        ]);
         
         if (!$subscription || $subscription->status === 'canceled') {
             return ['success' => false, 'error' => 'Suscripción no encontrada o cancelada'];
@@ -859,9 +982,8 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId, ?s
             return ['success' => false, 'error' => 'No se encontró el plan actual'];
         }
 
-        // Obtener el precio actual y el nuevo para comparar
+        // Obtener el precio actual para comparar (newPrice ya se obtuvo al inicio)
         $currentPrice = $this->stripe->prices->retrieve($currentItem->price->id);
-        $newPrice = $this->stripe->prices->retrieve($newPriceId);
 
         $currentAmount = $currentPrice->unit_amount ?? 0;
         $newAmount = $newPrice->unit_amount ?? 0;
@@ -922,6 +1044,12 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId, ?s
 
         // Crear una invoice preview (upcoming invoice) con el nuevo precio
         // Nota: upcoming() es un método especial que no está en StripeClient, usar la clase estática
+        // Si el intervalo cambia (ej. mensual → anual), el ciclo se ancla en 'now'.
+        // Si es el mismo intervalo, se mantiene la fecha actual de facturación.
+        $currentInterval = $currentItem->price->recurring->interval ?? null;
+        $newInterval = $newPrice->recurring->interval ?? null;
+        $intervalChanges = $currentInterval !== $newInterval;
+
         $invoicePreviewOptions = [
             'customer' => $subscription->customer,
             'subscription' => $subscriptionId,
@@ -932,7 +1060,8 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId, ?s
                         'price' => $newPriceId,
                     ],
                 ],
-                'proration_behavior' => 'none',
+                'proration_behavior' => $intervalChanges ? 'create_prorations' : 'none',
+                'billing_cycle_anchor' => $intervalChanges ? 'now' : 'unchanged',
             ],
         ];
 
@@ -981,9 +1110,13 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId, ?s
                 'new_plan_formatted' => $this->formatMoney($newAmount, $currency),
                 'current_plan_amount' => $currentAmount,
                 'current_plan_formatted' => $this->formatMoney($currentAmount, $currency),
-                'billing_date' => date('Y-m-d', $invoice->next_payment_attempt ?? time()),
+                // Si el intervalo cambia, el cobro es inmediato (billing_cycle_anchor='now')
+                // Si el intervalo es el mismo, se cobra en la próxima fecha de renovación
+                'billing_date' => $intervalChanges
+                    ? date('Y-m-d')
+                    : date('Y-m-d', $invoice->next_payment_attempt ?? time()),
                 'is_upgrade' => $isUpgrade,
-                'immediate_charge' => $isUpgrade && $amountDue > 0,
+                'immediate_charge' => $intervalChanges && $amountDue > 0,
                 'new_plan_name' => $newPrice->nickname ?? $newPrice->lookup_key ?? 'Plan',
             ]
         ];
@@ -1035,12 +1168,26 @@ public function previewNewSubscription(string $customerId, string $priceId, int 
             }
             $couponInfo = $couponValidation['coupon'];
         }
+
+         // si se mando un cupon y el precio es anual entonces no se acepta
+        if($couponInfo && $priceId ){
+            $price = $this->stripe->prices->retrieve($priceId);
+            if($price->recurring && $price->recurring->interval === 'year') {
+                return [
+                    'success' => false,
+                    'error' => 'Los cupones no son aplicables a planes anuales'
+                ];
+            }
+        }
         
         $price = $this->stripe->prices->retrieve($priceId);
         
         if (!$price) {
             return ['success' => false, 'error' => 'Precio no encontrado'];
         }
+
+        // Detectar si es un precio one-time (permanente)
+        $isOneTime = $price->type === 'one_time';
 
         $amount = $price->unit_amount ?? 0;
         $currency = strtoupper($price->currency ?? 'mxn');
@@ -1077,8 +1224,9 @@ public function previewNewSubscription(string $customerId, string $priceId, int 
                 'current_plan_formatted' => $this->formatMoney(0, $currency),
                 'billing_date' => $billingDate,
                 'is_upgrade' => true,
-                'immediate_charge' => false,
+                'immediate_charge' => true,
                 'new_plan_name' => $price->nickname ?? $price->lookup_key ?? 'Plan',
+                'is_one_time_payment' => $isOneTime,
             ]
         ];
         
@@ -1210,4 +1358,129 @@ public function getCurrentPlan(string $customerId): array
         ];
     }
 }
+
+    /**
+     * Crea un pago único (one-time) para licencias permanentes
+     * 
+     * @param string $customerId ID del cliente en Stripe
+     * @param string $priceId ID del precio one-time
+     * @param string|null $couponCode Código de cupón opcional
+     * @return array Resultado del pago
+     */
+    public function createOneTimePayment(string $customerId, string $priceId, ?string $couponCode = null): array
+    {
+        try {
+            // Validar cupón si se proporcionó
+            // $couponInfo = null;
+            // if ($couponCode !== null && $couponCode !== '') {
+            //     $couponValidation = $this->validateCoupon($couponCode);
+            //     if (!$couponValidation['success']) {
+            //         return $couponValidation;
+            //     }
+            //     $couponInfo = $couponValidation['coupon'];
+            // }
+
+            // Obtener información del precio
+            $price = $this->stripe->prices->retrieve($priceId);
+            
+            if (!$price || $price->type !== 'one_time') {
+                return [
+                    'success' => false,
+                    'error' => 'El precio especificado no es de tipo one-time'
+                ];
+            }
+
+            // Usar PaymentIntent en lugar de Invoice para pagos one-time
+            $paymentIntentOptions = [
+                'amount' => $price->unit_amount,
+                'currency' => $price->currency,
+                'customer' => $customerId,
+                'description' => $price->nickname ?? 'Licencia Permanente - ' . ($price->lookup_key ?? ''),
+                'confirm' => true, // Confirmar automáticamente el pago
+                'off_session' => true, // Usar la tarjeta guardada del cliente
+                'metadata' => [
+                    'price_id' => $priceId,
+                    'lookup_key' => $price->lookup_key ?? '',
+                    'is_permanent_license' => 'true'
+                ]
+            ];
+
+            // Aplicar cupón si es válido
+            // if ($couponInfo) {
+            //     if ($couponInfo['is_promotion_code']) {
+            //         $paymentIntentOptions['discounts'] = [['promotion_code' => $couponInfo['promotion_code_id']]];
+            //     } else {
+            //         $paymentIntentOptions['discounts'] = [['coupon' => $couponInfo['coupon_id']]];
+            //     }
+            // }
+
+            $paymentIntent = $this->stripe->paymentIntents->create($paymentIntentOptions);
+
+            // Verificar el estado del pago
+            if ($paymentIntent->status !== 'succeeded') {
+                return [
+                    'success' => false,
+                    'error' => 'El pago no se completó. Estado: ' . $paymentIntent->status,
+                    'payment_intent' => $paymentIntent
+                ];
+            }
+
+            // Guardar el price_id en metadata del cliente para referencia futura
+            $this->stripe->customers->update($customerId, [
+                'metadata' => [
+                    'permanent_license_price_id' => $priceId,
+                    'permanent_license_purchased_at' => date('Y-m-d H:i:s')
+                ]
+            ]);
+
+            // Cancelar todas las suscripciones activas del cliente
+            // ya que la licencia permanente no requiere facturación periódica
+            $canceledSubscriptions = [];
+            try {
+                $subscriptions = $this->stripe->subscriptions->all([
+                    'customer' => $customerId,
+                    'limit' => 500,
+                ]);
+
+                foreach ($subscriptions->data as $subscription) {
+                    // Cancelar solo suscripciones activas o en período de prueba
+                    if (in_array($subscription->status, ['active', 'trialing'])) {
+                        $canceledSub = $this->stripe->subscriptions->cancel($subscription->id);
+                        $canceledSubscriptions[] = $canceledSub->id;
+                    }
+                }
+            } catch (\Exception $e) {
+                // No interrumpir el flujo si falla la cancelación de suscripciones
+                // El pago ya se procesó exitosamente
+            }
+
+            return [
+                'success' => true,
+                'payment_intent_id' => $paymentIntent->id,
+                'status' => $paymentIntent->status,
+                'amount_paid' => $paymentIntent->amount,
+                'is_permanent_license' => true,
+                'price_id' => $priceId,
+                'lookup_key' => $price->lookup_key ?? null,
+                'canceled_subscriptions' => $canceledSubscriptions,
+            ];
+
+        } catch (\Stripe\Exception\CardException $e) {
+            return [
+                'success' => false,
+                'error' => $this->mapCardError($e->getStripeCode(), $e->getDeclineCode())
+            ];
+        } catch (\Stripe\Exception\InvalidRequestException $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $this->offlineMessage,
+                'debug' => $e->getMessage()
+            ];
+        }
+    }
 }

@@ -4,11 +4,15 @@ namespace Controllers;
 
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Services/StripeService.php';
+require_once __DIR__ . '/../Services/LicenseService.php';
 require_once __DIR__ . '/../Helpers/ApiHelper.php';
+require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
 
 use Core\Controller;
 use App\Services\StripeService;
+use App\Services\LicenseService;
 use ApiHelper;
+use Models\CustomerRegistryModel;
 
 /**
  * Controller para endpoints de Stripe
@@ -19,6 +23,7 @@ use ApiHelper;
 class StripeController extends Controller
 {
     private StripeService $stripeService;
+    private ?LicenseService $licenseService = null;
 
     public function __construct()
     {
@@ -33,6 +38,155 @@ class StripeController extends Controller
             $config['secret_key'],
             $testClockId
         );
+
+        try {
+            $this->licenseService = new LicenseService();
+        } catch (\Exception $e) {
+            // LicenseService no disponible si no están configuradas las claves
+        }
+    }
+
+    /**
+     * Obtiene el cliente autenticado desde la sesión JWT.
+     * Devuelve null si no hay sesión activa.
+     */
+    private function getCustomerFromSession(): ?array
+    {
+        $customerId = ApiHelper::getCustomerIdFromSession();
+        if ($customerId === null) {
+            return null;
+        }
+        $model = new CustomerRegistryModel();
+        return $model->getCustomer($customerId) ?? null;
+    }
+
+    /**
+     * Obtiene el TokenJwt actual del cliente.
+     * Si no existe, crea uno nuevo, lo guarda y lo devuelve.
+     */
+    private function resolveOrCreateCustomerJwt(?string $internalCustomerId, ?string $machineToken = null): ?string
+    {
+        if (!$internalCustomerId) {
+            return null;
+        }
+
+        $db = new \Database();
+        $row = $db->fetchOne(
+            'SELECT Id, Token, TokenJwt FROM Customers WHERE Id = ? LIMIT 1',
+            [$internalCustomerId]
+        );
+
+        if (!$row) {
+            return null;
+        }
+
+        $currentJwt = trim((string)($row['TokenJwt'] ?? ''));
+        if ($currentJwt !== '') {
+            return $currentJwt;
+        }
+
+        require_once __DIR__ . '/../Services/JwtService.php';
+        $jwtService = new \App\Services\JwtService();
+        $newJwt = $jwtService->createToken([
+            'cid' => $row['Id'],
+            'mkt' => $machineToken ?: ($row['Token'] ?? ''),
+            'typ' => 'customer',
+        ], 0);
+
+        $db->update(
+            'Customers',
+            [
+                'TokenJwt'          => $newJwt,
+                'TokenJwtCreatedAt' => date('Y-m-d H:i:s'),
+                'TokenJwtExpiresAt' => null,
+            ],
+            'Id = ?',
+            [$row['Id']]
+        );
+
+        return $newJwt;
+    }
+
+    /**
+     * Genera un token de licencia firmado, lo agrega al array de resultado y lo registra en LicenseLogs.
+     * No lanza excepciones — si falla, simplemente no agrega el token.
+     *
+     * @param string $createdBy       'customer' (default) o 'admin'
+     * @param string|null $adminUsername  Nombre del admin si $createdBy = 'admin'
+     * @param string|null $internalCustomerId  ID interno del cliente en ClubCheck (Customers.Id)
+     */
+    public function attachLicense(
+        array &$result,
+        string $stripeCustomerId,
+        string $customerName,
+        string $customerEmail,
+        string $planLookupKey,
+        string $planName,
+        bool $isPermanent,
+        ?int $expiresAt,
+        ?string $machineToken,
+        string $createdBy = 'customer',
+        ?string $adminUsername = null,
+        ?string $internalCustomerId = null
+    ): void {
+        if ($this->licenseService === null) {
+            return;
+        }
+        try {
+            // Resolver reglas del plan desde la configuración
+            $config = require __DIR__ . '/../../config/stripe.php';
+            $plans  = $config['plans'] ?? [];
+            $rules  = null;
+            foreach ($plans as $plan) {
+                if (($plan['lookup_key'] ?? '') === $planLookupKey) {
+                    $rules = $plan['rules'] ?? null;
+                    break;
+                }
+            }
+
+            $customerJwt = $this->resolveOrCreateCustomerJwt($internalCustomerId, $machineToken);
+
+            $token = $this->licenseService->generateLicense(
+                $stripeCustomerId,
+                $customerName,
+                $customerEmail,
+                $planLookupKey,
+                $planName,
+                $isPermanent,
+                $expiresAt,
+                $machineToken,
+                $rules,
+                $customerJwt
+            );
+            $result['license_token'] = $token;
+            $result['license_file']  = $this->licenseService->generateLicenseFile(
+                $token, $customerName, $planName, $isPermanent, $expiresAt, $machineToken, $rules
+            );
+
+            // Registrar en el historial de licencias
+            try {
+                require_once __DIR__ . '/../Models/LicenseLogModel.php';
+                $logModel = new \Models\LicenseLogModel();
+                $logModel->createLog([
+                    'CustomerId'    => $internalCustomerId,
+                    'BillingId'     => $stripeCustomerId,
+                    'CustomerName'  => $customerName,
+                    'CustomerEmail' => $customerEmail,
+                    'PlanLookupKey' => $planLookupKey,
+                    'PlanName'      => $planName,
+                    'IsPermanent'   => $isPermanent,
+                    'ExpiresAt'     => $expiresAt ? date('Y-m-d H:i:s', $expiresAt) : null,
+                    'MachineToken'  => $machineToken,
+                    'LicenseToken'  => $token,
+                    'CreatedBy'     => $createdBy,
+                    'AdminUsername' => $adminUsername,
+                ]);
+            } catch (\Exception $e) {
+                // No interrumpir si falla el registro
+            }
+        } catch (\Exception $e) {
+            // No interrumpir el flujo si falla la generación de licencia
+        }
     }
 
     private function requireFields(array $input, array $fields): void
@@ -42,6 +196,129 @@ class StripeController extends Controller
                 ApiHelper::respond(['success' => false, 'error' => "Campo requerido: {$field}"], 400);
             }
         }
+    }
+
+    // ==================== VALIDAR LICENCIA ====================
+
+    /**
+     * POST /api/licenses/validate
+     *
+     * Valida un licenseToken (JWT firmado con RSA), busca al cliente,
+     * consulta su suscripción activa en Stripe y devuelve un apiToken (HMAC JWT)
+     * listo para usarse como sesión, junto con los datos actuales del cliente.
+     *
+     * Body: { "licenseToken": "<JWT de licencia>" }
+     *
+     * Respuesta exitosa:
+     * {
+     *   "status": "success",
+     *   "license": { sub, name, email, plan, plan_name, permanent, machine, exp, iat, rules },
+     *   "customer": { customerId, name, email, phone, billingId, token, ... },
+     *   "subscription": { ...datos de Stripe... },
+     *   "apiToken": "<JWT de sesión HMAC>"
+     * }
+     */
+    public function validateLicense(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsPost();
+
+        if ($this->licenseService === null) {
+            ApiHelper::respond(['error' => 'El servicio de licencias no está disponible (verifique las claves RSA en .env)'], 503);
+        }
+
+        $input        = ApiHelper::getJsonBody();
+        $licenseToken = trim($input['licenseToken'] ?? '');
+
+        if ($licenseToken === '') {
+            ApiHelper::respond(['error' => 'licenseToken es obligatorio'], 422);
+        }
+
+        // 1. Verificar y decodificar la licencia
+        $verification = $this->licenseService->verifyLicense($licenseToken);
+
+        if (!$verification['valid']) {
+            $code = ($verification['error'] ?? '') === 'Licencia expirada' ? 403 : 401;
+            ApiHelper::respond([
+                'error'   => $verification['error'] ?? 'Licencia inválida',
+                'payload' => $verification['payload'] ?? null,
+            ], $code);
+        }
+
+        $licPayload = $verification['payload'];
+        $billingId  = $licPayload['sub']   ?? null;   // sub = Stripe cus_xxx
+        $email      = $licPayload['email'] ?? null;
+
+        // 2. Buscar el cliente en la BD por BillingId o por email
+        $registry = new CustomerRegistryModel();
+        $rawDb    = new \Database();
+        $customer = null;
+
+        if ($billingId) {
+            $row = $rawDb->fetchOne(
+                'SELECT * FROM Customers WHERE BillingId = ? LIMIT 1',
+                [$billingId]
+            );
+            if ($row) {
+                $customer = $registry->getCustomer($row['Id']);
+            }
+        }
+
+        if (!$customer && $email) {
+            $row = $rawDb->fetchOne(
+                'SELECT * FROM Customers WHERE Email = ? LIMIT 1',
+                [$email]
+            );
+            if ($row) {
+                $customer = $registry->getCustomer($row['Id']);
+            }
+        }
+
+        if (!$customer) {
+            ApiHelper::respond(['error' => 'No se encontró ningún cliente asociado a esta licencia'], 404);
+        }
+
+        if (!($customer['isActive'] ?? true)) {
+            ApiHelper::respond(['error' => 'El cliente está desactivado'], 403);
+        }
+
+        // 3. Consultar suscripción activa en Stripe
+        $subscription = null;
+        if (!empty($customer['billingId'])) {
+            $stripeResult = $this->stripeService->getActiveSubscription($customer['billingId']);
+            if ($stripeResult['success'] ?? false) {
+                $subscription = $stripeResult;
+            }
+        }
+
+        // 4. Validar que el JWT embebido en la licencia sea el mismo del customer actual
+        $licenseCustomerJwt = trim((string)($licPayload['customer_jwt'] ?? ''));
+        $currentCustomerJwt = $this->resolveOrCreateCustomerJwt($customer['customerId'], $customer['token'] ?? null);
+
+        if ($licenseCustomerJwt === '') {
+            ApiHelper::respond(['error' => 'La licencia no contiene customer_jwt'], 401);
+        }
+
+        if ($currentCustomerJwt === null || !hash_equals($currentCustomerJwt, $licenseCustomerJwt)) {
+            ApiHelper::respond(['error' => 'La licencia se ha desactivado'], 401);
+        }
+
+        ApiHelper::respond([
+            'status'       => 'success',
+            'license'      => $licPayload,
+            'customer'     => [
+                'customerId' => $customer['customerId'],
+                'name'       => $customer['name'],
+                'email'      => $customer['email'],
+                'phone'      => $customer['phone'],
+                'billingId'  => $customer['billingId'],
+                'token'      => $customer['token'],
+                'deviceName' => $customer['deviceName'],
+                'isActive'   => $customer['isActive'],
+            ],
+            'subscription' => $subscription,
+            'apiToken'     => $currentCustomerJwt,
+        ], 200);
     }
 
     // ==================== CLIENTES ====================
@@ -187,9 +464,38 @@ class StripeController extends Controller
             ApiHelper::respond(['success' => false, 'error' => 'Se requiere price_id o plan_lookup_key válido'], 400);
         }
 
-        $trialDays = (int)($input['trial_days'] ?? 0);
+        $trialDays  = (int)($input['trial_days'] ?? 0);
         $couponCode = $input['coupon_code'] ?? null;
-        $result = $this->stripeService->createSubscription($customerId, $priceId, $trialDays, 'error_if_incomplete', $couponCode);
+        $result     = $this->stripeService->createSubscription($customerId, $priceId, $trialDays, 'error_if_incomplete', $couponCode);
+
+        if ($result['success']) {
+            $customer = $this->getCustomerFromSession();
+            if ($customer) {
+                // Detectar si es licencia permanente
+                $isPermanent = $result['is_permanent_license'] ?? false;
+                
+                // Para licencias permanentes, usar el price_id y lookup_key del resultado
+                // Para suscripciones, usar current_period_end
+                $planLookupKey = $result['lookup_key'] ?? $input['plan_lookup_key'] ?? $priceId;
+                $expiresAt     = $isPermanent ? null : ($result['current_period_end'] ?? null);
+                $plan = $this->stripeService->getPlanRulesByLookupKey($planLookupKey);
+                
+                $this->attachLicense(
+                    $result,
+                    $customer['billingId'] ?? $customerId,
+                    $customer['name']  ?? '',
+                    $customer['email'] ?? '',
+                    $planLookupKey,
+                    $plan['name'] ?? $planLookupKey,
+                    $isPermanent,
+                    $expiresAt,
+                    $customer['token'] ?? null,
+                    'customer',
+                    null,
+                    $customer['customerId'] ?? null
+                );
+            }
+        }
 
         ApiHelper::respond($result, $result['success'] ? 201 : 400);
     }
@@ -221,10 +527,50 @@ class StripeController extends Controller
             ApiHelper::respond(['success' => false, 'error' => 'Se requiere cancel_at_period_end'], 400);
         }
 
-        $result = $this->stripeService->updateSubscription(
-            $subscriptionId,
-            (bool)$input['cancel_at_period_end']
-        );
+        $cancelAtPeriodEnd = (bool)$input['cancel_at_period_end'];
+        $result = $this->stripeService->updateSubscription($subscriptionId, $cancelAtPeriodEnd);
+
+        // Al reactivar (cancel_at_period_end = false) adjuntar licencia según tipo de plan
+        if ($result['success'] && !$cancelAtPeriodEnd) {
+            $customer = $this->getCustomerFromSession();
+            if ($customer && !empty($customer['billingId'])) {
+                $activeResult = $this->stripeService->getActiveSubscription($customer['billingId']);
+                $pl  = $activeResult['permanent_license'] ?? null;
+                $sub = $activeResult['subscription']      ?? null;
+                $plan = $this->stripeService->getPlanRulesByLookupKey($pl['lookup_key'] ?? ($sub['lookup_key'] ?? ''));
+                if ($pl) {
+                    $this->attachLicense(
+                        $result,
+                        $customer['billingId'],
+                        $customer['name']  ?? '',
+                        $customer['email'] ?? '',
+                        $pl['lookup_key']  ?? '',
+                        $plan['name'] ?? $pl['price_name']  ?? '',
+                        true,
+                        null,
+                        $customer['token'] ?? null,
+                        'customer',
+                        null,
+                        $customer['customerId'] ?? null
+                    );
+                } elseif ($sub) {
+                    $this->attachLicense(
+                        $result,
+                        $customer['billingId'],
+                        $customer['name']  ?? '',
+                        $customer['email'] ?? '',
+                        $sub['lookup_key']        ?? '',
+                        $plan['name'] ?? $sub['price_name']        ?? '',
+                        false,
+                        $sub['current_period_end'] ?? null,
+                        $customer['token'] ?? null,
+                        'customer',
+                        null,
+                        $customer['customerId'] ?? null
+                    );
+                }
+            }
+        }
 
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
@@ -251,10 +597,134 @@ class StripeController extends Controller
         }
 
         $couponCode = $input['coupon_code'] ?? null;
-        $result = $this->stripeService->changePlan($subscriptionId, $priceId, $couponCode);
+        $result     = $this->stripeService->changePlan($subscriptionId, $priceId, $couponCode);
+
+        // Si el resultado indica que requiere compra separada (plan permanente)
+        if (!$result['success'] && ($result['requires_separate_purchase'] ?? false)) {
+            ApiHelper::respond($result, 400);
+            return;
+        }
+
+        if ($result['success']) {
+            $customer = $this->getCustomerFromSession();
+            if ($customer) {
+                // Detectar si es licencia permanente (aunque en changePlan no debería llegar aquí)
+                $isPermanent = $result['is_permanent_license'] ?? false;
+                $planLookupKey = $result['lookup_key'] ?? $input['plan_lookup_key'] ?? $priceId;
+                $expiresAt   = $isPermanent ? null : ($result['current_period_end'] ?? null);
+                $plan = $this->stripeService->getPlanRulesByLookupKey($planLookupKey);
+                
+                $this->attachLicense(
+                    $result,
+                    $customer['billingId'] ?? '',
+                    $customer['name']  ?? '',
+                    $customer['email'] ?? '',
+                    $planLookupKey,
+                    $plan['name'] ?? $planLookupKey,
+                    $isPermanent,
+                    $expiresAt,
+                    $customer['token'] ?? null,
+                    'customer',
+                    null,
+                    $customer['customerId'] ?? null
+                );
+            }
+        }
+
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
-    
+
+    /**
+     * POST /api/customers/stripe/license/refresh
+     * Compara la fecha local de suscripción con la activa en Stripe.
+     * Si Stripe tiene una fecha posterior, devuelve una nueva licencia.
+     *
+     * Body: { "subscription_date": 1780000000 }
+     */
+    public function refreshLicense(): void
+    {
+        ApiHelper::allowedMethodsPost();
+        $input = ApiHelper::getJsonBody();
+
+        if (!isset($input['subscription_date'])) {
+            ApiHelper::respond(['success' => false, 'error' => 'Se requiere subscription_date'], 400);
+        }
+
+        $clientDate = (int)$input['subscription_date'];
+
+        $customer = $this->getCustomerFromSession();
+        if (!$customer || empty($customer['billingId'])) {
+            ApiHelper::respond(['success' => false, 'error' => 'No se encontró información del cliente'], 401);
+        }
+
+        $activeResult = $this->stripeService->getActiveSubscription($customer['billingId']);
+        if (!$activeResult['success']) {
+            ApiHelper::respond(['success' => false, 'error' => 'Error al obtener suscripción'], 400);
+        }
+
+        $pl  = $activeResult['permanent_license'] ?? null;
+        $sub = $activeResult['subscription']      ?? null;
+
+        // Licencia permanente: siempre devolver
+        if ($pl) {
+            $result = ['success' => true, 'renewed' => false];
+            $plan = $this->stripeService->getPlanRulesByLookupKey($pl['lookup_key'] ?? '');
+
+            $this->attachLicense(
+                $result,
+                $customer['billingId'],
+                $customer['name']  ?? '',
+                $customer['email'] ?? '',
+                $pl['lookup_key']  ?? '',
+                $plan['name'] ?? $pl['price_name']  ?? '',
+                true,
+                null,
+                $customer['token'] ?? null,
+                'customer',
+                null,
+                $customer['customerId'] ?? null
+            );
+            ApiHelper::respond($result);
+            return;
+        }
+
+        if (!$sub || !($activeResult['has_subscription'] ?? false)) {
+            ApiHelper::respond(['success' => false, 'error' => 'No hay suscripción activa'], 404);
+        }
+
+        $stripeDate = (int)($sub['current_period_end'] ?? 0);
+
+        // Si la fecha de Stripe no es más reciente, no hay nada que renovar
+        if ($stripeDate <= $clientDate) {
+            ApiHelper::respond(['success' => true, 'renewed' => false]);
+            return;
+        }
+
+        // Fecha de Stripe es posterior: entregar licencia actualizada
+        $result = [
+            'success'            => true,
+            'renewed'            => true,
+            'current_period_end' => $stripeDate,
+        ];
+
+        $plan = $this->stripeService->getPlanRulesByLookupKey($sub['lookup_key'] ?? '');
+        $this->attachLicense(
+            $result,
+            $customer['billingId'],
+            $customer['name']  ?? '',
+            $customer['email'] ?? '',
+            $sub['lookup_key']        ?? '',
+            $plan['name'] ?? $sub['price_name']        ?? '',
+            false,
+            $stripeDate,
+            $customer['token'] ?? null,
+            'customer',
+            null,
+            $customer['customerId'] ?? null
+        );
+        ApiHelper::respond($result);
+    }
+
 
     // ==================== PRECIOS ====================
 
@@ -335,7 +805,8 @@ class StripeController extends Controller
             $plans[] = [
                 'name' => $plan['name'],
                 'lookup_key' => $plan['lookup_key'] ?? $key,
-                'rules' => $plan['rules'] ?? []
+                'rules' => $plan['rules'] ?? [],
+                'type' => $plan['type'] ?? 'monthly'
             ];
         }
         

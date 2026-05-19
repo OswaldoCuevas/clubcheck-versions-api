@@ -337,4 +337,46 @@ class ApiController extends Controller
             exit;
         }
     }
+
+    /**
+     * Endpoint para obtener el timestamp del servidor
+     * Devuelve timestamp UTC en formato ISO 8601 y ticks de .NET
+     */
+    public function timestamp()
+    {
+        // Configurar headers para API
+        header('Content-Type: application/json');
+        header('Access-Control-Allow-Origin: *');
+        header('Access-Control-Allow-Methods: GET');
+        header('Access-Control-Allow-Headers: Content-Type, Authorization');
+
+        // Obtener el timestamp UTC actual
+        $now = new \DateTime('now', new \DateTimeZone('UTC'));
+        $utcTimestamp = $now->format('Y-m-d\TH:i:s\Z'); // Formato ISO 8601
+
+        // Calcular ticks de .NET
+        // La época de .NET es 0001-01-01 00:00:00
+        // Los ticks son intervalos de 100 nanosegundos
+        // 1 segundo = 10,000,000 ticks
+        // Diferencia entre época .NET (0001-01-01) y época Unix (1970-01-01) = 62135596800 segundos
+        $unixTimestamp = $now->getTimestamp();
+        $microSeconds = (int)$now->format('u'); // Microsegundos
+        
+        // Ticks totales desde la época .NET
+        $secondsSinceNetEpoch = $unixTimestamp + 62135596800;
+        $utcTicks = ($secondsSinceNetEpoch * 10000000) + ($microSeconds * 10);
+
+        // Obtener la zona horaria del servidor
+        $timeZone = date_default_timezone_get();
+
+        // Preparar respuesta
+        $response = [
+            'utcTimestamp' => $utcTimestamp,
+            'utcTicks' => $utcTicks,
+            'timeZone' => $timeZone
+        ];
+
+        echo json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
 }

@@ -60,7 +60,9 @@ try {
         '/api/customers/token',
         '/api/customers/token/register',
         '/api/customers/token/await',
-        '/api/customers/validate'
+        '/api/customers/validate',
+        '/api/licenses/validate',
+        '/api/server/timestamp' // Nueva ruta pública para obtener el timestamp del servidor
     ];
 
     $isPublicRoute = in_array($requestUri, $publicRoutes);

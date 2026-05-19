@@ -29,6 +29,7 @@ require_once __DIR__ . '/../Models/BarcodeLookupCacheDesktopModel.php';
 require_once __DIR__ . '/../Helpers/ApiHelper.php';
 require_once __DIR__ . '/../Services/StripeService.php';
 require_once __DIR__ . '/../Services/JwtService.php';
+require_once __DIR__ . '/../Services/LicenseService.php';
 
 use Core\Controller;
 use Models\CustomerRegistryModel;
@@ -57,6 +58,7 @@ use Models\BarcodeLookupCacheDesktopModel;
 use App\Services\StripeService;
 use ApiHelper;
 use App\Services\JwtService;
+use App\Services\LicenseService;
 
 class CustomersController extends Controller
 {
@@ -64,6 +66,7 @@ class CustomersController extends Controller
     private CustomerRegistryModel $customerRegistry;
     private MessageSentModel $messageSentModel;
     private StripeService $stripeService;
+    private ?LicenseService $licenseService = null;
     
     private array $desktopModels;
 
@@ -85,6 +88,14 @@ class CustomersController extends Controller
             $stripeConfig['secret_key'],
             $testClockId
         );
+        
+        // Inicializar LicenseService
+        try {
+            $this->licenseService = new LicenseService();
+        } catch (\Exception $e) {
+            // LicenseService no disponible si no están configuradas las claves
+            $this->licenseService = null;
+        }
     }
 
     private function createDesktopModels(): array
@@ -947,13 +958,130 @@ class CustomersController extends Controller
         );
 
 
-        ApiHelper::respond([
+        $response = [
             'found' => false,
             'registered' => true,
             'customer' => $result['customer'],
             'accessKey' => $result['accessKey'] ?? null,
             'apiToken' => $jwtToken,
-        ], 201);
+        ];
+        
+        // Generar licencia con plan "free" para el nuevo cliente
+        $this->attachFreeLicense(
+            $response,
+            $billingId ?? '',
+            $name,
+            $email !== '' ? $email : null,
+            $token,
+            $result['customer']['customerId'] ?? null
+        );
+
+        ApiHelper::respond($response, 201);
+    }
+    
+    /**
+     * Genera una licencia con plan "free" para un nuevo cliente
+     * 
+     * @param array &$result Array de respuesta donde se agregará la licencia
+     * @param string $billingId ID de Stripe del cliente
+     * @param string $customerName Nombre del cliente
+     * @param string|null $customerEmail Email del cliente
+     * @param string|null $machineToken Token de la máquina
+     * @param string|null $internalCustomerId ID interno del cliente en ClubCheck
+     */
+    private function attachFreeLicense(
+        array &$result,
+        string $billingId,
+        string $customerName,
+        ?string $customerEmail,
+        ?string $machineToken,
+        ?string $internalCustomerId
+    ): void {
+        if ($this->licenseService === null) {
+            return;
+        }
+        
+        try {
+            // Obtener configuración del plan "free"
+            $config = require __DIR__ . '/../../config/stripe.php';
+            $plans = $config['plans'] ?? [];
+            $freePlan = $plans['free'] ?? null;
+            
+            if (!$freePlan) {
+                return;
+            }
+            
+            $planLookupKey = 'free';
+            $planName = $freePlan['name'] ?? 'Plan Start';
+            $rules = $freePlan['rules'] ?? null;
+            
+            // Generar JWT de cliente
+            $customerJwt = null;
+            if ($internalCustomerId && $machineToken) {
+                try {
+                    $jwtService = new JwtService();
+                    $customerJwt = $jwtService->createToken([
+                        'cid' => $internalCustomerId,
+                        'mkt' => $machineToken,
+                        'typ' => 'customer',
+                    ], 0);
+                } catch (\Exception $e) {
+                    // Si falla, continuar sin JWT
+                }
+            }
+            
+            // El plan "free" es permanente (sin expiración)
+            $isPermanent = true;
+            $expiresAt = null;
+            
+            $token = $this->licenseService->generateLicense(
+                $billingId,
+                $customerName,
+                $customerEmail ?? '',
+                $planLookupKey,
+                $planName,
+                $isPermanent,
+                $expiresAt,
+                $machineToken,
+                $rules,
+                $customerJwt
+            );
+            
+            $result['license_token'] = $token;
+            $result['license_file'] = $this->licenseService->generateLicenseFile(
+                $token,
+                $customerName,
+                $planName,
+                $isPermanent,
+                $expiresAt,
+                $machineToken,
+                $rules
+            );
+            
+            // Registrar en el historial de licencias
+            try {
+                require_once __DIR__ . '/../Models/LicenseLogModel.php';
+                $logModel = new \Models\LicenseLogModel();
+                $logModel->createLog([
+                    'CustomerId' => $internalCustomerId,
+                    'BillingId' => $billingId,
+                    'CustomerName' => $customerName,
+                    'CustomerEmail' => $customerEmail ?? '',
+                    'PlanLookupKey' => $planLookupKey,
+                    'PlanName' => $planName,
+                    'IsPermanent' => $isPermanent,
+                    'ExpiresAt' => null,
+                    'MachineToken' => $machineToken,
+                    'LicenseToken' => $token,
+                    'CreatedBy' => 'customer',
+                    'AdminUsername' => null,
+                ]);
+            } catch (\Exception $e) {
+                // No interrumpir si falla el registro
+            }
+        } catch (\Exception $e) {
+            // No interrumpir el flujo si falla la generación de licencia
+        }
     }
 
     public function loginCustomer()

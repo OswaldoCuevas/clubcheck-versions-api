@@ -6,15 +6,21 @@ use Core\Controller;
 use Models\CustomerRegistryModel;
 use Models\WhatsAppConfigurationModel;
 use Models\DownloadLogModel;
+use Models\LicenseLogModel;
 use App\Services\WhatsAppService;
 use App\Services\CustomerStatsService;
+use App\Services\StripeService;
+use App\Services\LicenseService;
 
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
 require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
 require_once __DIR__ . '/../Models/DownloadLogModel.php';
+require_once __DIR__ . '/../Models/LicenseLogModel.php';
 require_once __DIR__ . '/../Services/WhatsAppService.php';
 require_once __DIR__ . '/../Services/CustomerStatsService.php';
+require_once __DIR__ . '/../Services/StripeService.php';
+require_once __DIR__ . '/../Services/LicenseService.php';
 
 class AdminController extends Controller
 {
@@ -1468,6 +1474,250 @@ class AdminController extends Controller
             'count' => count($downloads),
             'downloads' => $downloads,
         ]);
+    }
+
+    // ==================== LICENCIAS ====================
+
+    /**
+     * GET /admin/licenses
+     * Panel de licencias generadas
+     */
+    public function licenses(): void
+    {
+        $this->requirePermission('admin_access');
+
+        $currentUser = $this->userModel->getCurrentUser();
+
+        $data = [
+            'currentUser'     => $currentUser,
+            'title'           => 'Licencias - ClubCheck',
+            'isAuthenticated' => true,
+        ];
+
+        $this->view('admin/licenses', $data);
+    }
+
+    /**
+     * GET /admin/api/licenses
+     * JSON: lista de todas las licencias generadas
+     */
+    public function licensesJson(): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $logModel = new LicenseLogModel();
+        $licenses = $logModel->getAll();
+
+        $this->json([
+            'count'    => count($licenses),
+            'licenses' => $licenses,
+        ]);
+    }
+
+    /**
+     * POST /admin/api/licenses/generate
+     * Genera una licencia para un cliente desde el panel de administración.
+     *
+     * Body: {
+     *   "customerId":     "...",        // ID interno ClubCheck (requerido)
+     *   "planLookupKey":  "...",        // opcional: usa la suscripción activa de Stripe si no se indica
+     *   "machineToken":   "...",        // opcional: usa el token registrado del cliente si no se indica
+     *   "expiresAt":      1780000000   // opcional: solo para planes recurrentes sin suscripción Stripe
+     * }
+     */
+    public function generateLicenseAdmin(): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $payload    = json_decode(file_get_contents('php://input'), true) ?? [];
+        $customerId = trim($payload['customerId'] ?? '');
+
+        if ($customerId === '') {
+            $this->json(['error' => 'customerId es obligatorio'], 422);
+        }
+
+        // Obtener cliente
+        $registry = new CustomerRegistryModel();
+        $customer = $registry->getCustomer($customerId);
+        if (!$customer) {
+            $this->json(['error' => 'Cliente no encontrado'], 404);
+        }
+
+        $billingId    = $customer['billingId'] ?? null;
+        $machineToken = trim($payload['machineToken'] ?? '') ?: ($customer['token'] ?? null);
+
+        // Siempre consultar Stripe: verificar suscripción activa y obtener expiración
+        if (!$billingId) {
+            $this->json(['error' => 'El cliente no tiene billingId vinculado a Stripe'], 422);
+        }
+
+        $config        = require __DIR__ . '/../../config/stripe.php';
+        $appMode       = $_ENV['APP_MODE'] ?? 'DEV';
+        $testClockId   = ($appMode === 'DEV') ? ($config['test_clock_id'] ?? null) : null;
+        $stripeService = new StripeService($config['secret_key'], $testClockId);
+
+        $activeResult = $stripeService->getActiveSubscription($billingId);
+
+        if (!($activeResult['success'] ?? false)) {
+            $this->json(['error' => 'Error al consultar Stripe: ' . ($activeResult['error'] ?? '')], 400);
+        }
+
+        $pl  = $activeResult['permanent_license'] ?? null;
+        $sub = $activeResult['subscription']      ?? null;
+
+        if (!$pl && !($activeResult['has_subscription'] ?? false)) {
+            $this->json(['error' => 'El cliente no tiene suscripción activa ni licencia permanente en Stripe. No se puede generar la licencia.'], 400);
+        }
+
+        // Determinar plan, nombre, permanente y expiración (expiración siempre desde Stripe)
+        $planLookupKey = trim($payload['planLookupKey'] ?? '');
+        $isPermanent   = false;
+        $expiresAt     = null;
+        $planName      = $planLookupKey;
+
+        if ($pl) {
+            if ($planLookupKey === '') $planLookupKey = $pl['lookup_key']  ?? 'permanent';
+            $planName    = $pl['price_name']  ?? 'Licencia Permanente';
+            $isPermanent = true;
+            $expiresAt   = null;
+        } else {
+            if ($planLookupKey === '') $planLookupKey = $sub['lookup_key'] ?? '';
+            $planName    = $sub['price_name'] ?? $planLookupKey;
+            $isPermanent = false;
+            $expiresAt   = $sub['current_period_end'] ?? null;
+        }
+
+        // Si se pasó una fecha personalizada y es válida, usarla (incluso para permanentes)
+        $customExpiresAt = isset($payload['expiresAt']) ? (int)$payload['expiresAt'] : null;
+        if ($customExpiresAt && $customExpiresAt > 0) {
+            $expiresAt = $customExpiresAt;
+        }
+
+        if (empty($planLookupKey)) {
+            $this->json(['error' => 'No se pudo determinar el plan'], 400);
+        }
+
+        // Resolver nombre y reglas desde config
+        $config = require __DIR__ . '/../../config/stripe.php';
+        $rules  = null;
+        foreach ($config['plans'] ?? [] as $planCfg) {
+            if (($planCfg['lookup_key'] ?? '') === $planLookupKey) {
+                $planName    = $planCfg['name']  ?? $planName;
+                $isPermanent = ($planCfg['type'] ?? '') === 'permanent' ? true : $isPermanent;
+                $rules       = $planCfg['rules'] ?? null;
+                break;
+            }
+        }
+
+        // Instanciar LicenseService
+        try {
+            $licenseService = new LicenseService();
+        } catch (\Exception $e) {
+            $this->json(['error' => 'LicenseService no disponible: verifique las claves RSA en .env'], 500);
+        }
+
+        $currentUser   = $this->userModel->getCurrentUser();
+        $adminUsername = $currentUser['username'] ?? 'admin';
+        $db = new \Database();
+
+        $dbRow = $db->fetchOne(
+            'SELECT Id, Token, TokenJwt FROM Customers WHERE Id = ? LIMIT 1',
+            [$customerId]
+        );
+
+        $customerJwt = trim((string)($dbRow['TokenJwt'] ?? ''));
+        if ($customerJwt === '' && $dbRow) {
+            require_once __DIR__ . '/../Services/JwtService.php';
+            $jwtService  = new \App\Services\JwtService();
+            $customerJwt = $jwtService->createToken([
+                'cid' => $dbRow['Id'],
+                'mkt' => $machineToken ?: ($dbRow['Token'] ?? ''),
+                'typ' => 'customer',
+            ], 0);
+
+            $db->update(
+                'Customers',
+                [
+                    'TokenJwt'          => $customerJwt,
+                    'TokenJwtCreatedAt' => date('Y-m-d H:i:s'),
+                    'TokenJwtExpiresAt' => null,
+                ],
+                'Id = ?',
+                [$dbRow['Id']]
+            );
+        }
+
+        try {
+            $token = $licenseService->generateLicense(
+                $billingId ?? $customerId,
+                $customer['name']  ?? '',
+                $customer['email'] ?? '',
+                $planLookupKey,
+                $planName,
+                $isPermanent,
+                $expiresAt,
+                $machineToken,
+                $rules,
+                $customerJwt !== '' ? $customerJwt : null
+            );
+
+            $licenseFile = $licenseService->generateLicenseFile(
+                $token,
+                $customer['name'] ?? '',
+                $planName,
+                $isPermanent,
+                $expiresAt,
+                $machineToken,
+                $rules
+            );
+
+            // Registrar en LicenseLogs como generado por administrador
+            $logModel = new LicenseLogModel();
+            $logModel->createLog([
+                'CustomerId'    => $customerId,
+                'BillingId'     => $billingId,
+                'CustomerName'  => $customer['name']  ?? '',
+                'CustomerEmail' => $customer['email'] ?? '',
+                'PlanLookupKey' => $planLookupKey,
+                'PlanName'      => $planName,
+                'IsPermanent'   => $isPermanent,
+                'ExpiresAt'     => $expiresAt ? date('Y-m-d H:i:s', $expiresAt) : null,
+                'MachineToken'  => $machineToken,
+                'LicenseToken'  => $token,
+                'CreatedBy'     => 'admin',
+                'AdminUsername' => $adminUsername,
+            ]);
+
+            $this->json([
+                'success'        => true,
+                'license_token'  => $token,
+                'license_file'   => $licenseFile,
+                'plan_lookup_key'=> $planLookupKey,
+                'plan_name'      => $planName,
+                'is_permanent'   => $isPermanent,
+                'expires_at'     => $expiresAt,
+                'customer_name'  => $customer['name']  ?? '',
+                'customer_email' => $customer['email'] ?? '',
+            ]);
+        } catch (\Exception $e) {
+            $this->json(['error' => 'Error al generar licencia: ' . $e->getMessage()], 500);
+        }
     }
 }
 

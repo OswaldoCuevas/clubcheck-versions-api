@@ -142,6 +142,7 @@ class EmailService
             $mailer = $this->getMailer();
             $mailer->clearAddresses();
             $mailer->clearReplyTos();
+            $mailer->clearAttachments();
 
             // Configurar destinatario
             $mailer->addAddress($to, $options['toName'] ?? '');
@@ -169,6 +170,18 @@ class EmailService
             $mailer->Subject = $subject;
             $mailer->Body = $body;
             $mailer->AltBody = strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $body));
+
+            // Adjuntos opcionales: $options['attachments'] = [['content'=>..., 'name'=>..., 'mime'=>...]]
+            if (!empty($options['attachments'])) {
+                foreach ($options['attachments'] as $attachment) {
+                    $mailer->addStringAttachment(
+                        $attachment['content'],
+                        $attachment['name'],
+                        'base64',
+                        $attachment['mime'] ?? 'application/octet-stream'
+                    );
+                }
+            }
 
             // Enviar
             $mailer->send();

@@ -37,6 +37,7 @@ $router->get('/api/version', 'ApiController', 'version');
 $router->get('/api/check-update', 'ApiController', 'checkUpdate');
 $router->get('/api/download', 'ApiController', 'download');
 $router->get('/api/download-setup', 'ApiController', 'downloadSetup'); // Descarga pública del Setup
+$router->get('/api/server/timestamp', 'ApiController', 'timestamp'); // Timestamp del servidor
 
 // Rutas para sesiones de clientes (aplicación de escritorio)
 $router->any('/api/customers/sessions/start', 'CustomersController', 'startSession');// NO
@@ -129,6 +130,14 @@ $router->get('/admin/downloads', 'AdminController', 'downloads');// NO, Administ
 $router->get('/admin/api/downloads', 'AdminController', 'downloadsJson');// NO, Administrativo
 $router->get('/admin/api/downloads/ip/:ipAddress', 'AdminController', 'downloadsByIpJson');// NO, Administrativo
 
+// License Validation (public — no auth required)
+$router->post('/api/licenses/validate', 'StripeController', 'validateLicense');
+
+// Licenses Admin
+$router->get('/admin/licenses', 'AdminController', 'licenses');// NO, Administrativo
+$router->get('/admin/api/licenses', 'AdminController', 'licensesJson');// NO, Administrativo
+$router->post('/admin/api/licenses/generate', 'AdminController', 'generateLicenseAdmin');// NO, Administrativo
+
 // Rutas de herramientas
 $router->any('/password-generator', 'ToolsController', 'passwordGenerator');
 $router->any('/quick-hash', 'ToolsController', 'quickHash');
@@ -154,6 +163,7 @@ $router->post('/api/customers/stripe/customers/:customerId/subscriptions', 'Stri
 $router->get('/api/customers/stripe/customers/:customerId/subscriptions/active', 'StripeController', 'getActiveSubscription', ['customer_jwt']);
 $router->put('/api/customers/stripe/subscriptions/:subscriptionId', 'StripeController', 'updateSubscription', ['customer_jwt']);
 $router->put('/api/customers/stripe/subscriptions/:subscriptionId/plan', 'StripeController', 'changePlan', ['customer_jwt']);
+$router->post('/api/customers/stripe/license/refresh', 'StripeController', 'refreshLicense', ['customer_jwt']);
 
 // Paquetes
 $router->get('/api/customers/stripe/plans', 'StripeController', 'getplans'); // NO, para mostrar planes disponibles al cliente
