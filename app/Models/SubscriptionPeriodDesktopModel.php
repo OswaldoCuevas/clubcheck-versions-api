@@ -20,14 +20,18 @@ class SubscriptionPeriodDesktopModel extends BaseDesktopSyncModel
         'LastModifiedOn',
         'LastModifiedBy',
         'IsDeleted',
+        'Priority',
+        'Sync',
         'CustomerApiId',
     ];
     protected array $nullableColumns = [
         'CreatedBy',
         'LastModifiedOn',
         'LastModifiedBy',
+        'Priority',
+        'Sync',
     ];
-    protected array $booleanColumns = ['Active', 'IsDeleted'];
+    protected array $booleanColumns = ['Active', 'IsDeleted', 'Sync'];
     protected ?string $softDeleteColumn = 'IsDeleted';
     protected ?string $orderBy = 'Name';
 }

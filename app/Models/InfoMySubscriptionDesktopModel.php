@@ -18,6 +18,8 @@ class InfoMySubscriptionDesktopModel extends BaseDesktopSyncModel
         'Trial',
         'UrlWhatsapp',
         'TokenWhatsapp',
+        'EnableMessage',
+        'ApiToken',
     ];
     protected array $nullableColumns = [
         'CustomerId',
@@ -27,7 +29,9 @@ class InfoMySubscriptionDesktopModel extends BaseDesktopSyncModel
         'Trial',
         'UrlWhatsapp',
         'TokenWhatsapp',
+        'EnableMessage',
+        'ApiToken',
     ];
-    protected array $booleanColumns = ['Trial'];
+    protected array $booleanColumns = ['Trial', 'EnableMessage'];
     protected ?string $orderBy = 'Id';
 }

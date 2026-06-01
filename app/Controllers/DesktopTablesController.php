@@ -29,6 +29,9 @@ require_once __DIR__ . '/../Models/SubscriptionsDesktopModel.php';
 require_once __DIR__ . '/../Models/SyncStatusDesktopModel.php';
 require_once __DIR__ . '/../Models/UsersDesktopModel.php';
 require_once __DIR__ . '/../Models/WhatsAppDesktopModel.php';
+require_once __DIR__ . '/../Models/AccessDevicesDesktopModel.php';
+require_once __DIR__ . '/../Models/OperationsAccessDevicesDesktopModel.php';
+require_once __DIR__ . '/../Models/UserAccessDevicesDesktopModel.php';
 
 use Models\AdministratorsDesktopModel;
 use Models\AppSettingsDesktopModel;
@@ -50,6 +53,9 @@ use Models\SubscriptionsDesktopModel;
 use Models\SyncStatusDesktopModel;
 use Models\UsersDesktopModel;
 use Models\WhatsAppDesktopModel;
+use Models\AccessDevicesDesktopModel;
+use Models\OperationsAccessDevicesDesktopModel;
+use Models\UserAccessDevicesDesktopModel;
 
 class DesktopTablesController extends Controller
 {
@@ -73,6 +79,13 @@ class DesktopTablesController extends Controller
                 'model' => AdministratorsDesktopModel::class,
                 'icon' => 'fa-user-shield',
                 'description' => 'Gestión de administradores del sistema',
+            ],
+            'access-devices' => [
+                'name' => 'Dispositivos de Acceso',
+                'table' => 'AccessDevicesDesktop',
+                'model' => AccessDevicesDesktopModel::class,
+                'icon' => 'fa-door-open',
+                'description' => 'Dispositivos de control de acceso',
             ],
             'app-settings' => [
                 'name' => 'Configuración de App',
@@ -144,6 +157,13 @@ class DesktopTablesController extends Controller
                 'icon' => 'fa-boxes',
                 'description' => 'Control de inventario y stock',
             ],
+            'operations-access-devices' => [
+                'name' => 'Operaciones de Dispositivos',
+                'table' => 'OperationsAccessDevicesDesktop',
+                'model' => OperationsAccessDevicesDesktopModel::class,
+                'icon' => 'fa-exchange-alt',
+                'description' => 'Operaciones enviadas a dispositivos de acceso',
+            ],
             'sale-tickets' => [
                 'name' => 'Tickets de Venta',
                 'table' => 'SaleTicketDesktop',
@@ -199,6 +219,13 @@ class DesktopTablesController extends Controller
                 'model' => UsersDesktopModel::class,
                 'icon' => 'fa-users',
                 'description' => 'Usuarios del sistema',
+            ],
+            'user-access-devices' => [
+                'name' => 'Usuarios y Dispositivos',
+                'table' => 'UserAccessDevicesDesktop',
+                'model' => UserAccessDevicesDesktopModel::class,
+                'icon' => 'fa-id-card',
+                'description' => 'Relacion de usuarios con dispositivos de acceso',
             ],
             'whatsapp' => [
                 'name' => 'WhatsApp',

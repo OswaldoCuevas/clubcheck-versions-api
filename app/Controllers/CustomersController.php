@@ -26,6 +26,9 @@ require_once __DIR__ . '/../Models/SubscriptionPeriodDesktopModel.php';
 require_once __DIR__ . '/../Models/SyncStatusDesktopModel.php';
 require_once __DIR__ . '/../Models/MigrationsDesktopModel.php';
 require_once __DIR__ . '/../Models/BarcodeLookupCacheDesktopModel.php';
+require_once __DIR__ . '/../Models/AccessDevicesDesktopModel.php';
+require_once __DIR__ . '/../Models/OperationsAccessDevicesDesktopModel.php';
+require_once __DIR__ . '/../Models/UserAccessDevicesDesktopModel.php';
 require_once __DIR__ . '/../Helpers/ApiHelper.php';
 require_once __DIR__ . '/../Services/StripeService.php';
 require_once __DIR__ . '/../Services/JwtService.php';
@@ -55,6 +58,9 @@ use Models\SubscriptionPeriodDesktopModel;
 use Models\SyncStatusDesktopModel;
 use Models\MigrationsDesktopModel;
 use Models\BarcodeLookupCacheDesktopModel;
+use Models\AccessDevicesDesktopModel;
+use Models\OperationsAccessDevicesDesktopModel;
+use Models\UserAccessDevicesDesktopModel;
 use App\Services\StripeService;
 use ApiHelper;
 use App\Services\JwtService;
@@ -119,6 +125,9 @@ class CustomersController extends Controller
             'saleTicketItems' => new SaleTicketItemDesktopModel(),
             'subscriptionPeriods' => new SubscriptionPeriodDesktopModel(),
             'syncStatus' => new SyncStatusDesktopModel(),
+            'accessDevices' => new AccessDevicesDesktopModel(),
+            'operationsAccessDevices' => new OperationsAccessDevicesDesktopModel(),
+            'userAccessDevices' => new UserAccessDevicesDesktopModel(),
             // 'migrations' => new MigrationsDesktopModel(),
             //'barcodeLookupCache' => new BarcodeLookupCacheDesktopModel(),
         ];

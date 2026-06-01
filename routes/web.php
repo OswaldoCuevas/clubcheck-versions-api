@@ -166,7 +166,7 @@ $router->put('/api/customers/stripe/subscriptions/:subscriptionId/plan', 'Stripe
 $router->post('/api/customers/stripe/license/refresh', 'StripeController', 'refreshLicense', ['customer_jwt']);
 
 // Paquetes
-$router->get('/api/customers/stripe/plans', 'StripeController', 'getplans'); // NO, para mostrar planes disponibles al cliente
+$router->get('/api/customers/stripe/plans', 'StripeController', 'getplans', ['customer_jwt']);
 $router->get('/api/customers/stripe/customers/:customerId/plan', 'StripeController', 'getCurrentPlan', ['customer_jwt']);
 
 // Precios/Planes

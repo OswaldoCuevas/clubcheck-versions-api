@@ -20,6 +20,7 @@ class AdministratorsDesktopModel extends BaseDesktopSyncModel
         'Removed',
         'EmailConfirmed',
         'EmailConfirmedOn',
+        'Role',
         'CustomerApiId',
     ];
     protected array $nullableColumns = [
@@ -32,6 +33,7 @@ class AdministratorsDesktopModel extends BaseDesktopSyncModel
         'Removed',
         'EmailConfirmed',
         'EmailConfirmedOn',
+        'Role',
         'CustomerApiId',
     ];
     protected array $booleanColumns = ['Manager', 'Removed', 'EmailConfirmed'];

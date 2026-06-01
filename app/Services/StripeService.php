@@ -669,6 +669,30 @@ class StripeService
                 ];
             }
 
+            $stripeConfig = require __DIR__ . '/../../config/stripe.php';
+            $plansConfig = $stripeConfig['plans'] ?? [];
+
+            //remover los precios que no estén configurados en el config/stripe.php
+            $result = array_filter($result, function($price) use ($plansConfig) {
+                foreach ($plansConfig as $plan) {
+                    if (($plan['lookup_key'] ?? null) === $price['lookup_key']) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+
+            //agregar al precio showBillingIds que vbiene del config/stripe.php para saber si se muestra o no en la app dependiendo del billingId del cliente
+            $result = array_map(function($price) use ($plansConfig) {
+                foreach ($plansConfig as $plan) {
+                    if (($plan['lookup_key'] ?? null) === $price['lookup_key'] && isset($plan['showBillingIds'])) {
+                        $price['showBillingIds'] = $plan['showBillingIds'] ?? [];
+                        break;
+                    }
+                }
+                return $price;
+            }, $result);
+
             return [
                 'success' => true,
                 'prices' => $result

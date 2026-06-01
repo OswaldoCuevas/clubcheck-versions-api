@@ -737,6 +737,7 @@ class StripeController extends Controller
     public function listPrices(): void
     {
         ApiHelper::allowedMethodsGet();
+        $billingId = ApiHelper::getBillingIdByCustomerIdFromSession();
         $config = require __DIR__ . '/../../config/stripe.php';
         $productId = $config['product_id'];
 
@@ -745,6 +746,15 @@ class StripeController extends Controller
         }
 
         $result = $this->stripeService->getProductPrices($productId);
+
+        // remover planes que no correspondan al billingId sabiendo que price tiene el campo showBillingIds
+        // y reindexar el resultado para que JSON lo represente como lista (array) en lugar de objeto
+        if ($result['success']) {
+            $result['prices'] = array_values(array_filter($result['prices'], function($price) use ($billingId) {
+                return empty($price['showBillingIds']) || in_array($billingId, $price['showBillingIds']);
+            }));
+        }
+
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
 
@@ -798,10 +808,16 @@ class StripeController extends Controller
     public function getplans(): void
     {
         ApiHelper::allowedMethodsGet();
+        $billingId = ApiHelper::getBillingIdByCustomerIdFromSession();
         $config = require __DIR__ . '/../../config/stripe.php';
         
         $plans = [];
         foreach ($config['plans'] ?? [] as $key => $plan) {
+
+            if(isset($plan['showBillingIds']) && !empty($plan['showBillingIds']) && !in_array($billingId, $plan['showBillingIds'])) {
+                continue; // Si el plan es exclusivo para ciertos billingIds y el cliente no está en la lista, lo omitimos
+            }
+
             $plans[] = [
                 'name' => $plan['name'],
                 'lookup_key' => $plan['lookup_key'] ?? $key,
