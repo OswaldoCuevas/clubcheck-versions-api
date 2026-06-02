@@ -50,6 +50,59 @@ class CustomerRegistryModel extends Model
         return implode('-', $segments);
     }
 
+    private function slugifyCodeAccess(string $name): string
+    {
+        $value = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $name);
+        if ($value === false) {
+            $value = $name;
+        }
+
+        $value = strtolower($value);
+        $value = preg_replace('/[^a-z0-9]+/', '_', $value) ?? '';
+        $value = trim($value, '_');
+
+        return $value !== '' ? mb_substr($value, 0, 80) : 'customer';
+    }
+
+    private function randomCodeAccessSuffix(): string
+    {
+        $alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+        $suffix = '';
+
+        for ($i = 0; $i < 3; $i++) {
+            $suffix .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+        }
+
+        return $suffix;
+    }
+
+    private function codeAccessExists(string $codeAccess, ?string $ignoreCustomerId = null): bool
+    {
+        $params = [$codeAccess];
+        $sql = 'SELECT Id FROM Customers WHERE CodeAccess = ?';
+
+        if ($ignoreCustomerId !== null && $ignoreCustomerId !== '') {
+            $sql .= ' AND Id <> ?';
+            $params[] = $ignoreCustomerId;
+        }
+
+        $sql .= ' LIMIT 1';
+
+        return $this->db->fetchOne($sql, $params) !== null;
+    }
+
+    private function generateUniqueCodeAccess(string $name, ?string $ignoreCustomerId = null): string
+    {
+        $base = $this->slugifyCodeAccess($name);
+        $candidate = $base;
+
+        while ($this->codeAccessExists($candidate, $ignoreCustomerId)) {
+            $candidate = mb_substr($base, 0, 76) . '_' . $this->randomCodeAccessSuffix();
+        }
+
+        return $candidate;
+    }
+
     private function getAccessKeySecret(): string
     {
         $secret = getenv('ACCESS_KEY_SECRET');
@@ -282,6 +335,7 @@ class CustomerRegistryModel extends Model
             'billingId' => $row['BillingId'] ?? null,
             'planCode' => $row['PlanCode'] ?? null,
             'name' => $row['Name'],
+            'codeAccess' => $row['CodeAccess'] ?? null,
             'email' => $row['Email'],
             'phone' => $row['Phone'],
             'deviceName' => $row['DeviceName'],
@@ -420,6 +474,19 @@ class CustomerRegistryModel extends Model
             $update['Name'] = $attributes['name'];
         }
 
+        if (array_key_exists('codeAccess', $attributes)) {
+            $codeAccess = $attributes['codeAccess'];
+            if ($codeAccess !== null) {
+                $codeAccess = $this->slugifyCodeAccess((string) $codeAccess);
+                if ($this->codeAccessExists($codeAccess, $customerId)) {
+                    throw new \RuntimeException('code_access_already_registered');
+                }
+            }
+            $update['CodeAccess'] = ($codeAccess === null || $codeAccess === '') ? null : $codeAccess;
+        } elseif (array_key_exists('name', $attributes) && !empty($attributes['name']) && empty($existing['CodeAccess'])) {
+            $update['CodeAccess'] = $this->generateUniqueCodeAccess((string) $attributes['name'], $customerId);
+        }
+
         if (array_key_exists('billingId', $attributes)) {
             $billingId = is_string($attributes['billingId']) ? trim($attributes['billingId']) : $attributes['billingId'];
             $update['BillingId'] = ($billingId === null || $billingId === '') ? null : $billingId;
@@ -497,6 +564,9 @@ class CustomerRegistryModel extends Model
                 ? (is_string($attributes['planCode']) ? trim($attributes['planCode']) : $attributes['planCode'])
                 : null,
             'Name' => $attributes['name'] ?? null,
+            'CodeAccess' => isset($attributes['codeAccess']) && $attributes['codeAccess'] !== ''
+                ? $this->slugifyCodeAccess((string) $attributes['codeAccess'])
+                : (isset($attributes['name']) && $attributes['name'] !== '' ? $this->generateUniqueCodeAccess((string) $attributes['name'], $customerId) : null),
             'Email' => $attributes['email'] ?? null,
             'Phone' => $attributes['phone'] ?? null,
             'DeviceName' => $attributes['deviceName'] ?? null,
@@ -514,6 +584,10 @@ class CustomerRegistryModel extends Model
 
         if ($data['AccessKeyHash'] === null || $data['AccessKeyHash'] === '') {
             throw new \InvalidArgumentException('access_key_hash_required');
+        }
+
+        if ($data['CodeAccess'] !== null && $this->codeAccessExists($data['CodeAccess'], $customerId)) {
+            throw new \RuntimeException('code_access_already_registered');
         }
 
         $this->db->insert('Customers', $data);
@@ -821,6 +895,17 @@ class CustomerRegistryModel extends Model
                 $name = trim((string) $name);
             }
             $update['Name'] = ($name === null || $name === '') ? null : $name;
+        }
+
+        if (array_key_exists('codeAccess', $attributes)) {
+            $codeAccess = $attributes['codeAccess'];
+            if ($codeAccess !== null) {
+                $codeAccess = $this->slugifyCodeAccess((string) $codeAccess);
+                if ($this->codeAccessExists($codeAccess, $customerId)) {
+                    throw new \RuntimeException('code_access_already_registered');
+                }
+            }
+            $update['CodeAccess'] = ($codeAccess === null || $codeAccess === '') ? null : $codeAccess;
         }
 
         if (array_key_exists('email', $attributes)) {

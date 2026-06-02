@@ -16,6 +16,21 @@ if (file_exists($envLoaderPath)) {
 // Incluir sistema de configuración
 require_once __DIR__ . '/../config/bootstrap.php';
 
+function sendCorsHeaders(): void
+{
+    header('Access-Control-Allow-Origin: *');
+    header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-Access-Token, X-Customer-JWT, X-Desktop-JWT, X-Device-Name, X-HTTP-Method-Override');
+    header('Access-Control-Max-Age: 86400');
+}
+
+sendCorsHeaders();
+
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
+
 try {
     // Cargar el sistema de rutas
     require_once __DIR__ . '/../app/Core/Router.php';
@@ -71,6 +86,7 @@ try {
         $apiPrefixes = [
             '/api/customers/sessions',
             '/api/customers',
+            '/api/desktop',
             '/api/email'  // Rutas de email públicas (recuperación de contraseña, etc.)
         ];
 

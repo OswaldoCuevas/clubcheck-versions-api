@@ -18,6 +18,7 @@ class Router
         'jwt' => \App\Middleware\JwtMiddleware::class,
         'auth' => \Middleware\AuthMiddleware::class,
         'customer_jwt' => \App\Middleware\CustomerJwtMiddleware::class,
+        'desktop_jwt' => \App\Middleware\DesktopJwtMiddleware::class,
     ];
 
     /**

@@ -672,6 +672,11 @@ class CustomersController extends Controller
             $attributes['email'] = $email;
         }
 
+        if (array_key_exists('codeAccess', $payload)) {
+            $codeAccess = $payload['codeAccess'];
+            $attributes['codeAccess'] = $codeAccess !== null ? trim((string) $codeAccess) : null;
+        }
+
         if (array_key_exists('phone', $payload)) {
             $phone = $payload['phone'];
             $attributes['phone'] = $phone !== null ? trim((string) $phone) : null;
@@ -760,6 +765,7 @@ class CustomersController extends Controller
                 $result = $this->customerRegistry->registerCustomerIfAbsent([
                     'customerId' => $customerId !== '' ? $customerId : null,
                     'name' => $attributes['name'],
+                    'codeAccess' => $attributes['codeAccess'] ?? null,
                     'billingId' => $attributes['billingId'] ?? null,
                     'planCode' => $attributes['planCode'] ?? null,
                     'email' => $attributes['email'] ?? null,
@@ -775,6 +781,13 @@ class CustomersController extends Controller
                     ApiHelper::respond([
                         'error' => 'El correo ya está registrado para otro cliente',
                         'code' => 'email_conflict',
+                    ], 409);
+                }
+
+                if ($e->getMessage() === 'code_access_already_registered') {
+                    ApiHelper::respond([
+                        'error' => 'El CodeAccess ya estÃ¡ registrado para otro cliente',
+                        'code' => 'code_access_conflict',
                     ], 409);
                 }
 
@@ -810,6 +823,13 @@ class CustomersController extends Controller
                 ], 409);
             }
 
+            if ($e->getMessage() === 'code_access_already_registered') {
+                ApiHelper::respond([
+                    'error' => 'El CodeAccess ya estÃ¡ registrado para otro cliente',
+                    'code' => 'code_access_conflict',
+                ], 409);
+            }
+
             throw $e;
         }
         ApiHelper::respond([
@@ -829,6 +849,7 @@ class CustomersController extends Controller
         $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
         $name = isset($payload['name']) ? trim((string) $payload['name']) : '';
         $email = isset($payload['email']) ? trim((string) $payload['email']) : '';
+        $codeAccess = array_key_exists('codeAccess', $payload) ? trim((string) $payload['codeAccess']) : null;
         $billingId = array_key_exists('billingId', $payload) ? trim((string) $payload['billingId']) : null;
         $planCode = array_key_exists('planCode', $payload) ? trim((string) $payload['planCode']) : null;
         $phone = array_key_exists('phone', $payload) ? trim((string) $payload['phone']) : null;
@@ -908,6 +929,7 @@ class CustomersController extends Controller
             $result = $this->customerRegistry->registerCustomerIfAbsent([
                 'customerId' => $customerId,
                 'name' => $name,
+                'codeAccess' => $codeAccess,
                 'billingId' => $billingId,
                 'planCode' => $planCode,
                 'email' => $email !== '' ? $email : null,
@@ -922,6 +944,13 @@ class CustomersController extends Controller
                 ApiHelper::respond([
                     'error' => 'El correo ya está registrado para otro cliente',
                     'code' => 'email_conflict',
+                ], 409);
+            }
+
+            if ($e->getMessage() === 'code_access_already_registered') {
+                ApiHelper::respond([
+                    'error' => 'El CodeAccess ya estÃ¡ registrado para otro cliente',
+                    'code' => 'code_access_conflict',
                 ], 409);
             }
 

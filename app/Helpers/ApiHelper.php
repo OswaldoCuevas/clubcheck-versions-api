@@ -20,8 +20,9 @@ class ApiHelper
         http_response_code($statusCode);
         header('Content-Type: application/json');
         header('Access-Control-Allow-Origin: *');
-        header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-        header('Access-Control-Allow-Headers: Content-Type, Authorization');
+        header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
+        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-Access-Token, X-Customer-JWT, X-Desktop-JWT, X-Device-Name, X-HTTP-Method-Override');
+        header('Access-Control-Max-Age: 86400');
         echo json_encode($data, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
         exit;
     }

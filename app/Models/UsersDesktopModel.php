@@ -18,6 +18,7 @@ class UsersDesktopModel extends BaseDesktopSyncModel
         'FingerPrint',
         'BirthDate',
         'Code',
+        'CreatedOn',
         'Removed',
         'CustomerApiId',
     ];
@@ -29,6 +30,7 @@ class UsersDesktopModel extends BaseDesktopSyncModel
         'FingerPrint',
         'BirthDate',
         'Code',
+        'CreatedOn',
         'Removed',
         'CustomerApiId',
     ];

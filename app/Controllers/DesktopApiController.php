@@ -1,0 +1,971 @@
+<?php
+
+namespace Controllers;
+
+require_once __DIR__ . '/../Core/Controller.php';
+require_once __DIR__ . '/../Helpers/ApiHelper.php';
+require_once __DIR__ . '/../Services/JwtService.php';
+require_once __DIR__ . '/../../utils/database.php';
+
+use ApiHelper;
+use App\Services\JwtService;
+use Core\Controller;
+
+class DesktopApiController extends Controller
+{
+    private const JWT_TTL_SECONDS = 1296000; // 15 dias
+
+    private \Database $db;
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->db = new \Database();
+    }
+
+    public function login(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsPost();
+
+        $payload = ApiHelper::getJsonBody();
+        $codeAccess = $this->requiredString($payload, 'codeAccess');
+        $login = trim((string) ($payload['login'] ?? $payload['username'] ?? $payload['email'] ?? $payload['administrator'] ?? ''));
+        if ($login === '') {
+            ApiHelper::respond(['error' => 'El campo login es obligatorio'], 422);
+        }
+        $password = $this->requiredString($payload, 'password');
+
+        $row = $this->db->fetchOne(
+            "SELECT c.Id AS CustomerId, c.Name AS CustomerName, c.IsActive, a.Id AS AdminId, a.Username, a.Email, a.Password, a.Role
+             FROM Customers c
+             JOIN AdministratorsDesktop a ON a.CustomerApiId = c.Id
+             WHERE c.CodeAccess = ?
+               AND c.IsActive = 1
+               AND COALESCE(a.Removed, 0) = 0
+               AND a.Role = 2
+               AND (a.Username = ? OR a.Email = ?)
+             LIMIT 1",
+            [$codeAccess, $login, $login]
+        );
+
+        if (!$row || !$this->passwordMatches($password, (string) ($row['Password'] ?? ''))) {
+            ApiHelper::respond(['error' => 'Credenciales invalidas'], 401);
+        }
+
+        $jwt = new JwtService();
+        $token = $jwt->createToken([
+            'name' => $row['CustomerName'],
+            'customerId' => $row['CustomerId'],
+        ], self::JWT_TTL_SECONDS);
+
+        ApiHelper::respond([
+            'status' => 'success',
+            'token' => $token,
+            'expiresIn' => self::JWT_TTL_SECONDS,
+            'expiresAt' => date('Y-m-d H:i:s', time() + self::JWT_TTL_SECONDS),
+            'customer' => [
+                'name' => $row['CustomerName'],
+                'customerId' => $row['CustomerId'],
+            ],
+        ]);
+    }
+
+    public function dashboard(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsGet();
+
+        $customerId = $this->customerId();
+        [$from, $to] = $this->dateRange();
+        $expiringDays = $this->intQuery('expiringDays', 3, 1, 365);
+        $lowStock = $this->intQuery('lowStock', 5, 0, 100000);
+
+        ApiHelper::respond([
+            'customerApiId' => $customerId,
+            'range' => $this->rangePayload($from, $to),
+            'members' => [
+                'total' => $this->scalar("SELECT COUNT(*) FROM UsersDesktop WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0", [$customerId]),
+                'newInRange' => $this->scalar(
+                    "SELECT COUNT(*) FROM UsersDesktop WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0 AND CreatedOn BETWEEN ? AND ?",
+                    [$customerId, $from, $to]
+                ),
+                'dailyNew' => $this->dailyUsers($customerId, $from, $to),
+            ],
+            'memberships' => [
+                'activeTotal' => $this->activeMemberships($customerId),
+                'expiringTotal' => $this->expiringMemberships($customerId, $expiringDays),
+                'soldTotal' => $this->saleCategoryCount($customerId, $from, $to, 'membership'),
+                'income' => $this->saleCategoryIncome($customerId, $from, $to, 'membership'),
+                'dailySales' => $this->dailyCategorySales($customerId, $from, $to, 'membership'),
+            ],
+            'products' => [
+                'lowStockTotal' => $this->lowStockCount($customerId, $lowStock),
+                'soldTotal' => $this->saleCategoryCount($customerId, $from, $to, 'product'),
+                'income' => $this->saleCategoryIncome($customerId, $from, $to, 'product'),
+                'dailySales' => $this->dailyCategorySales($customerId, $from, $to, 'product'),
+            ],
+            'attendances' => $this->attendanceSummary($customerId, $from, $to),
+            'sales' => $this->salesSummary($customerId, $from, $to),
+        ]);
+    }
+
+    public function users(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsGet();
+
+        $customerId = $this->customerId();
+        [$from, $to] = $this->dateRange();
+        [$page, $perPage, $offset] = $this->pagination();
+        $search = trim((string) ($_GET['search'] ?? ''));
+
+        $where = 'CustomerApiId = ? AND COALESCE(Removed, 0) = 0';
+        $params = [$customerId];
+
+        if ($search !== '') {
+            $where .= ' AND (Fullname LIKE ? OR Code LIKE ? OR PhoneNumber LIKE ?)';
+            $like = '%' . $search . '%';
+            array_push($params, $like, $like, $like);
+        }
+
+        $total = $this->scalar("SELECT COUNT(*) FROM UsersDesktop WHERE {$where}", $params);
+        $members = $this->db->fetchAll(
+            "SELECT Id, Fullname, PhoneNumber, PhoneNumberEmergency, Gender, BirthDate, Code, CreatedOn
+             FROM UsersDesktop
+             WHERE {$where}
+             ORDER BY Fullname ASC
+             LIMIT ? OFFSET ?",
+            array_merge($params, [$perPage, $offset])
+        );
+
+        ApiHelper::respond([
+            'summary' => [
+                'totalCurrent' => $this->scalar("SELECT COUNT(*) FROM UsersDesktop WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0", [$customerId]),
+                'newInRange' => $this->scalar(
+                    "SELECT COUNT(*) FROM UsersDesktop WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0 AND CreatedOn BETWEEN ? AND ?",
+                    [$customerId, $from, $to]
+                ),
+                'dailyNew' => $this->dailyUsers($customerId, $from, $to),
+            ],
+            'members' => $this->pagePayload($members, $total, $page, $perPage),
+        ]);
+    }
+
+    public function memberships(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsGet();
+
+        $customerId = $this->customerId();
+        $expiringDays = $this->intQuery('expiringDays', 3, 1, 365);
+        [$page, $perPage, $offset] = $this->pagination();
+        $status = strtolower(trim((string) ($_GET['status'] ?? 'all')));
+
+        $where = 'CustomerApiId = ?';
+        $params = [$customerId];
+        if ($status === 'active') {
+            $where .= ' AND Expiration > 0';
+        } elseif ($status === 'expired') {
+            $where .= ' AND Expiration <= 0';
+        } elseif ($status === 'expiring') {
+            $where .= ' AND Expiration BETWEEN 1 AND ?';
+            $params[] = $expiringDays;
+        }
+
+        $total = $this->scalar("SELECT COUNT(*) FROM ViewSubscriptions WHERE {$where}", $params);
+        $rows = $this->db->fetchAll(
+            "SELECT Id, UserId, Fullname, PhoneNumber, EndingDate, Expiration, Warning, Finished, Registered
+             FROM ViewSubscriptions
+             WHERE {$where}
+             ORDER BY Expiration ASC, Fullname ASC
+             LIMIT ? OFFSET ?",
+            array_merge($params, [$perPage, $offset])
+        );
+
+        ApiHelper::respond([
+            'summary' => [
+                'activeToday' => $this->activeMemberships($customerId),
+                'activeTotal' => $this->activeMemberships($customerId),
+                'expiringTotal' => $this->expiringMemberships($customerId, $expiringDays),
+                'expiringDays' => $expiringDays,
+            ],
+            'memberships' => $this->pagePayload($rows, $total, $page, $perPage),
+        ]);
+    }
+
+    public function products(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsGet();
+
+        $customerId = $this->customerId();
+        $lowStock = $this->intQuery('lowStock', 5, 0, 100000);
+        [$page, $perPage, $offset] = $this->pagination();
+        $search = trim((string) ($_GET['search'] ?? ''));
+
+        $where = 'CustomerApiId = ? AND COALESCE(IsDeleted, 0) = 0';
+        $params = [$customerId];
+        if ($search !== '') {
+            $where .= ' AND (Name LIKE ? OR Code LIKE ?)';
+            $like = '%' . $search . '%';
+            array_push($params, $like, $like);
+        }
+
+        $total = $this->scalar("SELECT COUNT(*) FROM ViewProductStock WHERE {$where}", $params);
+        $products = $this->db->fetchAll(
+            "SELECT ProductId, Code, Name, Active, CurrentPrice, Stock
+             FROM ViewProductStock
+             WHERE {$where}
+             ORDER BY Name ASC
+             LIMIT ? OFFSET ?",
+            array_merge($params, [$perPage, $offset])
+        );
+
+        [$historyPage, $historyPerPage, $historyOffset] = $this->pagination('historyPage', 'historyPerPage');
+        $historyTotal = $this->scalar(
+            "SELECT COUNT(*)
+             FROM ProductStockDesktop ps
+             WHERE ps.CustomerApiId = ? AND COALESCE(ps.IsDeleted, 0) = 0",
+            [$customerId]
+        );
+        $history = $this->db->fetchAll(
+            "SELECT ps.Id, ps.ProductId, p.Name AS ProductName, ps.MovementType, ps.Quantity, ps.MovementDate, ps.Notes, ps.CreatedBy
+             FROM ProductStockDesktop ps
+             LEFT JOIN ProductDesktop p ON p.Id = ps.ProductId
+             WHERE ps.CustomerApiId = ? AND COALESCE(ps.IsDeleted, 0) = 0
+             ORDER BY ps.MovementDate DESC
+             LIMIT ? OFFSET ?",
+            [$customerId, $historyPerPage, $historyOffset]
+        );
+
+        ApiHelper::respond([
+            'summary' => [
+                'lowStockTotal' => $this->lowStockCount($customerId, $lowStock),
+                'lowStockThreshold' => $lowStock,
+            ],
+            'products' => $this->pagePayload($products, $total, $page, $perPage),
+            'stockHistory' => $this->pagePayload($history, $historyTotal, $historyPage, $historyPerPage),
+        ]);
+    }
+
+    public function attendances(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsGet();
+
+        $customerId = $this->customerId();
+        [$from, $to] = $this->dateRange();
+        [$page, $perPage, $offset] = $this->pagination();
+
+        $total = $this->scalar(
+            "SELECT COUNT(*) FROM AttendancesDesktop WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0 AND STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?",
+            [$customerId, $from, $to]
+        );
+        $rows = $this->db->fetchAll(
+            "SELECT a.Id, a.CheckIn, a.Active, a.UserId, u.Fullname, u.Code
+             FROM AttendancesDesktop a
+             LEFT JOIN UsersDesktop u ON u.Id = a.UserId
+             WHERE a.CustomerApiId = ? AND COALESCE(a.Removed, 0) = 0 AND STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
+             ORDER BY STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s') DESC
+             LIMIT ? OFFSET ?",
+            [$customerId, $from, $to, $perPage, $offset]
+        );
+
+        ApiHelper::respond([
+            'summary' => $this->attendanceSummary($customerId, $from, $to),
+            'attendances' => $this->pagePayload($rows, $total, $page, $perPage),
+        ]);
+    }
+
+    public function sales(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsGet();
+
+        $customerId = $this->customerId();
+        [$from, $to] = $this->dateRange();
+        [$page, $perPage, $offset] = $this->pagination();
+
+        $cashTotal = $this->scalar(
+            "SELECT COUNT(*) FROM CashRegisterDesktop WHERE CustomerApiId = ? AND COALESCE(IsDeleted, 0) = 0 AND OpenedAt BETWEEN ? AND ?",
+            [$customerId, $from, $to]
+        );
+        $cashRegisters = $this->db->fetchAll(
+            "SELECT cr.*,
+                    (
+                        SELECT a.Username
+                        FROM AdministratorsDesktop a
+                        WHERE a.CustomerApiId = cr.CustomerApiId
+                          AND COALESCE(a.Removed, 0) = 0
+                          AND (a.Id = cr.OpenedBy OR a.Username = cr.OpenedBy)
+                        ORDER BY a.Username ASC
+                        LIMIT 1
+                    ) AS OpenedByName,
+                    (
+                        SELECT a.Username
+                        FROM AdministratorsDesktop a
+                        WHERE a.CustomerApiId = cr.CustomerApiId
+                          AND COALESCE(a.Removed, 0) = 0
+                          AND (a.Id = cr.ClosedBy OR a.Username = cr.ClosedBy)
+                        ORDER BY a.Username ASC
+                        LIMIT 1
+                    ) AS ClosedByName
+             FROM CashRegisterDesktop cr
+             WHERE cr.CustomerApiId = ? AND COALESCE(cr.IsDeleted, 0) = 0 AND cr.OpenedAt BETWEEN ? AND ?
+             ORDER BY cr.OpenedAt DESC
+             LIMIT ? OFFSET ?",
+            [$customerId, $from, $to, $perPage, $offset]
+        );
+
+        foreach ($cashRegisters as &$cashRegister) {
+            $tickets = $this->db->fetchAll(
+                "SELECT * FROM SaleTicketDesktop
+                 WHERE CustomerApiId = ? AND CashRegisterId = ? AND COALESCE(IsDeleted, 0) = 0
+                 ORDER BY SaleDate DESC",
+                [$customerId, $cashRegister['Id']]
+            );
+
+            foreach ($tickets as &$ticket) {
+                $ticket['items'] = $this->db->fetchAll(
+                    "SELECT * FROM SaleTicketItemDesktop
+                     WHERE CustomerApiId = ? AND SaleTicketId = ? AND COALESCE(IsDeleted, 0) = 0
+                     ORDER BY CreatedOn ASC",
+                    [$customerId, $ticket['Id']]
+                );
+            }
+
+            $cashRegister['tickets'] = $tickets;
+        }
+        unset($cashRegister, $ticket);
+
+        ApiHelper::respond([
+            'summary' => $this->salesSummary($customerId, $from, $to),
+            'cashRegisters' => $this->pagePayload($cashRegisters, $cashTotal, $page, $perPage),
+        ]);
+    }
+
+    public function admins(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsGet();
+
+        $customerId = $this->customerId();
+        [$page, $perPage, $offset] = $this->pagination();
+        $search = trim((string) ($_GET['search'] ?? ''));
+
+        $where = 'CustomerApiId = ? AND COALESCE(Removed, 0) = 0';
+        $params = [$customerId];
+        if ($search !== '') {
+            $where .= ' AND (Username LIKE ? OR Email LIKE ? OR PhoneNumber LIKE ?)';
+            $like = '%' . $search . '%';
+            array_push($params, $like, $like, $like);
+        }
+
+        $total = $this->scalar("SELECT COUNT(*) FROM AdministratorsDesktop WHERE {$where}", $params);
+        $admins = $this->db->fetchAll(
+            "SELECT Id, Username, Email, PhoneNumber, Manager, EmailConfirmed, EmailConfirmedOn, Role
+             FROM AdministratorsDesktop
+             WHERE {$where}
+             ORDER BY Username ASC
+             LIMIT ? OFFSET ?",
+            array_merge($params, [$perPage, $offset])
+        );
+
+        [$historyPage, $historyPerPage, $historyOffset] = $this->pagination('historyPage', 'historyPerPage');
+        $historySearch = trim((string) ($_GET['historySearch'] ?? ''));
+        $historyWhere = 'h.CustomerApiId = ? AND COALESCE(h.Removed, 0) = 0';
+        $historyParams = [$customerId];
+        if ($historySearch !== '') {
+            $historyWhere .= ' AND (h.Operation LIKE ? OR a.Username LIKE ? OR a.Email LIKE ?)';
+            $like = '%' . $historySearch . '%';
+            array_push($historyParams, $like, $like, $like);
+        }
+
+        $historyTotal = $this->scalar(
+            "SELECT COUNT(*)
+             FROM HistoryOperationsDesktop h
+             LEFT JOIN AdministratorsDesktop a ON a.Id = h.AdminId
+             WHERE {$historyWhere}",
+            $historyParams
+        );
+        $history = $this->db->fetchAll(
+            "SELECT h.Id, h.Operation, h.DatetimeOperation, h.AdminId, a.Username, a.Email
+             FROM HistoryOperationsDesktop h
+             LEFT JOIN AdministratorsDesktop a ON a.Id = h.AdminId
+             WHERE {$historyWhere}
+             ORDER BY STR_TO_DATE(h.DatetimeOperation, '%Y-%m-%d %H:%i:%s') DESC
+             LIMIT ? OFFSET ?",
+            array_merge($historyParams, [$historyPerPage, $historyOffset])
+        );
+
+        ApiHelper::respond([
+            'admins' => $this->pagePayload($admins, $total, $page, $perPage),
+            'history' => $this->pagePayload($history, $historyTotal, $historyPage, $historyPerPage),
+        ]);
+    }
+
+    public function chartsOverview(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsGet();
+
+        $customerId = $this->customerId();
+        [$from, $to] = $this->dateRange();
+
+        ApiHelper::respond([
+            'customerApiId' => $customerId,
+            'range' => $this->rangePayload($from, $to),
+            'users' => $this->usersChartPayload($customerId, $from, $to),
+            'memberships' => $this->categoryChartPayload($customerId, $from, $to, 'membership'),
+            'products' => $this->categoryChartPayload($customerId, $from, $to, 'product'),
+            'attendances' => $this->attendancesChartPayload($customerId, $from, $to),
+            'sales' => $this->salesChartPayload($customerId, $from, $to),
+        ]);
+    }
+
+    public function chartsUsers(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsGet();
+
+        $customerId = $this->customerId();
+        [$from, $to] = $this->dateRange();
+
+        ApiHelper::respond([
+            'customerApiId' => $customerId,
+            'range' => $this->rangePayload($from, $to),
+            'users' => $this->usersChartPayload($customerId, $from, $to),
+        ]);
+    }
+
+    public function chartsMemberships(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsGet();
+
+        $customerId = $this->customerId();
+        [$from, $to] = $this->dateRange();
+
+        ApiHelper::respond([
+            'customerApiId' => $customerId,
+            'range' => $this->rangePayload($from, $to),
+            'memberships' => $this->categoryChartPayload($customerId, $from, $to, 'membership'),
+        ]);
+    }
+
+    public function chartsProducts(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsGet();
+
+        $customerId = $this->customerId();
+        [$from, $to] = $this->dateRange();
+
+        ApiHelper::respond([
+            'customerApiId' => $customerId,
+            'range' => $this->rangePayload($from, $to),
+            'products' => $this->categoryChartPayload($customerId, $from, $to, 'product'),
+        ]);
+    }
+
+    public function chartsAttendances(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsGet();
+
+        $customerId = $this->customerId();
+        [$from, $to] = $this->dateRange();
+
+        ApiHelper::respond([
+            'customerApiId' => $customerId,
+            'range' => $this->rangePayload($from, $to),
+            'attendances' => $this->attendancesChartPayload($customerId, $from, $to),
+        ]);
+    }
+
+    public function chartsSales(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsGet();
+
+        $customerId = $this->customerId();
+        [$from, $to] = $this->dateRange();
+
+        ApiHelper::respond([
+            'customerApiId' => $customerId,
+            'range' => $this->rangePayload($from, $to),
+            'sales' => $this->salesChartPayload($customerId, $from, $to),
+        ]);
+    }
+
+    private function requiredString(array $payload, string $key): string
+    {
+        $value = isset($payload[$key]) ? trim((string) $payload[$key]) : '';
+        if ($value === '') {
+            ApiHelper::respond(['error' => "El campo {$key} es obligatorio"], 422);
+        }
+
+        return $value;
+    }
+
+    private function passwordMatches(string $plain, string $stored): bool
+    {
+        if ($stored === '') {
+            return false;
+        }
+
+        $info = password_get_info($stored);
+        if (($info['algo'] ?? 0) !== 0 && password_verify($plain, $stored)) {
+            return true;
+        }
+
+        if (hash_equals($stored, $plain)) {
+            return true;
+        }
+
+        $sqlVarcharHash = $this->hashSha256SqlVarcharString($plain);
+        if ($sqlVarcharHash !== null && hash_equals($stored, $sqlVarcharHash)) {
+            return true;
+        }
+
+        $sqlVarcharHashHex = $this->hashSha256SqlVarcharHex($plain);
+        return hash_equals(strtolower($stored), $sqlVarcharHashHex);
+    }
+
+    private function hashSha256SqlVarcharString(string $password, string $codePage = 'Windows-1252'): ?string
+    {
+        $passwordBytes = $this->convertEncoding($password, 'UTF-8', $codePage);
+        if ($passwordBytes === null) {
+            return null;
+        }
+
+        $hashBytes = hash('sha256', $passwordBytes, true);
+
+        return $this->convertEncoding($hashBytes, $codePage, 'UTF-8');
+    }
+
+    private function hashSha256SqlVarcharHex(string $password, string $codePage = 'Windows-1252'): string
+    {
+        $passwordBytes = $this->convertEncoding($password, 'UTF-8', $codePage) ?? $password;
+
+        return hash('sha256', $passwordBytes);
+    }
+
+    private function convertEncoding(string $value, string $from, string $to): ?string
+    {
+        if (function_exists('mb_convert_encoding')) {
+            $converted = @mb_convert_encoding($value, $to, $from);
+            if ($converted !== false) {
+                return $converted;
+            }
+        }
+
+        if (function_exists('iconv')) {
+            $converted = @iconv($from, $to . '//TRANSLIT', $value);
+            if ($converted !== false) {
+                return $converted;
+            }
+        }
+
+        return null;
+    }
+
+    private function customerId(): string
+    {
+        $customerId = $GLOBALS['desktop_jwt_customer_id'] ?? '';
+        if ($customerId === '') {
+            ApiHelper::respond(['error' => 'Token sin customerId'], 401);
+        }
+
+        return (string) $customerId;
+    }
+
+    private function dateRange(): array
+    {
+        $range = strtolower(trim((string) ($_GET['range'] ?? 'today')));
+        $todayStart = strtotime(date('Y-m-d 00:00:00'));
+        $todayEnd = strtotime(date('Y-m-d 23:59:59'));
+
+        if ($range === 'custom') {
+            $from = isset($_GET['from']) ? strtotime((string) $_GET['from']) : false;
+            $to = isset($_GET['to']) ? strtotime((string) $_GET['to']) : false;
+            if ($from === false || $to === false) {
+                ApiHelper::respond(['error' => 'from y to son obligatorios para range=custom'], 422);
+            }
+            if ($from > $to) {
+                ApiHelper::respond(['error' => 'from no puede ser mayor que to'], 422);
+            }
+
+            return [date('Y-m-d 00:00:00', $from), date('Y-m-d 23:59:59', $to)];
+        }
+
+        if ($range === 'week') {
+            $days = 7;
+        } elseif (in_array($range, ['fifteen', '15', '15days'], true)) {
+            $days = 15;
+        } elseif (in_array($range, ['month', '30', '30days'], true)) {
+            $days = 30;
+        } else {
+            $days = 1;
+        }
+
+        $from = $days === 1 ? $todayStart : strtotime('-' . ($days - 1) . ' days', $todayStart);
+
+        return [date('Y-m-d H:i:s', $from), date('Y-m-d H:i:s', $todayEnd)];
+    }
+
+    private function rangePayload(string $from, string $to): array
+    {
+        return [
+            'from' => $from,
+            'to' => $to,
+        ];
+    }
+
+    private function pagination(string $pageKey = 'page', string $perPageKey = 'perPage'): array
+    {
+        $page = $this->intQuery($pageKey, 1, 1, 1000000);
+        $perPage = $this->intQuery($perPageKey, 25, 1, 100);
+
+        return [$page, $perPage, ($page - 1) * $perPage];
+    }
+
+    private function intQuery(string $key, int $default, int $min, int $max): int
+    {
+        $value = isset($_GET[$key]) ? (int) $_GET[$key] : $default;
+        return max($min, min($max, $value));
+    }
+
+    private function scalar(string $sql, array $params = []): float
+    {
+        $row = $this->db->fetchOne($sql, $params);
+        if (!$row) {
+            return 0;
+        }
+
+        return (float) array_values($row)[0];
+    }
+
+    private function pagePayload(array $data, float $total, int $page, int $perPage): array
+    {
+        return [
+            'data' => $data,
+            'pagination' => [
+                'page' => $page,
+                'perPage' => $perPage,
+                'total' => (int) $total,
+                'totalPages' => (int) ceil($total / $perPage),
+            ],
+        ];
+    }
+
+    private function activeMemberships(string $customerId): float
+    {
+        return $this->scalar('SELECT COUNT(*) FROM ViewSubscriptions WHERE CustomerApiId = ? AND Expiration > 0', [$customerId]);
+    }
+
+    private function expiringMemberships(string $customerId, int $days): float
+    {
+        return $this->scalar('SELECT COUNT(*) FROM ViewSubscriptions WHERE CustomerApiId = ? AND Expiration BETWEEN 1 AND ?', [$customerId, $days]);
+    }
+
+    private function lowStockCount(string $customerId, int $threshold): float
+    {
+        return $this->scalar(
+            'SELECT COUNT(*) FROM ViewProductStock WHERE CustomerApiId = ? AND COALESCE(IsDeleted, 0) = 0 AND Stock <= ?',
+            [$customerId, $threshold]
+        );
+    }
+
+    private function dailyUsers(string $customerId, string $from, string $to): array
+    {
+        $rows = $this->db->fetchAll(
+            "SELECT DATE(CreatedOn) AS date, COUNT(*) AS total
+             FROM UsersDesktop
+             WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0 AND CreatedOn BETWEEN ? AND ?
+             GROUP BY DATE(CreatedOn)
+             ORDER BY date ASC",
+            [$customerId, $from, $to]
+        );
+
+        return $this->completeDailySeries($from, $to, $rows, ['total']);
+    }
+
+    private function categoryCondition(string $category): string
+    {
+        return $category === 'membership' ? 'i.SubscriptionId IS NOT NULL' : 'i.ProductId IS NOT NULL';
+    }
+
+    private function saleCategoryCount(string $customerId, string $from, string $to, string $category): float
+    {
+        return $this->scalar(
+            "SELECT COALESCE(SUM(i.Quantity), 0)
+             FROM SaleTicketItemDesktop i
+             JOIN SaleTicketDesktop t ON t.Id = i.SaleTicketId
+             WHERE t.CustomerApiId = ? AND t.Active = 1 AND COALESCE(t.IsDeleted, 0) = 0 AND COALESCE(i.IsDeleted, 0) = 0
+               AND t.SaleDate BETWEEN ? AND ? AND " . $this->categoryCondition($category),
+            [$customerId, $from, $to]
+        );
+    }
+
+    private function saleCategoryIncome(string $customerId, string $from, string $to, string $category): float
+    {
+        return $this->scalar(
+            "SELECT COALESCE(SUM(i.LineTotal), 0)
+             FROM SaleTicketItemDesktop i
+             JOIN SaleTicketDesktop t ON t.Id = i.SaleTicketId
+             WHERE t.CustomerApiId = ? AND t.Active = 1 AND COALESCE(t.IsDeleted, 0) = 0 AND COALESCE(i.IsDeleted, 0) = 0
+               AND t.SaleDate BETWEEN ? AND ? AND " . $this->categoryCondition($category),
+            [$customerId, $from, $to]
+        );
+    }
+
+    private function dailyCategorySales(string $customerId, string $from, string $to, string $category): array
+    {
+        $rows = $this->db->fetchAll(
+            "SELECT DATE(t.SaleDate) AS date, COALESCE(SUM(i.Quantity), 0) AS quantity, COALESCE(SUM(i.LineTotal), 0) AS income
+             FROM SaleTicketItemDesktop i
+             JOIN SaleTicketDesktop t ON t.Id = i.SaleTicketId
+             WHERE t.CustomerApiId = ? AND t.Active = 1 AND COALESCE(t.IsDeleted, 0) = 0 AND COALESCE(i.IsDeleted, 0) = 0
+               AND t.SaleDate BETWEEN ? AND ? AND " . $this->categoryCondition($category) . "
+             GROUP BY DATE(t.SaleDate)
+             ORDER BY date ASC",
+            [$customerId, $from, $to]
+        );
+
+        return $this->completeDailySeries($from, $to, $rows, ['quantity', 'income']);
+    }
+
+    private function usersChartPayload(string $customerId, string $from, string $to): array
+    {
+        return [
+            'dailyNewUsers' => $this->dailyUsers($customerId, $from, $to),
+            'totalNewUsers' => $this->scalar(
+                "SELECT COUNT(*) FROM UsersDesktop WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0 AND CreatedOn BETWEEN ? AND ?",
+                [$customerId, $from, $to]
+            ),
+        ];
+    }
+
+    private function categoryChartPayload(string $customerId, string $from, string $to, string $category): array
+    {
+        return [
+            'daily' => $this->dailyCategorySales($customerId, $from, $to, $category),
+            'totalQuantity' => $this->saleCategoryCount($customerId, $from, $to, $category),
+            'totalIncome' => $this->saleCategoryIncome($customerId, $from, $to, $category),
+        ];
+    }
+
+    private function attendancesChartPayload(string $customerId, string $from, string $to): array
+    {
+        $dailyRows = $this->db->fetchAll(
+            "SELECT DATE(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s')) AS date,
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN Active = 1 THEN 1 ELSE 0 END) AS allowed,
+                    SUM(CASE WHEN Active = 0 THEN 1 ELSE 0 END) AS denied
+             FROM AttendancesDesktop
+             WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0
+               AND STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
+             GROUP BY DATE(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s'))
+             ORDER BY date ASC",
+            [$customerId, $from, $to]
+        );
+
+        return [
+            'daily' => $this->completeDailySeries($from, $to, $dailyRows, ['total', 'allowed', 'denied']),
+            'byWeekday' => $this->completeWeekdaySeries($this->db->fetchAll(
+                "SELECT DAYOFWEEK(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s')) AS weekday,
+                        COUNT(*) AS total
+                 FROM AttendancesDesktop
+                 WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0 AND Active = 1
+                   AND STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
+                 GROUP BY DAYOFWEEK(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s'))
+                 ORDER BY weekday ASC",
+                [$customerId, $from, $to]
+            )),
+            'byHour' => $this->completeHourSeries($this->db->fetchAll(
+                "SELECT HOUR(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s')) AS hour,
+                        COUNT(*) AS total
+                 FROM AttendancesDesktop
+                 WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0 AND Active = 1
+                   AND STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
+                 GROUP BY HOUR(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s'))
+                 ORDER BY hour ASC",
+                [$customerId, $from, $to]
+            )),
+        ];
+    }
+
+    private function salesChartPayload(string $customerId, string $from, string $to): array
+    {
+        $dailySalesRows = $this->db->fetchAll(
+            "SELECT DATE(SaleDate) AS date,
+                    SUM(CASE WHEN Active = 1 THEN 1 ELSE 0 END) AS tickets,
+                    SUM(CASE WHEN Active = 0 THEN 1 ELSE 0 END) AS cancelledTickets,
+                    COALESCE(SUM(CASE WHEN Active = 1 THEN TotalAmount ELSE 0 END), 0) AS income
+             FROM SaleTicketDesktop
+             WHERE CustomerApiId = ? AND COALESCE(IsDeleted, 0) = 0 AND SaleDate BETWEEN ? AND ?
+             GROUP BY DATE(SaleDate)
+             ORDER BY date ASC",
+            [$customerId, $from, $to]
+        );
+
+        $dailyCategoryRows = $this->db->fetchAll(
+            "SELECT DATE(t.SaleDate) AS date,
+                    COALESCE(SUM(CASE WHEN i.SubscriptionId IS NOT NULL THEN i.Quantity ELSE 0 END), 0) AS memberships,
+                    COALESCE(SUM(CASE WHEN i.SubscriptionId IS NOT NULL THEN i.LineTotal ELSE 0 END), 0) AS membershipIncome,
+                    COALESCE(SUM(CASE WHEN i.ProductId IS NOT NULL THEN i.Quantity ELSE 0 END), 0) AS products,
+                    COALESCE(SUM(CASE WHEN i.ProductId IS NOT NULL THEN i.LineTotal ELSE 0 END), 0) AS productIncome
+             FROM SaleTicketItemDesktop i
+             JOIN SaleTicketDesktop t ON t.Id = i.SaleTicketId
+             WHERE t.CustomerApiId = ? AND t.Active = 1 AND COALESCE(t.IsDeleted, 0) = 0 AND COALESCE(i.IsDeleted, 0) = 0
+               AND t.SaleDate BETWEEN ? AND ?
+             GROUP BY DATE(t.SaleDate)
+             ORDER BY date ASC",
+            [$customerId, $from, $to]
+        );
+
+        return [
+            'dailyTickets' => $this->completeDailySeries($from, $to, $dailySalesRows, ['tickets', 'cancelledTickets', 'income']),
+            'dailyCategories' => $this->completeDailySeries($from, $to, $dailyCategoryRows, ['memberships', 'membershipIncome', 'products', 'productIncome']),
+        ];
+    }
+
+    private function completeDailySeries(string $from, string $to, array $rows, array $fields): array
+    {
+        $series = [];
+        $start = strtotime(date('Y-m-d', strtotime($from)));
+        $end = strtotime(date('Y-m-d', strtotime($to)));
+
+        for ($day = $start; $day <= $end; $day = strtotime('+1 day', $day)) {
+            $date = date('Y-m-d', $day);
+            $series[$date] = ['date' => $date];
+            foreach ($fields as $field) {
+                $series[$date][$field] = 0;
+            }
+        }
+
+        foreach ($rows as $row) {
+            $date = isset($row['date']) ? date('Y-m-d', strtotime((string) $row['date'])) : null;
+            if ($date === null || !isset($series[$date])) {
+                continue;
+            }
+
+            foreach ($fields as $field) {
+                $series[$date][$field] = (float) ($row[$field] ?? 0);
+            }
+        }
+
+        return array_values($series);
+    }
+
+    private function completeWeekdaySeries(array $rows): array
+    {
+        $labels = [
+            1 => 'Domingo',
+            2 => 'Lunes',
+            3 => 'Martes',
+            4 => 'Miercoles',
+            5 => 'Jueves',
+            6 => 'Viernes',
+            7 => 'Sabado',
+        ];
+        $series = [];
+
+        foreach ($labels as $weekday => $label) {
+            $series[$weekday] = [
+                'weekday' => $weekday,
+                'label' => $label,
+                'total' => 0,
+            ];
+        }
+
+        foreach ($rows as $row) {
+            $weekday = (int) ($row['weekday'] ?? 0);
+            if (isset($series[$weekday])) {
+                $series[$weekday]['total'] = (float) ($row['total'] ?? 0);
+            }
+        }
+
+        return array_values($series);
+    }
+
+    private function completeHourSeries(array $rows): array
+    {
+        $series = [];
+
+        for ($hour = 0; $hour <= 23; $hour++) {
+            $series[$hour] = [
+                'hour' => $hour,
+                'label' => str_pad((string) $hour, 2, '0', STR_PAD_LEFT) . ':00',
+                'total' => 0,
+            ];
+        }
+
+        foreach ($rows as $row) {
+            $hour = (int) ($row['hour'] ?? -1);
+            if (isset($series[$hour])) {
+                $series[$hour]['total'] = (float) ($row['total'] ?? 0);
+            }
+        }
+
+        return array_values($series);
+    }
+
+    private function attendanceSummary(string $customerId, string $from, string $to): array
+    {
+        $base = "CustomerApiId = ? AND COALESCE(Removed, 0) = 0 AND STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?";
+        $params = [$customerId, $from, $to];
+        $total = $this->scalar("SELECT COUNT(*) FROM AttendancesDesktop WHERE {$base}", $params);
+        $charts = $this->attendancesChartPayload($customerId, $from, $to);
+
+        return [
+            'total' => $total,
+            'allowed' => $this->scalar("SELECT COUNT(*) FROM AttendancesDesktop WHERE {$base} AND Active = 1", $params),
+            'denied' => $this->scalar("SELECT COUNT(*) FROM AttendancesDesktop WHERE {$base} AND Active = 0", $params),
+            'averagePerDay' => $this->scalar(
+                "SELECT COALESCE(COUNT(*) / NULLIF(COUNT(DISTINCT DATE(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s'))), 0), 0)
+                 FROM AttendancesDesktop WHERE {$base}",
+                $params
+            ),
+            'daily' => $charts['daily'],
+            'byWeekday' => $charts['byWeekday'],
+            'byHour' => $charts['byHour'],
+        ];
+    }
+
+    private function salesSummary(string $customerId, string $from, string $to): array
+    {
+        $ticketWhere = 'CustomerApiId = ? AND COALESCE(IsDeleted, 0) = 0 AND SaleDate BETWEEN ? AND ?';
+        $params = [$customerId, $from, $to];
+
+        return [
+            'tickets' => $this->scalar("SELECT COUNT(*) FROM SaleTicketDesktop WHERE {$ticketWhere} AND Active = 1", $params),
+            'cancelledTickets' => $this->scalar("SELECT COUNT(*) FROM SaleTicketDesktop WHERE {$ticketWhere} AND Active = 0", $params),
+            'income' => $this->scalar("SELECT COALESCE(SUM(TotalAmount), 0) FROM SaleTicketDesktop WHERE {$ticketWhere} AND Active = 1", $params),
+            'membershipTickets' => $this->scalar(
+                "SELECT COUNT(DISTINCT t.Id) FROM SaleTicketDesktop t JOIN SaleTicketItemDesktop i ON i.SaleTicketId = t.Id
+                 WHERE t.CustomerApiId = ? AND t.Active = 1 AND COALESCE(t.IsDeleted, 0) = 0 AND COALESCE(i.IsDeleted, 0) = 0
+                   AND t.SaleDate BETWEEN ? AND ? AND i.SubscriptionId IS NOT NULL",
+                $params
+            ),
+            'productTickets' => $this->scalar(
+                "SELECT COUNT(DISTINCT t.Id) FROM SaleTicketDesktop t JOIN SaleTicketItemDesktop i ON i.SaleTicketId = t.Id
+                 WHERE t.CustomerApiId = ? AND t.Active = 1 AND COALESCE(t.IsDeleted, 0) = 0 AND COALESCE(i.IsDeleted, 0) = 0
+                   AND t.SaleDate BETWEEN ? AND ? AND i.ProductId IS NOT NULL",
+                $params
+            ),
+            'membershipIncome' => $this->saleCategoryIncome($customerId, $from, $to, 'membership'),
+            'productIncome' => $this->saleCategoryIncome($customerId, $from, $to, 'product'),
+            'paymentDistribution' => $this->db->fetchAll(
+                "SELECT PaymentMethod, COUNT(*) AS tickets, COALESCE(SUM(TotalAmount), 0) AS income
+                 FROM SaleTicketDesktop
+                 WHERE {$ticketWhere} AND Active = 1
+                 GROUP BY PaymentMethod
+                 ORDER BY income DESC",
+                $params
+            ),
+        ];
+    }
+}

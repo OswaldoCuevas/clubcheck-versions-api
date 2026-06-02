@@ -59,6 +59,22 @@ $router->any('/api/customers', 'CustomersController', 'patchCustomer',['customer
 $router->any('/api/customers/:customerId', 'CustomersController', 'getCustomer', ['customer_jwt']);
 $router->any('/api/customers/messages-sends-at-month/:customerId', 'CustomersController', 'getMessagesSendsAtMonth', ['customer_jwt']);
 
+// Desktop web/reporting API
+$router->post('/api/desktop/login', 'DesktopApiController', 'login');
+$router->get('/api/desktop/dashboard', 'DesktopApiController', 'dashboard', ['desktop_jwt']);
+$router->get('/api/desktop/users', 'DesktopApiController', 'users', ['desktop_jwt']);
+$router->get('/api/desktop/memberships', 'DesktopApiController', 'memberships', ['desktop_jwt']);
+$router->get('/api/desktop/products', 'DesktopApiController', 'products', ['desktop_jwt']);
+$router->get('/api/desktop/attendances', 'DesktopApiController', 'attendances', ['desktop_jwt']);
+$router->get('/api/desktop/sales', 'DesktopApiController', 'sales', ['desktop_jwt']);
+$router->get('/api/desktop/admins', 'DesktopApiController', 'admins', ['desktop_jwt']);
+$router->get('/api/desktop/charts', 'DesktopApiController', 'chartsOverview', ['desktop_jwt']);
+$router->get('/api/desktop/charts/users', 'DesktopApiController', 'chartsUsers', ['desktop_jwt']);
+$router->get('/api/desktop/charts/memberships', 'DesktopApiController', 'chartsMemberships', ['desktop_jwt']);
+$router->get('/api/desktop/charts/products', 'DesktopApiController', 'chartsProducts', ['desktop_jwt']);
+$router->get('/api/desktop/charts/attendances', 'DesktopApiController', 'chartsAttendances', ['desktop_jwt']);
+$router->get('/api/desktop/charts/sales', 'DesktopApiController', 'chartsSales', ['desktop_jwt']);
+
 // Rutas de mensajes enviados (MessageSent)
 // $router->get('/api/messages-sent', 'MessageSentController', 'index');
 // $router->get('/api/messages-sent/:id', 'MessageSentController', 'show');
