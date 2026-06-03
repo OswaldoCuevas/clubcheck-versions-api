@@ -119,6 +119,7 @@ class DesktopApiController extends Controller
         [$from, $to] = $this->dateRange();
         [$page, $perPage, $offset] = $this->pagination();
         $search = trim((string) ($_GET['search'] ?? ''));
+        [$sortColumn, $sortDir] = $this->usersSort();
 
         $where = 'CustomerApiId = ? AND COALESCE(Removed, 0) = 0';
         $params = [$customerId];
@@ -134,7 +135,7 @@ class DesktopApiController extends Controller
             "SELECT Id, Fullname, PhoneNumber, PhoneNumberEmergency, Gender, BirthDate, Code, CreatedOn
              FROM UsersDesktop
              WHERE {$where}
-             ORDER BY Fullname ASC
+             ORDER BY {$sortColumn} {$sortDir}, Fullname ASC
              LIMIT ? OFFSET ?",
             array_merge($params, [$perPage, $offset])
         );
@@ -147,6 +148,8 @@ class DesktopApiController extends Controller
                     [$customerId, $from, $to]
                 ),
                 'dailyNew' => $this->dailyUsers($customerId, $from, $to),
+                'sortBy' => $_GET['sortBy'] ?? 'fullname',
+                'sortDir' => strtolower((string) ($_GET['sortDir'] ?? 'asc')) === 'desc' ? 'desc' : 'asc',
             ],
             'members' => $this->pagePayload($members, $total, $page, $perPage),
         ]);
@@ -161,6 +164,7 @@ class DesktopApiController extends Controller
         $expiringDays = $this->intQuery('expiringDays', 3, 1, 365);
         [$page, $perPage, $offset] = $this->pagination();
         $status = strtolower(trim((string) ($_GET['status'] ?? 'all')));
+        [$membershipOrderBy, $sortBy, $sortDir] = $this->membershipSort();
 
         $where = 'CustomerApiId = ?';
         $params = [$customerId];
@@ -175,13 +179,36 @@ class DesktopApiController extends Controller
 
         $total = $this->scalar("SELECT COUNT(*) FROM ViewSubscriptions WHERE {$where}", $params);
         $rows = $this->db->fetchAll(
-            "SELECT Id, UserId, Fullname, PhoneNumber, EndingDate, Expiration, Warning, Finished, Registered
+            "SELECT Id,
+                    UserId,
+                    Fullname,
+                    PhoneNumber,
+                    SubscriptionId,
+                    StartDate,
+                    EndingDate,
+                    Expiration,
+                    CASE
+                        WHEN Id IS NULL OR Expiration IS NULL THEN 'none'
+                        WHEN Expiration <= 0 THEN 'expired'
+                        WHEN Expiration BETWEEN 1 AND ? THEN 'expiring'
+                        ELSE 'active'
+                    END AS Status,
+                    CASE WHEN Expiration BETWEEN 1 AND ? THEN 1 ELSE 0 END AS IsExpiring,
+                    Warning,
+                    Finished,
+                    Registered
              FROM ViewSubscriptions
              WHERE {$where}
-             ORDER BY Expiration ASC, Fullname ASC
+             ORDER BY {$membershipOrderBy}
              LIMIT ? OFFSET ?",
-            array_merge($params, [$perPage, $offset])
+            array_merge([$expiringDays, $expiringDays], $params, [$perPage, $offset])
         );
+
+        foreach ($rows as &$row) {
+            $row['status'] = $row['Status'] ?? null;
+            $row['isExpiring'] = (bool) ($row['IsExpiring'] ?? false);
+        }
+        unset($row);
 
         ApiHelper::respond([
             'summary' => [
@@ -189,6 +216,8 @@ class DesktopApiController extends Controller
                 'activeTotal' => $this->activeMemberships($customerId),
                 'expiringTotal' => $this->expiringMemberships($customerId, $expiringDays),
                 'expiringDays' => $expiringDays,
+                'sortBy' => $sortBy,
+                'sortDir' => $sortDir,
             ],
             'memberships' => $this->pagePayload($rows, $total, $page, $perPage),
         ]);
@@ -200,6 +229,7 @@ class DesktopApiController extends Controller
         ApiHelper::allowedMethodsGet();
 
         $customerId = $this->customerId();
+        [$from, $to] = $this->dateRange();
         $lowStock = $this->intQuery('lowStock', 5, 0, 100000);
         [$page, $perPage, $offset] = $this->pagination();
         $search = trim((string) ($_GET['search'] ?? ''));
@@ -226,20 +256,21 @@ class DesktopApiController extends Controller
         $historyTotal = $this->scalar(
             "SELECT COUNT(*)
              FROM ProductStockDesktop ps
-             WHERE ps.CustomerApiId = ? AND COALESCE(ps.IsDeleted, 0) = 0",
-            [$customerId]
+             WHERE ps.CustomerApiId = ? AND COALESCE(ps.IsDeleted, 0) = 0 AND ps.MovementDate BETWEEN ? AND ?",
+            [$customerId, $from, $to]
         );
         $history = $this->db->fetchAll(
             "SELECT ps.Id, ps.ProductId, p.Name AS ProductName, ps.MovementType, ps.Quantity, ps.MovementDate, ps.Notes, ps.CreatedBy
              FROM ProductStockDesktop ps
              LEFT JOIN ProductDesktop p ON p.Id = ps.ProductId
-             WHERE ps.CustomerApiId = ? AND COALESCE(ps.IsDeleted, 0) = 0
+             WHERE ps.CustomerApiId = ? AND COALESCE(ps.IsDeleted, 0) = 0 AND ps.MovementDate BETWEEN ? AND ?
              ORDER BY ps.MovementDate DESC
              LIMIT ? OFFSET ?",
-            [$customerId, $historyPerPage, $historyOffset]
+            [$customerId, $from, $to, $historyPerPage, $historyOffset]
         );
 
         ApiHelper::respond([
+            'range' => $this->rangePayload($from, $to),
             'summary' => [
                 'lowStockTotal' => $this->lowStockCount($customerId, $lowStock),
                 'lowStockThreshold' => $lowStock,
@@ -286,10 +317,12 @@ class DesktopApiController extends Controller
         $customerId = $this->customerId();
         [$from, $to] = $this->dateRange();
         [$page, $perPage, $offset] = $this->pagination();
+        $cashRegisterRangeWhere = $this->cashRegisterRangeWhere();
+        $cashRegisterRangeParams = [$from, $to, $from, $to, $from, $to];
 
         $cashTotal = $this->scalar(
-            "SELECT COUNT(*) FROM CashRegisterDesktop WHERE CustomerApiId = ? AND COALESCE(IsDeleted, 0) = 0 AND OpenedAt BETWEEN ? AND ?",
-            [$customerId, $from, $to]
+            "SELECT COUNT(*) FROM CashRegisterDesktop WHERE CustomerApiId = ? AND COALESCE(IsDeleted, 0) = 0 AND {$cashRegisterRangeWhere}",
+            array_merge([$customerId], $cashRegisterRangeParams)
         );
         $cashRegisters = $this->db->fetchAll(
             "SELECT cr.*,
@@ -312,18 +345,18 @@ class DesktopApiController extends Controller
                         LIMIT 1
                     ) AS ClosedByName
              FROM CashRegisterDesktop cr
-             WHERE cr.CustomerApiId = ? AND COALESCE(cr.IsDeleted, 0) = 0 AND cr.OpenedAt BETWEEN ? AND ?
+             WHERE cr.CustomerApiId = ? AND COALESCE(cr.IsDeleted, 0) = 0 AND {$cashRegisterRangeWhere}
              ORDER BY cr.OpenedAt DESC
              LIMIT ? OFFSET ?",
-            [$customerId, $from, $to, $perPage, $offset]
+            array_merge([$customerId], $cashRegisterRangeParams, [$perPage, $offset])
         );
 
         foreach ($cashRegisters as &$cashRegister) {
             $tickets = $this->db->fetchAll(
                 "SELECT * FROM SaleTicketDesktop
-                 WHERE CustomerApiId = ? AND CashRegisterId = ? AND COALESCE(IsDeleted, 0) = 0
+                 WHERE CustomerApiId = ? AND CashRegisterId = ? AND COALESCE(IsDeleted, 0) = 0 AND SaleDate BETWEEN ? AND ?
                  ORDER BY SaleDate DESC",
-                [$customerId, $cashRegister['Id']]
+                [$customerId, $cashRegister['Id'], $from, $to]
             );
 
             foreach ($tickets as &$ticket) {
@@ -340,6 +373,7 @@ class DesktopApiController extends Controller
         unset($cashRegister, $ticket);
 
         ApiHelper::respond([
+            'range' => $this->rangePayload($from, $to),
             'summary' => $this->salesSummary($customerId, $from, $to),
             'cashRegisters' => $this->pagePayload($cashRegisters, $cashTotal, $page, $perPage),
         ]);
@@ -351,6 +385,7 @@ class DesktopApiController extends Controller
         ApiHelper::allowedMethodsGet();
 
         $customerId = $this->customerId();
+        [$from, $to] = $this->dateRange();
         [$page, $perPage, $offset] = $this->pagination();
         $search = trim((string) ($_GET['search'] ?? ''));
 
@@ -374,8 +409,8 @@ class DesktopApiController extends Controller
 
         [$historyPage, $historyPerPage, $historyOffset] = $this->pagination('historyPage', 'historyPerPage');
         $historySearch = trim((string) ($_GET['historySearch'] ?? ''));
-        $historyWhere = 'h.CustomerApiId = ? AND COALESCE(h.Removed, 0) = 0';
-        $historyParams = [$customerId];
+        $historyWhere = "h.CustomerApiId = ? AND COALESCE(h.Removed, 0) = 0 AND STR_TO_DATE(h.DatetimeOperation, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?";
+        $historyParams = [$customerId, $from, $to];
         if ($historySearch !== '') {
             $historyWhere .= ' AND (h.Operation LIKE ? OR a.Username LIKE ? OR a.Email LIKE ?)';
             $like = '%' . $historySearch . '%';
@@ -400,6 +435,7 @@ class DesktopApiController extends Controller
         );
 
         ApiHelper::respond([
+            'range' => $this->rangePayload($from, $to),
             'admins' => $this->pagePayload($admins, $total, $page, $perPage),
             'history' => $this->pagePayload($history, $historyTotal, $historyPage, $historyPerPage),
         ]);
@@ -412,12 +448,13 @@ class DesktopApiController extends Controller
 
         $customerId = $this->customerId();
         [$from, $to] = $this->dateRange();
+        $expiringDays = $this->intQuery('expiringDays', 3, 1, 365);
 
         ApiHelper::respond([
             'customerApiId' => $customerId,
             'range' => $this->rangePayload($from, $to),
             'users' => $this->usersChartPayload($customerId, $from, $to),
-            'memberships' => $this->categoryChartPayload($customerId, $from, $to, 'membership'),
+            'memberships' => $this->categoryChartPayload($customerId, $from, $to, 'membership', $expiringDays),
             'products' => $this->categoryChartPayload($customerId, $from, $to, 'product'),
             'attendances' => $this->attendancesChartPayload($customerId, $from, $to),
             'sales' => $this->salesChartPayload($customerId, $from, $to),
@@ -446,11 +483,12 @@ class DesktopApiController extends Controller
 
         $customerId = $this->customerId();
         [$from, $to] = $this->dateRange();
+        $expiringDays = $this->intQuery('expiringDays', 3, 1, 365);
 
         ApiHelper::respond([
             'customerApiId' => $customerId,
             'range' => $this->rangePayload($from, $to),
-            'memberships' => $this->categoryChartPayload($customerId, $from, $to, 'membership'),
+            'memberships' => $this->categoryChartPayload($customerId, $from, $to, 'membership', $expiringDays),
         ]);
     }
 
@@ -631,6 +669,59 @@ class DesktopApiController extends Controller
         return [$page, $perPage, ($page - 1) * $perPage];
     }
 
+    private function membershipSort(): array
+    {
+        $sortBy = strtolower(trim((string) ($_GET['sortBy'] ?? 'expiration'), " \t\n\r\0\x0B+"));
+        $sortDirSql = strtolower(trim((string) ($_GET['sortDir'] ?? 'asc'))) === 'desc' ? 'DESC' : 'ASC';
+        $sortDirLabel = $sortDirSql === 'DESC' ? 'desc' : 'asc';
+
+        if (in_array($sortBy, ['expiration', 'expiation'], true)) {
+            return [
+                "CASE WHEN Expiration IS NULL THEN 1 ELSE 0 END ASC, CAST(Expiration AS SIGNED) {$sortDirSql}, Fullname ASC",
+                'expiration',
+                $sortDirLabel,
+            ];
+        }
+
+        if ($sortBy === 'endingdate') {
+            return [
+                "CASE WHEN EndingDate IS NULL THEN 1 ELSE 0 END ASC, STR_TO_DATE(EndingDate, '%Y-%m-%d') {$sortDirSql}, Fullname ASC",
+                'endingDate',
+                $sortDirLabel,
+            ];
+        }
+
+        return [
+            "Fullname {$sortDirSql}",
+            'fullname',
+            $sortDirLabel,
+        ];
+    }
+
+    private function usersSort(): array
+    {
+        $sortBy = strtolower(trim((string) ($_GET['sortBy'] ?? 'fullname')));
+        $sortDir = strtolower(trim((string) ($_GET['sortDir'] ?? 'asc'))) === 'desc' ? 'DESC' : 'ASC';
+
+        $columns = [
+            'fullname' => 'Fullname',
+            'name' => 'Fullname',
+            'createdon' => 'CreatedOn',
+            'created' => 'CreatedOn',
+        ];
+
+        return [$columns[$sortBy] ?? 'Fullname', $sortDir];
+    }
+
+    private function cashRegisterRangeWhere(): string
+    {
+        return '(
+            OpenedAt BETWEEN ? AND ?
+            OR ClosedAt BETWEEN ? AND ?
+            OR (OpenedAt <= ? AND (ClosedAt IS NULL OR ClosedAt >= ?))
+        )';
+    }
+
     private function intQuery(string $key, int $default, int $min, int $max): int
     {
         $value = isset($_GET[$key]) ? (int) $_GET[$key] : $default;
@@ -748,13 +839,22 @@ class DesktopApiController extends Controller
         ];
     }
 
-    private function categoryChartPayload(string $customerId, string $from, string $to, string $category): array
+    private function categoryChartPayload(string $customerId, string $from, string $to, string $category, ?int $expiringDays = null): array
     {
-        return [
+        $payload = [
             'daily' => $this->dailyCategorySales($customerId, $from, $to, $category),
             'totalQuantity' => $this->saleCategoryCount($customerId, $from, $to, $category),
             'totalIncome' => $this->saleCategoryIncome($customerId, $from, $to, $category),
         ];
+
+        if ($category === 'membership') {
+            $days = $expiringDays ?? 3;
+            $payload['expiringDays'] = $days;
+            $payload['expiringTotal'] = $this->expiringMemberships($customerId, $days);
+            $payload['activeTotal'] = $this->activeMemberships($customerId);
+        }
+
+        return $payload;
     }
 
     private function attendancesChartPayload(string $customerId, string $from, string $to): array

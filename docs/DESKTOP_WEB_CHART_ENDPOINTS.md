@@ -8,6 +8,7 @@ Filtros aceptados en todos:
 
 - `range=today|week|fifteen|month|custom`
 - `from=YYYY-MM-DD&to=YYYY-MM-DD` cuando `range=custom`
+- `expiringDays=3` para membresias por vencer. Default: `3`.
 
 Todas las series diarias regresan todos los dias del rango, aunque no haya datos. Los dias sin datos regresan en `0`.
 
@@ -28,7 +29,10 @@ Respuesta:
   "memberships": {
     "daily": [{ "date": "2026-06-01", "quantity": 2, "income": 600 }],
     "totalQuantity": 2,
-    "totalIncome": 600
+    "totalIncome": 600,
+    "expiringDays": 3,
+    "expiringTotal": 4,
+    "activeTotal": 20
   },
   "products": {
     "daily": [{ "date": "2026-06-01", "quantity": 5, "income": 250 }],
@@ -55,12 +59,15 @@ Usar `users.dailyNewUsers` para la grafica de socios nuevos por dia.
 
 ## Membresias vendidas
 
-`GET /api/desktop/charts/memberships?range=fifteen`
+`GET /api/desktop/charts/memberships?range=fifteen&expiringDays=5`
 
 Usar `memberships.daily`:
 
 - `quantity`: membresias vendidas por dia.
 - `income`: ingreso por membresias por dia.
+- `expiringTotal`: numero de membresias por vencer dentro de `expiringDays`.
+- `activeTotal`: numero de membresias activas actuales.
+- `expiringDays`: umbral aplicado.
 
 Solo suma tickets activos (`SaleTicketDesktop.Active = 1`).
 

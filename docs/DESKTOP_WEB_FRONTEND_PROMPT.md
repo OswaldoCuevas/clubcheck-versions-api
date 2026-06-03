@@ -57,11 +57,11 @@ Usarlo para la pantalla de inicio. Devuelve cards y graficas de socios, membresi
 
 `GET /api/desktop/users`
 
-Devuelve total de socios actuales, socios nuevos en rango, grafica diaria de nuevos socios y listado paginado. Soporta `search`.
+Devuelve total de socios actuales, socios nuevos en rango, grafica diaria de nuevos socios y listado paginado. Soporta `search`, `sortBy=fullname|createdOn` y `sortDir=asc|desc`.
 
 `GET /api/desktop/memberships`
 
-Devuelve membresias activas, por vencer y listado paginado. Soporta `status=all|active|expired|expiring` y `expiringDays`.
+Devuelve membresias activas, por vencer y listado paginado. Soporta `status=all|active|expired|expiring`, `expiringDays`, `sortBy=expiration|endingDate|fullname` y `sortDir=asc|desc`. Cada registro trae `status` e `isExpiring` calculados con ese umbral.
 
 `GET /api/desktop/products`
 
