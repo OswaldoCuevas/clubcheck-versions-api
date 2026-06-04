@@ -231,8 +231,9 @@ class DesktopApiController extends Controller
         $customerId = $this->customerId();
         [$from, $to] = $this->dateRange();
         $lowStock = $this->intQuery('lowStock', 5, 0, 100000);
+        $lowStockOnly = $this->boolQuery('lowStockOnly');
         [$page, $perPage, $offset] = $this->pagination();
-        $search = trim((string) ($_GET['search'] ?? ''));
+        $search = trim((string) ($this->queryValue('search', '') ?? ''));
 
         $where = 'CustomerApiId = ? AND COALESCE(IsDeleted, 0) = 0';
         $params = [$customerId];
@@ -240,6 +241,10 @@ class DesktopApiController extends Controller
             $where .= ' AND (Name LIKE ? OR Code LIKE ?)';
             $like = '%' . $search . '%';
             array_push($params, $like, $like);
+        }
+        if ($lowStockOnly) {
+            $where .= ' AND Stock <= ?';
+            $params[] = $lowStock;
         }
 
         $total = $this->scalar("SELECT COUNT(*) FROM ViewProductStock WHERE {$where}", $params);
@@ -253,24 +258,39 @@ class DesktopApiController extends Controller
         );
 
         [$historyPage, $historyPerPage, $historyOffset] = $this->pagination('historyPage', 'historyPerPage');
+        $historySearchWhere = '';
+        $historySearchParams = [];
+        if ($search !== '') {
+            $historySearchWhere = ' AND (p.Name LIKE ? OR p.Code LIKE ? OR p.Description LIKE ? OR ps.Notes LIKE ? OR ps.MovementType LIKE ?)';
+            $like = '%' . $search . '%';
+            $historySearchParams = [$like, $like, $like, $like, $like];
+        }
         $historyTotal = $this->scalar(
             "SELECT COUNT(*)
              FROM ProductStockDesktop ps
-             WHERE ps.CustomerApiId = ? AND COALESCE(ps.IsDeleted, 0) = 0 AND ps.MovementDate BETWEEN ? AND ?",
-            [$customerId, $from, $to]
+             LEFT JOIN ProductDesktop p ON p.Id = ps.ProductId
+             WHERE ps.CustomerApiId = ? AND COALESCE(ps.IsDeleted, 0) = 0 AND ps.MovementDate BETWEEN ? AND ?
+             {$historySearchWhere}",
+            array_merge([$customerId, $from, $to], $historySearchParams)
         );
         $history = $this->db->fetchAll(
             "SELECT ps.Id, ps.ProductId, p.Name AS ProductName, ps.MovementType, ps.Quantity, ps.MovementDate, ps.Notes, ps.CreatedBy
              FROM ProductStockDesktop ps
              LEFT JOIN ProductDesktop p ON p.Id = ps.ProductId
              WHERE ps.CustomerApiId = ? AND COALESCE(ps.IsDeleted, 0) = 0 AND ps.MovementDate BETWEEN ? AND ?
+             {$historySearchWhere}
              ORDER BY ps.MovementDate DESC
              LIMIT ? OFFSET ?",
-            [$customerId, $from, $to, $historyPerPage, $historyOffset]
+            array_merge([$customerId, $from, $to], $historySearchParams, [$historyPerPage, $historyOffset])
         );
 
         ApiHelper::respond([
             'range' => $this->rangePayload($from, $to),
+            'filters' => [
+                'search' => $search,
+                'lowStock' => $lowStock,
+                'lowStockOnly' => $lowStockOnly,
+            ],
             'summary' => [
                 'lowStockTotal' => $this->lowStockCount($customerId, $lowStock),
                 'lowStockThreshold' => $lowStock,
@@ -288,6 +308,17 @@ class DesktopApiController extends Controller
         $customerId = $this->customerId();
         [$from, $to] = $this->dateRange();
         [$page, $perPage, $offset] = $this->pagination();
+        [$memberPage, $memberPerPage, $memberOffset] = $this->pagination('memberPage', 'memberPerPage');
+        $reentriesOnly = $this->boolQuery('reentriesOnly');
+        $memberHaving = $reentriesOnly ? 'HAVING COUNT(*) >= 2' : '';
+        $memberSearch = trim((string) ($_GET['search'] ?? $_GET['memberSearch'] ?? ''));
+        $memberSearchWhere = '';
+        $memberSearchParams = [];
+        if ($memberSearch !== '') {
+            $memberSearchWhere = ' AND (u.Fullname LIKE ? OR u.Code LIKE ? OR u.PhoneNumber LIKE ?)';
+            $like = '%' . $memberSearch . '%';
+            $memberSearchParams = [$like, $like, $like];
+        }
 
         $total = $this->scalar(
             "SELECT COUNT(*) FROM AttendancesDesktop WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0 AND STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?",
@@ -302,10 +333,64 @@ class DesktopApiController extends Controller
              LIMIT ? OFFSET ?",
             [$customerId, $from, $to, $perPage, $offset]
         );
+        $memberTotal = $this->scalar(
+            "SELECT COUNT(*)
+             FROM (
+                SELECT a.UserId, DATE(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s')) AS AttendanceDate
+                FROM AttendancesDesktop a
+                LEFT JOIN UsersDesktop u ON u.Id = a.UserId
+                WHERE a.CustomerApiId = ? AND COALESCE(a.Removed, 0) = 0 AND STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
+                {$memberSearchWhere}
+                GROUP BY a.UserId, DATE(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s'))
+                {$memberHaving}
+             ) groupedMembers",
+            array_merge([$customerId, $from, $to], $memberSearchParams)
+        );
+        $memberRows = $this->db->fetchAll(
+            "SELECT a.UserId,
+                    DATE(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s')) AS date,
+                    COALESCE(u.Fullname, '') AS Fullname,
+                    u.Code,
+                    COUNT(*) AS totalAttempts,
+                    SUM(CASE WHEN a.Active = 1 THEN 1 ELSE 0 END) AS allowedAttempts,
+                    SUM(CASE WHEN a.Active = 0 THEN 1 ELSE 0 END) AS deniedAttempts,
+                    MAX(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s')) AS lastAttemptAt
+             FROM AttendancesDesktop a
+             LEFT JOIN UsersDesktop u ON u.Id = a.UserId
+             WHERE a.CustomerApiId = ? AND COALESCE(a.Removed, 0) = 0 AND STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
+             {$memberSearchWhere}
+             GROUP BY a.UserId, DATE(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s')), u.Fullname, u.Code
+             {$memberHaving}
+             ORDER BY lastAttemptAt DESC, Fullname ASC
+             LIMIT ? OFFSET ?",
+            array_merge([$customerId, $from, $to], $memberSearchParams, [$memberPerPage, $memberOffset])
+        );
+
+        foreach ($memberRows as &$memberRow) {
+            $totalAttempts = (int) ($memberRow['totalAttempts'] ?? 0);
+            $memberRow['hasReentries'] = $totalAttempts >= 2;
+            $memberRow['reentriesCount'] = max(0, $totalAttempts - 1);
+            $attempts = $this->db->fetchAll(
+                "SELECT a.Id, a.CheckIn, a.Active, a.UserId
+                 FROM AttendancesDesktop a
+                 WHERE a.CustomerApiId = ? AND COALESCE(a.Removed, 0) = 0 AND a.UserId = ?
+                   AND DATE(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s')) = ?
+                 ORDER BY STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s') DESC",
+                [$customerId, $memberRow['UserId'], $memberRow['date']]
+            );
+            $memberRow['attempts'] = $attempts;
+        }
+        unset($memberRow);
 
         ApiHelper::respond([
+            'range' => $this->rangePayload($from, $to),
+            'filters' => [
+                'reentriesOnly' => $reentriesOnly,
+                'search' => $memberSearch,
+            ],
             'summary' => $this->attendanceSummary($customerId, $from, $to),
             'attendances' => $this->pagePayload($rows, $total, $page, $perPage),
+            'memberAccess' => $this->pagePayload($memberRows, $memberTotal, $memberPage, $memberPerPage),
         ]);
     }
 
@@ -724,8 +809,68 @@ class DesktopApiController extends Controller
 
     private function intQuery(string $key, int $default, int $min, int $max): int
     {
-        $value = isset($_GET[$key]) ? (int) $_GET[$key] : $default;
+        $value = $this->queryValue($key, $default);
+        $value = (int) $value;
+
         return max($min, min($max, $value));
+    }
+
+    private function boolQuery(string $key, bool $default = false): bool
+    {
+        $value = $this->queryValue($key, null);
+        if ($value === null) {
+            return $default;
+        }
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value === 1;
+        }
+
+        $value = strtolower(trim((string) $value));
+
+        return in_array($value, ['1', 'true', 'yes', 'on', 'si'], true);
+    }
+
+    private function queryValue(string $key, $default = null)
+    {
+        if (array_key_exists($key, $_GET)) {
+            return $_GET[$key];
+        }
+
+        $filters = $this->queryFilters();
+
+        return array_key_exists($key, $filters) ? $filters[$key] : $default;
+    }
+
+    private function queryFilters(): array
+    {
+        static $filters = null;
+
+        if ($filters !== null) {
+            return $filters;
+        }
+
+        $filters = [];
+        if (!isset($_GET['filters'])) {
+            return $filters;
+        }
+
+        $rawFilters = $_GET['filters'];
+        if (is_array($rawFilters)) {
+            $filters = $rawFilters;
+            return $filters;
+        }
+
+        $decoded = json_decode((string) $rawFilters, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            $filters = $decoded;
+        }
+
+        return $filters;
     }
 
     private function scalar(string $sql, array $params = []): float
@@ -859,38 +1004,43 @@ class DesktopApiController extends Controller
 
     private function attendancesChartPayload(string $customerId, string $from, string $to): array
     {
+        $latestCondition = $this->latestAttendanceCondition('a', 'ax');
         $dailyRows = $this->db->fetchAll(
-            "SELECT DATE(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s')) AS date,
+            "SELECT DATE(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s')) AS date,
                     COUNT(*) AS total,
-                    SUM(CASE WHEN Active = 1 THEN 1 ELSE 0 END) AS allowed,
-                    SUM(CASE WHEN Active = 0 THEN 1 ELSE 0 END) AS denied
-             FROM AttendancesDesktop
-             WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0
-               AND STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
-             GROUP BY DATE(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s'))
+                    SUM(CASE WHEN a.Active = 1 THEN 1 ELSE 0 END) AS allowed,
+                    SUM(CASE WHEN a.Active = 0 THEN 1 ELSE 0 END) AS denied
+             FROM AttendancesDesktop a
+             WHERE a.CustomerApiId = ? AND COALESCE(a.Removed, 0) = 0
+               AND STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
+               AND {$latestCondition}
+             GROUP BY DATE(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s'))
              ORDER BY date ASC",
             [$customerId, $from, $to]
         );
 
         return [
+            'countMode' => 'latest_attempt_per_user_per_day',
             'daily' => $this->completeDailySeries($from, $to, $dailyRows, ['total', 'allowed', 'denied']),
             'byWeekday' => $this->completeWeekdaySeries($this->db->fetchAll(
-                "SELECT DAYOFWEEK(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s')) AS weekday,
+                "SELECT DAYOFWEEK(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s')) AS weekday,
                         COUNT(*) AS total
-                 FROM AttendancesDesktop
-                 WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0 AND Active = 1
-                   AND STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
-                 GROUP BY DAYOFWEEK(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s'))
+                 FROM AttendancesDesktop a
+                 WHERE a.CustomerApiId = ? AND COALESCE(a.Removed, 0) = 0 AND a.Active = 1
+                   AND STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
+                   AND {$latestCondition}
+                 GROUP BY DAYOFWEEK(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s'))
                  ORDER BY weekday ASC",
                 [$customerId, $from, $to]
             )),
             'byHour' => $this->completeHourSeries($this->db->fetchAll(
-                "SELECT HOUR(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s')) AS hour,
+                "SELECT HOUR(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s')) AS hour,
                         COUNT(*) AS total
-                 FROM AttendancesDesktop
-                 WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0 AND Active = 1
-                   AND STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
-                 GROUP BY HOUR(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s'))
+                 FROM AttendancesDesktop a
+                 WHERE a.CustomerApiId = ? AND COALESCE(a.Removed, 0) = 0 AND a.Active = 1
+                   AND STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
+                   AND {$latestCondition}
+                 GROUP BY HOUR(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s'))
                  ORDER BY hour ASC",
                 [$customerId, $from, $to]
             )),
@@ -1013,20 +1163,77 @@ class DesktopApiController extends Controller
         return array_values($series);
     }
 
+    private function latestAttendanceCondition(string $alias, string $otherAlias): string
+    {
+        return "NOT EXISTS (
+            SELECT 1
+            FROM AttendancesDesktop {$otherAlias}
+            WHERE {$otherAlias}.CustomerApiId = {$alias}.CustomerApiId
+                AND {$otherAlias}.UserId = {$alias}.UserId
+                AND COALESCE({$otherAlias}.Removed, 0) = 0
+                AND DATE(STR_TO_DATE({$otherAlias}.CheckIn, '%Y-%m-%d %H:%i:%s')) = DATE(STR_TO_DATE({$alias}.CheckIn, '%Y-%m-%d %H:%i:%s'))
+                AND (
+                    STR_TO_DATE({$otherAlias}.CheckIn, '%Y-%m-%d %H:%i:%s') > STR_TO_DATE({$alias}.CheckIn, '%Y-%m-%d %H:%i:%s')
+                    OR (
+                        STR_TO_DATE({$otherAlias}.CheckIn, '%Y-%m-%d %H:%i:%s') = STR_TO_DATE({$alias}.CheckIn, '%Y-%m-%d %H:%i:%s')
+                        AND {$otherAlias}.Id > {$alias}.Id
+                    )
+                )
+        )";
+    }
+
+    private function reentryUsersCount(string $customerId, string $from, string $to): float
+    {
+        return $this->scalar(
+            "SELECT COUNT(*)
+             FROM (
+                SELECT UserId
+                FROM AttendancesDesktop
+                WHERE CustomerApiId = ?
+                  AND COALESCE(Removed, 0) = 0
+                  AND STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
+                GROUP BY UserId
+                HAVING COUNT(*) >= 2
+             ) reentries",
+            [$customerId, $from, $to]
+        );
+    }
+
+    private function totalReentriesCount(string $customerId, string $from, string $to): float
+    {
+        return $this->scalar(
+            "SELECT COALESCE(SUM(totalAttempts - 1), 0)
+             FROM (
+                SELECT COUNT(*) AS totalAttempts
+                FROM AttendancesDesktop
+                WHERE CustomerApiId = ?
+                  AND COALESCE(Removed, 0) = 0
+                  AND STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
+                GROUP BY UserId
+                HAVING COUNT(*) >= 2
+             ) reentries",
+            [$customerId, $from, $to]
+        );
+    }
+
     private function attendanceSummary(string $customerId, string $from, string $to): array
     {
-        $base = "CustomerApiId = ? AND COALESCE(Removed, 0) = 0 AND STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?";
+        $base = "a.CustomerApiId = ? AND COALESCE(a.Removed, 0) = 0 AND STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?";
         $params = [$customerId, $from, $to];
-        $total = $this->scalar("SELECT COUNT(*) FROM AttendancesDesktop WHERE {$base}", $params);
+        $latestCondition = $this->latestAttendanceCondition('a', 'ax');
+        $total = $this->scalar("SELECT COUNT(*) FROM AttendancesDesktop a WHERE {$base} AND {$latestCondition}", $params);
         $charts = $this->attendancesChartPayload($customerId, $from, $to);
 
         return [
             'total' => $total,
-            'allowed' => $this->scalar("SELECT COUNT(*) FROM AttendancesDesktop WHERE {$base} AND Active = 1", $params),
-            'denied' => $this->scalar("SELECT COUNT(*) FROM AttendancesDesktop WHERE {$base} AND Active = 0", $params),
+            'allowed' => $this->scalar("SELECT COUNT(*) FROM AttendancesDesktop a WHERE {$base} AND {$latestCondition} AND a.Active = 1", $params),
+            'denied' => $this->scalar("SELECT COUNT(*) FROM AttendancesDesktop a WHERE {$base} AND {$latestCondition} AND a.Active = 0", $params),
+            'rawAttempts' => $this->scalar("SELECT COUNT(*) FROM AttendancesDesktop a WHERE {$base}", $params),
+            'reentryUsers' => $this->reentryUsersCount($customerId, $from, $to),
+            'totalReentries' => $this->totalReentriesCount($customerId, $from, $to),
             'averagePerDay' => $this->scalar(
-                "SELECT COALESCE(COUNT(*) / NULLIF(COUNT(DISTINCT DATE(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s'))), 0), 0)
-                 FROM AttendancesDesktop WHERE {$base}",
+                "SELECT COALESCE(COUNT(*) / NULLIF(COUNT(DISTINCT DATE(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s'))), 0), 0)
+                 FROM AttendancesDesktop a WHERE {$base} AND {$latestCondition}",
                 $params
             ),
             'daily' => $charts['daily'],

@@ -352,6 +352,23 @@ class StripeController extends Controller
         ApiHelper::allowedMethodsGet();
         $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
         $result = $this->stripeService->getCustomer($customerId);
+        if (!empty($result['success']) && $result['success'] === true) {
+            try {
+                $registry = new CustomerRegistryModel();
+                $rawDb = new \Database();
+                $row = $rawDb->fetchOne('SELECT Id FROM Customers WHERE BillingId = ? LIMIT 1', [$customerId]);
+                if ($row) {
+                    $local = $registry->getCustomer($row['Id']);
+                    $result['customer']['codeAccess'] = $local['codeAccess'] ?? null;
+                } else {
+                    $result['customer']['codeAccess'] = null;
+                }
+            } catch (\Exception $e) {
+                // No interrumpir la respuesta si falla la búsqueda local
+                $result['customer']['codeAccess'] = null;
+            }
+        }
+
         ApiHelper::respond($result, $result['success'] ? 200 : 404);
     }
 
