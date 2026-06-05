@@ -106,7 +106,9 @@ $router->get('/api/customers/whatsapp/business-profile', 'WhatsAppController', '
 // Rutas administrativas
 $router->any('/admin', 'AdminController', 'index');// NO, Administrativo
 $router->get('/admin/customers', 'AdminController', 'customers');// NO, Administrativo
+$router->get('/admin/customer-login-attempts', 'AdminController', 'customerLoginAttempts');// NO, Administrativo
 $router->get('/admin/api/customers', 'AdminController', 'customersJson');// NO, Administrativo
+$router->get('/admin/api/customer-login-attempts', 'AdminController', 'customerLoginAttemptsJson');// NO, Administrativo
 $router->post('/admin/api/customers/save', 'AdminController', 'saveCustomerJson');// NO, Administrativo
 $router->post('/admin/api/customers/regenerate-access-key', 'AdminController', 'regenerateAccessKey');// NO, Administrativo
 // Eliminar cliente (desde panel admin)

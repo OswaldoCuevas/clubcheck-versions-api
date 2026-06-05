@@ -4,23 +4,29 @@ namespace Controllers;
 
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Helpers/ApiHelper.php';
+require_once __DIR__ . '/../Models/CustomerWebLoginAttemptModel.php';
 require_once __DIR__ . '/../Services/JwtService.php';
 require_once __DIR__ . '/../../utils/database.php';
 
 use ApiHelper;
 use App\Services\JwtService;
 use Core\Controller;
+use Models\CustomerWebLoginAttemptModel;
 
 class DesktopApiController extends Controller
 {
     private const JWT_TTL_SECONDS = 1296000; // 15 dias
+    private const LOGIN_ATTEMPT_WINDOW_SECONDS = 600; // 10 minutos
+    private const LOGIN_ATTEMPT_LIMIT = 5;
 
     private \Database $db;
+    private CustomerWebLoginAttemptModel $loginAttemptModel;
 
     public function __construct()
     {
         parent::__construct();
         $this->db = new \Database();
+        $this->loginAttemptModel = new CustomerWebLoginAttemptModel();
     }
 
     public function login(): void
@@ -35,6 +41,24 @@ class DesktopApiController extends Controller
             ApiHelper::respond(['error' => 'El campo login es obligatorio'], 422);
         }
         $password = $this->requiredString($payload, 'password');
+        $ipAddress = $_SERVER['REMOTE_ADDR'] ?? null;
+        $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? null;
+
+        $lockout = $this->loginAttemptModel->getLockoutStatus(
+            $login,
+            $codeAccess,
+            self::LOGIN_ATTEMPT_WINDOW_SECONDS,
+            self::LOGIN_ATTEMPT_LIMIT
+        );
+
+        if ($lockout['isLocked']) {
+            ApiHelper::respond([
+                'error' => 'Demasiados intentos fallidos. Intenta nuevamente cuando termine la ventana de 10 minutos.',
+                'code' => 'too_many_attempts',
+                'retryAfter' => $lockout['retryAfter'],
+                'lockedUntil' => $lockout['lockedUntil'],
+            ], 429);
+        }
 
         $row = $this->db->fetchOne(
             "SELECT c.Id AS CustomerId, c.Name AS CustomerName, c.IsActive, a.Id AS AdminId, a.Username, a.Email, a.Password, a.Role
@@ -50,8 +74,30 @@ class DesktopApiController extends Controller
         );
 
         if (!$row || !$this->passwordMatches($password, (string) ($row['Password'] ?? ''))) {
+            $this->loginAttemptModel->record([
+                'loginIdentifier' => $login,
+                'codeAccess' => $codeAccess,
+                'customerId' => $row['CustomerId'] ?? null,
+                'adminId' => $row['AdminId'] ?? null,
+                'ipAddress' => $ipAddress,
+                'userAgent' => $userAgent,
+                'wasSuccessful' => false,
+                'failureReason' => $row ? 'invalid_password' : 'invalid_login',
+            ]);
+
             ApiHelper::respond(['error' => 'Credenciales invalidas'], 401);
         }
+
+        $this->loginAttemptModel->record([
+            'loginIdentifier' => $login,
+            'codeAccess' => $codeAccess,
+            'customerId' => $row['CustomerId'] ?? null,
+            'adminId' => $row['AdminId'] ?? null,
+            'ipAddress' => $ipAddress,
+            'userAgent' => $userAgent,
+            'wasSuccessful' => true,
+            'failureReason' => null,
+        ]);
 
         $jwt = new JwtService();
         $token = $jwt->createToken([

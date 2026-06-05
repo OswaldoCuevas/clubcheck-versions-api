@@ -4,6 +4,7 @@ namespace Controllers;
 
 use Core\Controller;
 use Models\CustomerRegistryModel;
+use Models\CustomerWebLoginAttemptModel;
 use Models\WhatsAppConfigurationModel;
 use Models\DownloadLogModel;
 use Models\LicenseLogModel;
@@ -14,6 +15,7 @@ use App\Services\LicenseService;
 
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
+require_once __DIR__ . '/../Models/CustomerWebLoginAttemptModel.php';
 require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
 require_once __DIR__ . '/../Models/DownloadLogModel.php';
 require_once __DIR__ . '/../Models/LicenseLogModel.php';
@@ -56,6 +58,65 @@ class AdminController extends Controller
         ];
 
         $this->view('admin/customers', $data);
+    }
+
+    public function customerLoginAttempts()
+    {
+        $this->requirePermission('admin_access');
+
+        $currentUser = $this->userModel->getCurrentUser();
+        $attemptModel = new CustomerWebLoginAttemptModel();
+
+        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+        $perPage = isset($_GET['perPage']) ? max(10, min(200, (int) $_GET['perPage'])) : 50;
+        $filters = [
+            'search' => $_GET['search'] ?? '',
+            'status' => $_GET['status'] ?? 'all',
+            'codeAccess' => $_GET['codeAccess'] ?? '',
+            'from' => $_GET['from'] ?? '',
+            'to' => $_GET['to'] ?? '',
+        ];
+
+        $data = [
+            'currentUser' => $currentUser,
+            'title' => 'Intentos de Login Web - ClubCheck',
+            'attempts' => $attemptModel->getAttempts($filters, $page, $perPage),
+            'summary' => $attemptModel->getSummary(),
+            'filters' => $filters,
+            'isAuthenticated' => true,
+        ];
+
+        $this->view('admin/customer-login-attempts', $data);
+    }
+
+    public function customerLoginAttemptsJson()
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $attemptModel = new CustomerWebLoginAttemptModel();
+        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+        $perPage = isset($_GET['perPage']) ? max(10, min(200, (int) $_GET['perPage'])) : 50;
+        $filters = [
+            'search' => $_GET['search'] ?? '',
+            'status' => $_GET['status'] ?? 'all',
+            'codeAccess' => $_GET['codeAccess'] ?? '',
+            'from' => $_GET['from'] ?? '',
+            'to' => $_GET['to'] ?? '',
+        ];
+
+        $this->json([
+            'attempts' => $attemptModel->getAttempts($filters, $page, $perPage),
+            'summary' => $attemptModel->getSummary(),
+            'generatedAt' => date('Y-m-d H:i:s'),
+        ]);
     }
 
     public function customersJson()

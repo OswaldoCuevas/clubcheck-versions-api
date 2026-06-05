@@ -179,6 +179,24 @@ ob_start();
                                         <div class="card h-100 border-0 shadow-sm hover-shadow">
                                             <div class="card-body d-flex flex-column">
                                                 <div class="d-flex align-items-center mb-3">
+                                                    <span class="icon-circle text-white me-3" style="background-color: #495057;">
+                                                        <i class="fas fa-right-to-bracket"></i>
+                                                    </span>
+                                                    <div>
+                                                        <h5 class="card-title mb-1">Intentos de login web</h5>
+                                                        <small class="text-muted">Monitorea accesos por usuario y codeAccess</small>
+                                                    </div>
+                                                </div>
+                                                <a href="<?= app_url('/admin/customer-login-attempts') ?>" class="btn mt-auto" style="background-color: #495057; color: white;">
+                                                    Ver intentos <i class="fas fa-right-to-bracket ms-2"></i>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card h-100 border-0 shadow-sm hover-shadow">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex align-items-center mb-3">
                                                     <span class="icon-circle bg-purple text-white me-3" style="background-color: #6f42c1;">
                                                         <i class="fas fa-chart-bar"></i>
                                                     </span>
