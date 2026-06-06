@@ -1003,6 +1003,97 @@ class DesktopApiController extends Controller
         );
     }
 
+    private function saleCategoryIncomeByPayment(string $customerId, string $from, string $to, string $category): array
+    {
+        $rows = $this->db->fetchAll(
+            "SELECT t.PaymentMethod,
+                    COUNT(DISTINCT t.Id) AS tickets,
+                    COALESCE(SUM(i.Quantity), 0) AS quantity,
+                    COALESCE(SUM(i.LineTotal), 0) AS income
+             FROM SaleTicketItemDesktop i
+             JOIN SaleTicketDesktop t ON t.Id = i.SaleTicketId
+             WHERE t.CustomerApiId = ? AND t.Active = 1 AND COALESCE(t.IsDeleted, 0) = 0 AND COALESCE(i.IsDeleted, 0) = 0
+               AND t.SaleDate BETWEEN ? AND ? AND " . $this->categoryCondition($category) . "
+             GROUP BY t.PaymentMethod
+             ORDER BY income DESC",
+            [$customerId, $from, $to]
+        );
+
+        return $this->paymentIncomePayload($rows);
+    }
+
+    private function saleIncomeByPayment(string $customerId, string $from, string $to): array
+    {
+        $rows = $this->db->fetchAll(
+            "SELECT PaymentMethod, COUNT(*) AS tickets, COALESCE(SUM(TotalAmount), 0) AS income
+             FROM SaleTicketDesktop
+             WHERE CustomerApiId = ? AND COALESCE(IsDeleted, 0) = 0 AND SaleDate BETWEEN ? AND ? AND Active = 1
+             GROUP BY PaymentMethod
+             ORDER BY income DESC",
+            [$customerId, $from, $to]
+        );
+
+        return $this->paymentIncomePayload($rows);
+    }
+
+    private function paymentIncomePayload(array $rows): array
+    {
+        $byPayment = [
+            'card' => 0.0,
+            'cash' => 0.0,
+            'transfer' => 0.0,
+        ];
+        $breakdown = [];
+
+        foreach ($rows as $row) {
+            $rawMethod = trim((string) ($row['PaymentMethod'] ?? ''));
+            $key = $this->paymentMethodKey($rawMethod);
+            $income = (float) ($row['income'] ?? 0);
+
+            if (!array_key_exists($key, $byPayment)) {
+                $byPayment[$key] = 0.0;
+            }
+
+            $byPayment[$key] += $income;
+            $item = [
+                'paymentMethod' => $rawMethod,
+                'key' => $key,
+                'tickets' => (int) ($row['tickets'] ?? 0),
+                'income' => $income,
+            ];
+
+            if (array_key_exists('quantity', $row)) {
+                $item['quantity'] = (float) ($row['quantity'] ?? 0);
+            }
+
+            $breakdown[] = $item;
+        }
+
+        return [
+            'byPayment' => $byPayment,
+            'breakdown' => $breakdown,
+        ];
+    }
+
+    private function paymentMethodKey(string $paymentMethod): string
+    {
+        $normalized = strtolower(trim($paymentMethod));
+
+        if (in_array($normalized, ['card', 'tarjeta', 'credit_card', 'debit_card', 'credito', 'debito'], true)) {
+            return 'card';
+        }
+
+        if (in_array($normalized, ['cash', 'efectivo'], true)) {
+            return 'cash';
+        }
+
+        if (in_array($normalized, ['transfer', 'transferencia', 'bank_transfer', 'spei'], true)) {
+            return 'transfer';
+        }
+
+        return preg_replace('/[^a-z0-9]+/', '_', $normalized) ?: 'unknown';
+    }
+
     private function dailyCategorySales(string $customerId, string $from, string $to, string $category): array
     {
         $rows = $this->db->fetchAll(
@@ -1017,6 +1108,68 @@ class DesktopApiController extends Controller
         );
 
         return $this->completeDailySeries($from, $to, $rows, ['quantity', 'income']);
+    }
+
+    private function productSalesRanking(string $customerId, string $from, string $to): array
+    {
+        $rows = $this->db->fetchAll(
+            "SELECT p.Id AS productId,
+                    COALESCE(p.Code, '') AS productCode,
+                    p.Name AS productName,
+                    COALESCE(s.tickets, 0) AS tickets,
+                    COALESCE(s.quantity, 0) AS quantity,
+                    COALESCE(s.income, 0) AS income
+             FROM ProductDesktop p
+             LEFT JOIN (
+                SELECT i.ProductId,
+                       COUNT(DISTINCT t.Id) AS tickets,
+                       COALESCE(SUM(i.Quantity), 0) AS quantity,
+                       COALESCE(SUM(i.LineTotal), 0) AS income
+                FROM SaleTicketItemDesktop i
+                JOIN SaleTicketDesktop t ON t.Id = i.SaleTicketId
+                WHERE t.CustomerApiId = ? AND t.Active = 1 AND COALESCE(t.IsDeleted, 0) = 0 AND COALESCE(i.IsDeleted, 0) = 0
+                  AND t.SaleDate BETWEEN ? AND ? AND i.ProductId IS NOT NULL
+                GROUP BY i.ProductId
+             ) s ON s.ProductId = p.Id
+             WHERE p.CustomerApiId = ? AND COALESCE(p.IsDeleted, 0) = 0",
+            [$customerId, $from, $to, $customerId]
+        );
+
+        $products = array_map(static function (array $row): array {
+            return [
+                'productId' => $row['productId'],
+                'productCode' => $row['productCode'] ?? '',
+                'productName' => $row['productName'] ?? '',
+                'tickets' => (int) ($row['tickets'] ?? 0),
+                'quantity' => (float) ($row['quantity'] ?? 0),
+                'income' => (float) ($row['income'] ?? 0),
+            ];
+        }, $rows);
+
+        $byQuantity = $products;
+        usort($byQuantity, static function (array $a, array $b): int {
+            $quantityCompare = $b['quantity'] <=> $a['quantity'];
+            if ($quantityCompare !== 0) {
+                return $quantityCompare;
+            }
+
+            return $b['income'] <=> $a['income'];
+        });
+
+        $byIncome = $products;
+        usort($byIncome, static function (array $a, array $b): int {
+            $incomeCompare = $b['income'] <=> $a['income'];
+            if ($incomeCompare !== 0) {
+                return $incomeCompare;
+            }
+
+            return $b['quantity'] <=> $a['quantity'];
+        });
+
+        return [
+            'byQuantity' => $byQuantity,
+            'byIncome' => $byIncome,
+        ];
     }
 
     private function usersChartPayload(string $customerId, string $from, string $to): array
@@ -1043,6 +1196,8 @@ class DesktopApiController extends Controller
             $payload['expiringDays'] = $days;
             $payload['expiringTotal'] = $this->expiringMemberships($customerId, $days);
             $payload['activeTotal'] = $this->activeMemberships($customerId);
+        } elseif ($category === 'product') {
+            $payload['productSales'] = $this->productSalesRanking($customerId, $from, $to);
         }
 
         return $payload;
@@ -1292,6 +1447,8 @@ class DesktopApiController extends Controller
     {
         $ticketWhere = 'CustomerApiId = ? AND COALESCE(IsDeleted, 0) = 0 AND SaleDate BETWEEN ? AND ?';
         $params = [$customerId, $from, $to];
+        $paymentIncome = $this->saleIncomeByPayment($customerId, $from, $to);
+        $membershipPaymentIncome = $this->saleCategoryIncomeByPayment($customerId, $from, $to, 'membership');
 
         return [
             'tickets' => $this->scalar("SELECT COUNT(*) FROM SaleTicketDesktop WHERE {$ticketWhere} AND Active = 1", $params),
@@ -1311,6 +1468,10 @@ class DesktopApiController extends Controller
             ),
             'membershipIncome' => $this->saleCategoryIncome($customerId, $from, $to, 'membership'),
             'productIncome' => $this->saleCategoryIncome($customerId, $from, $to, 'product'),
+            'byPayment' => $paymentIncome['byPayment'],
+            'paymentBreakdown' => $paymentIncome['breakdown'],
+            'membershipByPayment' => $membershipPaymentIncome['byPayment'],
+            'membershipPaymentBreakdown' => $membershipPaymentIncome['breakdown'],
             'paymentDistribution' => $this->db->fetchAll(
                 "SELECT PaymentMethod, COUNT(*) AS tickets, COALESCE(SUM(TotalAmount), 0) AS income
                  FROM SaleTicketDesktop

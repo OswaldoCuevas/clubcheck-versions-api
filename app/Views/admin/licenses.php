@@ -150,7 +150,7 @@ ob_start();
                 <div class="modal-body">
                     <div class="alert alert-info mb-3">
                         <i class="fas fa-info-circle me-2"></i>
-                        La vigencia se toma de la suscripción activa del cliente en Stripe. Si el cliente no tiene suscripción activa ni plan permanente, no se podrá generar la licencia.
+                        Selecciona free para emitir Plan Start sin Stripe. Para los demas planes, la vigencia se toma de la suscripcion activa o licencia permanente en Stripe.
                     </div>
 
                     <div class="mb-3">
@@ -165,6 +165,7 @@ ob_start();
                         <label class="form-label fw-semibold">Plan (opcional)</label>
                         <select class="form-select" id="genPlanLookupKey">
                             <option value="">— Auto (desde Stripe) —</option>
+                            <option value="free">Plan Start (free)</option>
                         </select>
                     </div>
 
@@ -392,6 +393,7 @@ async function loadPlansForSelect() {
         const data = await res.json();
         const sel = document.getElementById('genPlanLookupKey');
         (data.plans ?? []).forEach(p => {
+            if (p.lookup_key === 'free' && sel.querySelector('option[value="free"]')) return;
             const opt = document.createElement('option');
             opt.value = p.lookup_key;
             opt.textContent = `${p.name} (${p.lookup_key})`;

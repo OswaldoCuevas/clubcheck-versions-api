@@ -1622,58 +1622,79 @@ class AdminController extends Controller
             $this->json(['error' => 'customerId es obligatorio'], 422);
         }
 
-        // Obtener cliente
         $registry = new CustomerRegistryModel();
         $customer = $registry->getCustomer($customerId);
         if (!$customer) {
             $this->json(['error' => 'Cliente no encontrado'], 404);
         }
 
-        $billingId    = $customer['billingId'] ?? null;
-        $machineToken = trim($payload['machineToken'] ?? '') ?: ($customer['token'] ?? null);
-
-        // Siempre consultar Stripe: verificar suscripción activa y obtener expiración
-        if (!$billingId) {
-            $this->json(['error' => 'El cliente no tiene billingId vinculado a Stripe'], 422);
-        }
-
+        $billingId     = $customer['billingId'] ?? null;
+        $machineToken  = trim($payload['machineToken'] ?? '') ?: ($customer['token'] ?? null);
         $config        = require __DIR__ . '/../../config/stripe.php';
-        $appMode       = $_ENV['APP_MODE'] ?? 'DEV';
-        $testClockId   = ($appMode === 'DEV') ? ($config['test_clock_id'] ?? null) : null;
-        $stripeService = new StripeService($config['secret_key'], $testClockId);
-
-        $activeResult = $stripeService->getActiveSubscription($billingId);
-
-        if (!($activeResult['success'] ?? false)) {
-            $this->json(['error' => 'Error al consultar Stripe: ' . ($activeResult['error'] ?? '')], 400);
-        }
-
-        $pl  = $activeResult['permanent_license'] ?? null;
-        $sub = $activeResult['subscription']      ?? null;
-
-        if (!$pl && !($activeResult['has_subscription'] ?? false)) {
-            $this->json(['error' => 'El cliente no tiene suscripción activa ni licencia permanente en Stripe. No se puede generar la licencia.'], 400);
-        }
-
-        // Determinar plan, nombre, permanente y expiración (expiración siempre desde Stripe)
         $planLookupKey = trim($payload['planLookupKey'] ?? '');
+        $isFreePlan    = $planLookupKey === 'free';
         $isPermanent   = false;
         $expiresAt     = null;
         $planName      = $planLookupKey;
+        $rules         = null;
+        $applyFreePlan = function () use ($config, &$planLookupKey, &$planName, &$isPermanent, &$expiresAt, &$rules): void {
+            $freePlan = $config['plans']['free'] ?? null;
+            if (!$freePlan) {
+                $this->json(['error' => 'El plan free no esta configurado'], 400);
+            }
 
-        if ($pl) {
-            if ($planLookupKey === '') $planLookupKey = $pl['lookup_key']  ?? 'permanent';
-            $planName    = $pl['price_name']  ?? 'Licencia Permanente';
-            $isPermanent = true;
-            $expiresAt   = null;
+            $planLookupKey = 'free';
+            $planName      = $freePlan['name'] ?? 'Plan Start';
+            $isPermanent   = false;
+            $expiresAt     = strtotime('+1 month');
+            $rules         = $freePlan['rules'] ?? null;
+        };
+
+        if ($isFreePlan) {
+            $applyFreePlan();
         } else {
-            if ($planLookupKey === '') $planLookupKey = $sub['lookup_key'] ?? '';
-            $planName    = $sub['price_name'] ?? $planLookupKey;
-            $isPermanent = false;
-            $expiresAt   = $sub['current_period_end'] ?? null;
+            if (!$billingId) {
+                if ($planLookupKey === '') {
+                    $applyFreePlan();
+                } else {
+                    $this->json(['error' => 'El cliente no tiene billingId vinculado a Stripe'], 422);
+                }
+            } else {
+
+                $appMode       = $_ENV['APP_MODE'] ?? 'DEV';
+                $testClockId   = ($appMode === 'DEV') ? ($config['test_clock_id'] ?? null) : null;
+                $stripeService = new StripeService($config['secret_key'], $testClockId);
+
+                $activeResult = $stripeService->getActiveSubscription($billingId);
+
+                if (!($activeResult['success'] ?? false)) {
+                    $this->json(['error' => 'Error al consultar Stripe: ' . ($activeResult['error'] ?? '')], 400);
+                }
+
+                $pl  = $activeResult['permanent_license'] ?? null;
+                $sub = $activeResult['subscription']      ?? null;
+
+                if (!$pl && !($activeResult['has_subscription'] ?? false)) {
+                    if ($planLookupKey === '') {
+                        $applyFreePlan();
+                    } else {
+                        $this->json(['error' => 'El cliente no tiene suscripcion activa ni licencia permanente en Stripe. No se puede generar la licencia.'], 400);
+                    }
+                } elseif ($pl) {
+                    if ($planLookupKey === '') $planLookupKey = $pl['lookup_key']  ?? 'permanent';
+                    $planName    = $pl['price_name']  ?? 'Licencia Permanente';
+                    $isPermanent = true;
+                    $expiresAt   = null;
+                } else {
+                    if ($planLookupKey === '') $planLookupKey = $sub['lookup_key'] ?? '';
+                    $planName    = $sub['price_name'] ?? $planLookupKey;
+                    $isPermanent = false;
+                    $expiresAt   = $sub['current_period_end'] ?? null;
+                }
+
+            }
         }
 
-        // Si se pasó una fecha personalizada y es válida, usarla (incluso para permanentes)
         $customExpiresAt = isset($payload['expiresAt']) ? (int)$payload['expiresAt'] : null;
         if ($customExpiresAt && $customExpiresAt > 0) {
             $expiresAt = $customExpiresAt;
@@ -1683,19 +1704,15 @@ class AdminController extends Controller
             $this->json(['error' => 'No se pudo determinar el plan'], 400);
         }
 
-        // Resolver nombre y reglas desde config
-        $config = require __DIR__ . '/../../config/stripe.php';
-        $rules  = null;
         foreach ($config['plans'] ?? [] as $planCfg) {
             if (($planCfg['lookup_key'] ?? '') === $planLookupKey) {
                 $planName    = $planCfg['name']  ?? $planName;
                 $isPermanent = ($planCfg['type'] ?? '') === 'permanent' ? true : $isPermanent;
-                $rules       = $planCfg['rules'] ?? null;
+                $rules       = $planCfg['rules'] ?? $rules;
                 break;
             }
         }
 
-        // Instanciar LicenseService
         try {
             $licenseService = new LicenseService();
         } catch (\Exception $e) {
@@ -1735,7 +1752,7 @@ class AdminController extends Controller
 
         try {
             $token = $licenseService->generateLicense(
-                $billingId ?? $customerId,
+                $billingId ?: $customerId,
                 $customer['name']  ?? '',
                 $customer['email'] ?? '',
                 $planLookupKey,
@@ -1757,7 +1774,6 @@ class AdminController extends Controller
                 $rules
             );
 
-            // Registrar en LicenseLogs como generado por administrador
             $logModel = new LicenseLogModel();
             $logModel->createLog([
                 'CustomerId'    => $customerId,
@@ -1775,15 +1791,15 @@ class AdminController extends Controller
             ]);
 
             $this->json([
-                'success'        => true,
-                'license_token'  => $token,
-                'license_file'   => $licenseFile,
-                'plan_lookup_key'=> $planLookupKey,
-                'plan_name'      => $planName,
-                'is_permanent'   => $isPermanent,
-                'expires_at'     => $expiresAt,
-                'customer_name'  => $customer['name']  ?? '',
-                'customer_email' => $customer['email'] ?? '',
+                'success'         => true,
+                'license_token'   => $token,
+                'license_file'    => $licenseFile,
+                'plan_lookup_key' => $planLookupKey,
+                'plan_name'       => $planName,
+                'is_permanent'    => $isPermanent,
+                'expires_at'      => $expiresAt,
+                'customer_name'   => $customer['name']  ?? '',
+                'customer_email'  => $customer['email'] ?? '',
             ]);
         } catch (\Exception $e) {
             $this->json(['error' => 'Error al generar licencia: ' . $e->getMessage()], 500);

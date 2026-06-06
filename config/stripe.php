@@ -222,7 +222,6 @@ return [
                 'max_partners' => null,       // ilimitado
             ],
             'type' => 'permanent',
-            'showBillingIds' =>['cus_UXvXDSOzZz12wN', 'cus_NuXo9n2eZvKYjL'],
         ],
          'plan_ilimited_permanent' => [
             'name' => 'Plan Permanente Ilimitado',
@@ -236,7 +235,7 @@ return [
                 'max_partners' => null,       // ilimitado
             ],
             'type' => 'permanent',
-            'showBillingIds' =>['cus_NuXo9n2eZvKYjL', 'cus_NuXo9n2eZvKYjL'],
+            'showBillingIds' =>['cus_NuXo9n2eZvKYjL', 'cus_NuXo9n2eZvKYjL','cus_UeMuQdNEOxOxVq'],
         ],
     ]
 ];
