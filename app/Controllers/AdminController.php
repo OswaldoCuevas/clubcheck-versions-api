@@ -249,6 +249,21 @@ class AdminController extends Controller
             $attributes['email'] = $email;
         }
 
+        if (array_key_exists('codeAccess', $payload) || array_key_exists('accessCode', $payload)) {
+            $codeAccess = $payload['codeAccess'] ?? $payload['accessCode'] ?? null;
+            $codeAccess = $codeAccess !== null ? trim((string) $codeAccess) : null;
+
+            if ($codeAccess === null || $codeAccess === '') {
+                $this->json(['error' => 'El AccessCode es obligatorio'], 422);
+            }
+
+            if (mb_strlen($codeAccess) > 100) {
+                $this->json(['error' => 'El AccessCode debe tener máximo 100 caracteres'], 422);
+            }
+
+            $attributes['codeAccess'] = $codeAccess;
+        }
+
         if (array_key_exists('phone', $payload)) {
             $phone = $payload['phone'];
             $attributes['phone'] = $phone !== null ? trim((string) $phone) : null;
@@ -301,6 +316,10 @@ class AdminController extends Controller
             }
 
             // Generar ID automático si no se proporcionó
+            if (!array_key_exists('codeAccess', $attributes) || $attributes['codeAccess'] === null || $attributes['codeAccess'] === '') {
+                $this->json(['error' => 'El AccessCode es obligatorio al crear un cliente'], 422);
+            }
+
             if ($customerId === '') {
                 $customerId = $this->generateCustomerId();
             }
@@ -335,6 +354,13 @@ class AdminController extends Controller
                 $this->json([
                     'error' => 'El correo ya está registrado para otro cliente',
                     'code' => 'email_conflict',
+                ], 409);
+            }
+
+            if ($e->getMessage() === 'code_access_already_registered') {
+                $this->json([
+                    'error' => 'El AccessCode ya está registrado para otro cliente',
+                    'code' => 'code_access_conflict',
                 ], 409);
             }
 

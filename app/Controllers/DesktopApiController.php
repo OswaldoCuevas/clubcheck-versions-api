@@ -483,6 +483,13 @@ class DesktopApiController extends Controller
         );
 
         foreach ($cashRegisters as &$cashRegister) {
+            $cashRegister['totalDiscounted'] = $this->scalar(
+                "SELECT COALESCE(SUM(DiscountAmount), 0)
+                 FROM SaleTicketDesktop
+                 WHERE CustomerApiId = ? AND CashRegisterId = ? AND COALESCE(IsDeleted, 0) = 0 AND Active = 1 AND SaleDate BETWEEN ? AND ?",
+                [$customerId, $cashRegister['Id'], $from, $to]
+            );
+
             $tickets = $this->db->fetchAll(
                 "SELECT * FROM SaleTicketDesktop
                  WHERE CustomerApiId = ? AND CashRegisterId = ? AND COALESCE(IsDeleted, 0) = 0 AND SaleDate BETWEEN ? AND ?
@@ -1254,7 +1261,8 @@ class DesktopApiController extends Controller
             "SELECT DATE(SaleDate) AS date,
                     SUM(CASE WHEN Active = 1 THEN 1 ELSE 0 END) AS tickets,
                     SUM(CASE WHEN Active = 0 THEN 1 ELSE 0 END) AS cancelledTickets,
-                    COALESCE(SUM(CASE WHEN Active = 1 THEN TotalAmount ELSE 0 END), 0) AS income
+                    COALESCE(SUM(CASE WHEN Active = 1 THEN TotalAmount ELSE 0 END), 0) AS income,
+                    COALESCE(SUM(CASE WHEN Active = 1 THEN DiscountAmount ELSE 0 END), 0) AS totalDiscounted
              FROM SaleTicketDesktop
              WHERE CustomerApiId = ? AND COALESCE(IsDeleted, 0) = 0 AND SaleDate BETWEEN ? AND ?
              GROUP BY DATE(SaleDate)
@@ -1278,7 +1286,7 @@ class DesktopApiController extends Controller
         );
 
         return [
-            'dailyTickets' => $this->completeDailySeries($from, $to, $dailySalesRows, ['tickets', 'cancelledTickets', 'income']),
+            'dailyTickets' => $this->completeDailySeries($from, $to, $dailySalesRows, ['tickets', 'cancelledTickets', 'income', 'totalDiscounted']),
             'dailyCategories' => $this->completeDailySeries($from, $to, $dailyCategoryRows, ['memberships', 'membershipIncome', 'products', 'productIncome']),
         ];
     }
@@ -1454,6 +1462,7 @@ class DesktopApiController extends Controller
             'tickets' => $this->scalar("SELECT COUNT(*) FROM SaleTicketDesktop WHERE {$ticketWhere} AND Active = 1", $params),
             'cancelledTickets' => $this->scalar("SELECT COUNT(*) FROM SaleTicketDesktop WHERE {$ticketWhere} AND Active = 0", $params),
             'income' => $this->scalar("SELECT COALESCE(SUM(TotalAmount), 0) FROM SaleTicketDesktop WHERE {$ticketWhere} AND Active = 1", $params),
+            'totalDiscounted' => $this->scalar("SELECT COALESCE(SUM(DiscountAmount), 0) FROM SaleTicketDesktop WHERE {$ticketWhere} AND Active = 1", $params),
             'membershipTickets' => $this->scalar(
                 "SELECT COUNT(DISTINCT t.Id) FROM SaleTicketDesktop t JOIN SaleTicketItemDesktop i ON i.SaleTicketId = t.Id
                  WHERE t.CustomerApiId = ? AND t.Active = 1 AND COALESCE(t.IsDeleted, 0) = 0 AND COALESCE(i.IsDeleted, 0) = 0

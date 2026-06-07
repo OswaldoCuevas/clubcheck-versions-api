@@ -121,6 +121,11 @@ ob_start();
                         <input type="text" class="form-control" id="customerName" placeholder="Nombre legal o comercial">
                     </div>
                     <div class="mb-3">
+                        <label for="customerAccessCode" class="form-label">AccessCode <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="customerAccessCode" placeholder="Ejemplo: club_centro" maxlength="100" autocomplete="off" required>
+                        <div class="form-text">Debe ser único; se normaliza a minúsculas, números y guiones bajos.</div>
+                    </div>
+                    <div class="mb-3">
                         <label for="customerDeviceName" class="form-label">Nombre del dispositivo</label>
                         <input type="text" class="form-control" id="customerDeviceName" placeholder="Ejemplo: POS-01" autocomplete="off">
                         <div class="form-text">Identifica la terminal o estación donde está instalado el escritorio.</div>
@@ -205,6 +210,7 @@ ob_start();
     const customerForm = document.getElementById('customerForm');
     const customerIdInput = document.getElementById('customerId');
     const customerNameInput = document.getElementById('customerName');
+    const customerAccessCodeInput = document.getElementById('customerAccessCode');
     const customerDeviceInput = document.getElementById('customerDeviceName');
     const customerBillingInput = document.getElementById('customerBillingId');
     const customerPlanInput = document.getElementById('customerPlanCode');
@@ -310,6 +316,7 @@ ob_start();
             const lastToken = customer.tokenUpdatedAt ? `Token ${escapeHtml(relativeTime(customer.tokenUpdatedAt))}` : '';
             const updates = [lastSeen, lastToken].filter(Boolean).join(' · ');
             const deviceDisplay = customer.deviceName ? customer.deviceName : 'Sin dispositivo';
+            const accessCodeDisplay = customer.codeAccess ? customer.codeAccess : 'Sin AccessCode';
             const billingDisplay = customer.billingId ? customer.billingId : '';
             const planDisplay = customer.planCode ? customer.planCode : '';
             const clientVersion = customer.clientVersion ? customer.clientVersion : null;
@@ -325,6 +332,7 @@ ob_start();
                     <td>
                         <div class="fw-semibold">${escapeHtml(customer.name || '—')}</div>
                         <div class="text-muted small">ID: ${escapeHtml(customer.customerId)}</div>
+                        <div class="text-muted small">AccessCode: <code>${escapeHtml(accessCodeDisplay)}</code></div>
                         <div class="text-muted small">Email: ${escapeHtml(customer.email || '—')}</div>
                         ${billingDisplay ? `<div class="text-muted small">Facturación: ${escapeHtml(billingDisplay)}</div>` : ''}
                         ${planDisplay ? `<div class="text-muted small">Plan: ${escapeHtml(planDisplay)}</div>` : ''}
@@ -596,6 +604,9 @@ ob_start();
         customerIdInput.removeAttribute('disabled');
         customerIdInput.value = '';
         customerNameInput.value = '';
+        if (customerAccessCodeInput) {
+            customerAccessCodeInput.value = '';
+        }
         if (customerDeviceInput) {
             customerDeviceInput.value = '';
         }
@@ -616,6 +627,9 @@ ob_start();
         customerIdInput.value = customer.customerId;
         customerIdInput.setAttribute('disabled', 'disabled');
         customerNameInput.value = customer.name || '';
+        if (customerAccessCodeInput) {
+            customerAccessCodeInput.value = customer.codeAccess || '';
+        }
         if (customerDeviceInput) {
             customerDeviceInput.value = customer.deviceName || '';
         }
@@ -637,6 +651,7 @@ ob_start();
             event.preventDefault();
             const customerId = customerIdInput.value.trim();
             const name = customerNameInput.value.trim();
+            const codeAccess = customerAccessCodeInput ? customerAccessCodeInput.value.trim() : '';
             const deviceName = customerDeviceInput ? customerDeviceInput.value.trim() : '';
             const billingId = customerBillingInput ? customerBillingInput.value.trim() : '';
             const planCode = customerPlanInput ? customerPlanInput.value.trim() : '';
@@ -650,8 +665,23 @@ ob_start();
                 return;
             }
 
+            if (!codeAccess) {
+                pushAlert('warning', 'El AccessCode es obligatorio');
+                return;
+            }
+
+            const duplicateCodeAccess = customers.some((customer) => {
+                return customer.codeAccess === codeAccess && customer.customerId !== customerId;
+            });
+
+            if (duplicateCodeAccess) {
+                pushAlert('warning', 'El AccessCode ya está registrado para otro cliente');
+                return;
+            }
+
             const payload = {
                 name: name || null,
+                codeAccess,
                 isActive
             };
 
