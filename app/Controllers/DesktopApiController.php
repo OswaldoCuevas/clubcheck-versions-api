@@ -700,51 +700,13 @@ class DesktopApiController extends Controller
             return true;
         }
 
-        $sqlVarcharHash = $this->hashSha256SqlVarcharString($plain);
-        if ($sqlVarcharHash !== null && hash_equals($stored, $sqlVarcharHash)) {
-            return true;
-        }
-
-        $sqlVarcharHashHex = $this->hashSha256SqlVarcharHex($plain);
-        return hash_equals(strtolower($stored), $sqlVarcharHashHex);
+        $sha256Utf8Hex = $this->hashSha256Utf8Hex($plain);
+        return hash_equals(strtolower($stored), $sha256Utf8Hex);
     }
 
-    private function hashSha256SqlVarcharString(string $password, string $codePage = 'Windows-1252'): ?string
+    private function hashSha256Utf8Hex(string $password): string
     {
-        $passwordBytes = $this->convertEncoding($password, 'UTF-8', $codePage);
-        if ($passwordBytes === null) {
-            return null;
-        }
-
-        $hashBytes = hash('sha256', $passwordBytes, true);
-
-        return $this->convertEncoding($hashBytes, $codePage, 'UTF-8');
-    }
-
-    private function hashSha256SqlVarcharHex(string $password, string $codePage = 'Windows-1252'): string
-    {
-        $passwordBytes = $this->convertEncoding($password, 'UTF-8', $codePage) ?? $password;
-
-        return hash('sha256', $passwordBytes);
-    }
-
-    private function convertEncoding(string $value, string $from, string $to): ?string
-    {
-        if (function_exists('mb_convert_encoding')) {
-            $converted = @mb_convert_encoding($value, $to, $from);
-            if ($converted !== false) {
-                return $converted;
-            }
-        }
-
-        if (function_exists('iconv')) {
-            $converted = @iconv($from, $to . '//TRANSLIT', $value);
-            if ($converted !== false) {
-                return $converted;
-            }
-        }
-
-        return null;
+        return hash('sha256', $password);
     }
 
     private function customerId(): string
