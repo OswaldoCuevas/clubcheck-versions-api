@@ -1394,14 +1394,14 @@ class DesktopApiController extends Controller
     private function reentryUsersCount(string $customerId, string $from, string $to): float
     {
         return $this->scalar(
-            "SELECT COUNT(*)
+            "SELECT COUNT(DISTINCT UserId)
              FROM (
-                SELECT UserId
+                SELECT UserId, DATE(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s')) AS AttendanceDate
                 FROM AttendancesDesktop
                 WHERE CustomerApiId = ?
                   AND COALESCE(Removed, 0) = 0
                   AND STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
-                GROUP BY UserId
+                GROUP BY UserId, DATE(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s'))
                 HAVING COUNT(*) >= 2
              ) reentries",
             [$customerId, $from, $to]
@@ -1418,7 +1418,7 @@ class DesktopApiController extends Controller
                 WHERE CustomerApiId = ?
                   AND COALESCE(Removed, 0) = 0
                   AND STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
-                GROUP BY UserId
+                GROUP BY UserId, DATE(STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s'))
                 HAVING COUNT(*) >= 2
              ) reentries",
             [$customerId, $from, $to]
