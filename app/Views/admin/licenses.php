@@ -224,12 +224,17 @@ ob_start();
 let allLicenses = [];
 let currentLicenseFile = null;
 
-const BASE = '<?= app_url('') ?>';
+const endpoints = <?= json_encode([
+    'licenses' => app_url('/admin/api/licenses'),
+    'generate' => app_url('/admin/api/licenses/generate'),
+    'customers' => app_url('/admin/api/customers'),
+    'plans' => app_url('/api/customers/stripe/plans'),
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
 // ==================== CARGAR LISTA ====================
 async function loadLicenses() {
     try {
-        const res = await fetch(BASE + '/admin/api/licenses');
+        const res = await fetch(endpoints.licenses);
         const data = await res.json();
         allLicenses = data.licenses ?? [];
         renderStats(allLicenses);
@@ -373,7 +378,7 @@ document.getElementById('downloadLicBtn').addEventListener('click', () => {
 // ==================== GENERAR (admin) ====================
 async function loadCustomersForSelect() {
     try {
-        const res = await fetch(BASE + '/admin/api/customers');
+        const res = await fetch(endpoints.customers);
         const data = await res.json();
         const sel = document.getElementById('genCustomerId');
         (data.customers ?? []).forEach(c => {
@@ -389,7 +394,7 @@ async function loadCustomersForSelect() {
 
 async function loadPlansForSelect() {
     try {
-        const res = await fetch(BASE + '/api/customers/stripe/plans');
+        const res = await fetch(endpoints.plans);
         const data = await res.json();
         const sel = document.getElementById('genPlanLookupKey');
         (data.plans ?? []).forEach(p => {
@@ -451,7 +456,7 @@ document.getElementById('generateForm').addEventListener('submit', async functio
     }
 
     try {
-        const res  = await fetch(BASE + '/admin/api/licenses/generate', {
+        const res  = await fetch(endpoints.generate, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
