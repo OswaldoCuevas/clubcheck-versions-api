@@ -12,6 +12,7 @@ class UsersDesktopModel extends BaseDesktopSyncModel
     protected array $columns = [
         'Id',
         'Fullname',
+        'FullNameSearch',
         'PhoneNumber',
         'PhoneNumberEmergency',
         'Gender',
@@ -24,6 +25,7 @@ class UsersDesktopModel extends BaseDesktopSyncModel
     ];
     protected array $nullableColumns = [
         'Fullname',
+        'FullNameSearch',
         'PhoneNumber',
         'PhoneNumberEmergency',
         'Gender',
