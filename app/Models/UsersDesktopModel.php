@@ -12,7 +12,7 @@ class UsersDesktopModel extends BaseDesktopSyncModel
     protected array $columns = [
         'Id',
         'Fullname',
-        'FullNameSearch',
+        'FullnameSearch',
         'PhoneNumber',
         'PhoneNumberEmergency',
         'Gender',
