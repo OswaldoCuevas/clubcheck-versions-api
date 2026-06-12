@@ -36,7 +36,8 @@ $router->any('/logout', 'AuthController', 'logout');
 $router->get('/api/version', 'ApiController', 'version');
 $router->get('/api/check-update', 'ApiController', 'checkUpdate');
 $router->get('/api/download', 'ApiController', 'download');
-$router->get('/api/download-setup', 'ApiController', 'downloadSetup'); // Descarga pública del Setup
+$router->get('/api/download-setup', 'ApiController', 'downloadSetup'); // Compatibilidad: descarga publica del Setup ZIP
+$router->get('/api/download-zip', 'ApiController', 'downloadZip'); // Descarga publica del Setup ZIP
 $router->get('/api/server/timestamp', 'ApiController', 'timestamp'); // Timestamp del servidor
 
 // Rutas para sesiones de clientes (aplicación de escritorio)

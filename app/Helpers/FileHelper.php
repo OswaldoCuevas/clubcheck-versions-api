@@ -44,6 +44,26 @@ if (!function_exists('getAppFilePath')) {
     }
 }
 
+if (!function_exists('getSetupFileName')) {
+    /**
+     * Genera el nombre del archivo Setup ZIP para una version especifica.
+     * @param string $version Version del archivo
+     * @return string Nombre del archivo (ej: ClubCheckSetup-1.1.1.20.zip)
+     */
+    function getSetupFileName($version)
+    {
+        try {
+            require_once __DIR__ . '/../../config/bootstrap.php';
+            $setupPattern = config('files.setup_name_pattern', 'ClubCheckSetup.zip');
+            $setupName = pathinfo($setupPattern, PATHINFO_FILENAME);
+        } catch (Exception $e) {
+            $setupName = 'ClubCheckSetup';
+        }
+
+        return "{$setupName}-{$version}.zip";
+    }
+}
+
 if (!function_exists('findExistingAppFile')) {
     /**
      * Busca archivos existentes con el nombre anterior (MyApp) o actual (ClubCheck)

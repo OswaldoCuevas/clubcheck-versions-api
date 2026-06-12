@@ -48,10 +48,13 @@ class ApiController extends Controller
             $versionData['downloadUrl'] = str_replace('//api', '/api', $versionData['downloadUrl']); // Asegurar formato correcto
             $versionData['downloadSetupUrl'] = $baseUrl . '/api/download-setup';
             $versionData['downloadSetupUrl'] = str_replace('//api', '/api', $versionData['downloadSetupUrl']); // Asegurar formato correcto
+            $versionData['downloadZipUrl'] = $baseUrl . '/api/download-zip';
+            $versionData['downloadZipUrl'] = str_replace('//api', '/api', $versionData['downloadZipUrl']); // Asegurar formato correcto
             $versionData['checkUpdateUrl'] = $baseUrl . '/api/check-update';
             $versionData['checkUpdateUrl'] = str_replace('//api', '/api', $versionData['checkUpdateUrl']); // Asegurar formato correcto
             $versionData['directUrl'] = $versionData['url'] ?? ''; // URL directa al archivo
             $versionData['directSetupUrl'] = $versionData['setupUrl'] ?? ''; // URL directa al Setup
+            $versionData['directZipUrl'] = $versionData['setupUrl'] ?? ''; // Alias para clientes nuevos
             
             // Verificar si el archivo EXE existe físicamente
             require_once __DIR__ . '/../Helpers/FileHelper.php';
@@ -66,9 +69,10 @@ class ApiController extends Controller
             
             // Verificar si el archivo Setup existe físicamente
             if (!empty($versionData['setupUrl'])) {
-                $setupFileName = "ClubCheckSetup-{$versionData['latestVersion']}.exe";
+                $setupFileName = getSetupFileName($versionData['latestVersion']);
                 $setupFilePath = __DIR__ . '/../../uploads/' . $setupFileName;
                 $versionData['setupFileExists'] = file_exists($setupFilePath);
+                $versionData['zipFileExists'] = $versionData['setupFileExists'];
                 
                 if ($versionData['setupFileExists'] && empty($versionData['setupFileSize'])) {
                     $versionData['setupFileSize'] = filesize($setupFilePath);
@@ -122,8 +126,10 @@ class ApiController extends Controller
                 $baseUrl = \Core\UrlHelper::absoluteUrl('');
                 $response['downloadUrl'] = $baseUrl . '/api/download';
                 $response['downloadSetupUrl'] = $baseUrl . '/api/download-setup';
+                $response['downloadZipUrl'] = $baseUrl . '/api/download-zip';
                 $response['url'] = $versionData['url'] ?? '';
                 $response['setupUrl'] = $versionData['setupUrl'] ?? '';
+                $response['zipUrl'] = $versionData['setupUrl'] ?? '';
                 
                 // Información adicional del archivo EXE
                 require_once __DIR__ . '/../Helpers/FileHelper.php';
@@ -139,7 +145,7 @@ class ApiController extends Controller
                     $response['setupFileSize'] = $versionData['setupFileSize'] ?? null;
                     $response['setupSha256'] = $versionData['setupSha256'] ?? '';
                     
-                    $setupFileName = "ClubCheckSetup-{$serverVersion}.exe";
+                    $setupFileName = getSetupFileName($serverVersion);
                     $setupFilePath = __DIR__ . '/../../uploads/' . $setupFileName;
                     if (file_exists($setupFilePath)) {
                         if (empty($response['setupFileSize'])) {
@@ -204,15 +210,7 @@ class ApiController extends Controller
         } else {
             // Descarga directa del archivo ejecutable (comportamiento por defecto)
             $fileSize = filesize($filePath);
-            
-            // Registrar la descarga
-            $this->downloadLogModel->logDownload(
-                'exe',
-                $versionData['latestVersion'],
-                $fileName,
-                $fileSize
-            );
-            
+
             // Headers para descarga de archivo
             header('Content-Type: application/octet-stream');
             header('Content-Disposition: attachment; filename="' . $fileName . '"');
@@ -232,12 +230,24 @@ class ApiController extends Controller
                 exit;
             }
 
-            while (!feof($handle)) {
-                echo fread($handle, $chunkSize);
+            $bytesSent = 0;
+            while (!feof($handle) && connection_status() === CONNECTION_NORMAL) {
+                $buffer = fread($handle, $chunkSize);
+                $bytesSent += strlen($buffer);
+                echo $buffer;
                 flush();
             }
             
             fclose($handle);
+
+            if ($bytesSent >= $fileSize && connection_status() === CONNECTION_NORMAL) {
+                $this->downloadLogModel->logDownload(
+                    'exe',
+                    $versionData['latestVersion'],
+                    $fileName,
+                    $fileSize
+                );
+            }
             exit;
         }
     }
@@ -259,8 +269,9 @@ class ApiController extends Controller
             exit;
         }
 
-        // Obtener el nombre y ruta del archivo Setup
-        $setupFileName = "ClubCheckSetup-{$versionData['latestVersion']}.exe";
+        // Obtener el nombre y ruta del archivo Setup ZIP
+        require_once __DIR__ . '/../Helpers/FileHelper.php';
+        $setupFileName = getSetupFileName($versionData['latestVersion']);
         $setupFilePath = __DIR__ . '/../../uploads/' . $setupFileName;
 
         // Verificar que el archivo existe
@@ -298,19 +309,11 @@ class ApiController extends Controller
             echo json_encode($fileInfo, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
             exit;
         } else {
-            // Descarga directa del archivo Setup (comportamiento por defecto)
+            // Descarga directa del archivo Setup ZIP (comportamiento por defecto)
             $fileSize = filesize($setupFilePath);
-            
-            // Registrar la descarga
-            $this->downloadLogModel->logDownload(
-                'setup',
-                $versionData['latestVersion'],
-                $setupFileName,
-                $fileSize
-            );
-            
-            // Headers para descarga de archivo Setup
-            header('Content-Type: application/octet-stream');
+
+            // Headers para descarga de archivo Setup ZIP
+            header('Content-Type: application/zip');
             header('Content-Disposition: attachment; filename="' . $setupFileName . '"');
             header('Content-Length: ' . $fileSize);
             header('Cache-Control: must-revalidate');
@@ -328,14 +331,31 @@ class ApiController extends Controller
                 exit;
             }
 
-            while (!feof($handle)) {
-                echo fread($handle, $chunkSize);
+            $bytesSent = 0;
+            while (!feof($handle) && connection_status() === CONNECTION_NORMAL) {
+                $buffer = fread($handle, $chunkSize);
+                $bytesSent += strlen($buffer);
+                echo $buffer;
                 flush();
             }
             
             fclose($handle);
+
+            if ($bytesSent >= $fileSize && connection_status() === CONNECTION_NORMAL) {
+                $this->downloadLogModel->logDownload(
+                    'setup',
+                    $versionData['latestVersion'],
+                    $setupFileName,
+                    $fileSize
+                );
+            }
             exit;
         }
+    }
+
+    public function downloadZip()
+    {
+        $this->downloadSetup();
     }
 
     /**

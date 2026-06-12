@@ -96,10 +96,10 @@ class HomeController extends Controller
             ];
         }
         
-        // Validar archivo Setup (segundo EXE)
+        // Validar archivo Setup ZIP
         if (!isset($_FILES['setupFile']) || $_FILES['setupFile']['error'] !== UPLOAD_ERR_OK) {
             return [
-                'message' => 'Error al subir el archivo Setup. Es obligatorio.',
+                'message' => 'Error al subir el archivo Setup ZIP. Es obligatorio.',
                 'type' => 'error'
             ];
         }
@@ -116,11 +116,11 @@ class HomeController extends Controller
             ];
         }
         
-        // Validar extensión Setup (también debe ser EXE)
+        // Validar extension Setup ZIP
         $setupExt = strtolower(pathinfo($setupFile['name'], PATHINFO_EXTENSION));
-        if ($setupExt !== 'exe') {
+        if ($setupExt !== 'zip') {
             return [
-                'message' => 'El archivo Setup debe ser .exe',
+                'message' => 'El archivo Setup debe ser .zip',
                 'type' => 'error'
             ];
         }
@@ -128,7 +128,7 @@ class HomeController extends Controller
         // Generar nombres de archivos
         require_once __DIR__ . '/../Helpers/FileHelper.php';
         $exeFileName = getAppFileName($version);
-        $setupFileName = "ClubCheckSetup-{$version}.exe";
+        $setupFileName = getSetupFileName($version);
         
         $exeFilePath = $this->uploadDir . $exeFileName;
         $setupFilePath = $this->uploadDir . $setupFileName;
@@ -213,7 +213,7 @@ class HomeController extends Controller
                 ];
             } else {
                 return [
-                    'message' => "Versión {$version} subida exitosamente (EXE + Setup)",
+                    'message' => "Versión {$version} subida exitosamente (EXE + Setup ZIP)",
                     'type' => 'success'
                 ];
             }

@@ -20,9 +20,9 @@ return [
     'files' => [
         'version_file' => 'version.json',
         'max_upload_size' => 500 * 1024 * 1024, // 500MB
-        'allowed_extensions' => ['exe'],
+        'allowed_extensions' => ['exe', 'zip'],
         'app_name_pattern' => 'ClubCheck.exe',
-        'setup_name_pattern' => 'ClubCheckSetup.exe',
+        'setup_name_pattern' => 'ClubCheckSetup.zip',
     ],
 
     'customerSessions' => [
