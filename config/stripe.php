@@ -41,8 +41,8 @@ return [
             'rules' => [
                 'enable_fingerprint' => true,
                 'enable_qr' => true,
-                'max_messages' => 600,
-                'max_members_actives' => 150,
+                'max_messages' => 1200,
+                'max_members_actives' => 300,
                 'products_to_sale' => null,  // ilimitado
                 'max_partners' => null,       // ilimitado
             ],
@@ -54,8 +54,8 @@ return [
             'rules' => [
                 'enable_fingerprint' => true,
                 'enable_qr' => true,
-                'max_messages' => 600,
-                'max_members_actives' => 150,
+                'max_messages' => 1200,
+                'max_members_actives' => 300,
                 'products_to_sale' => null,  // ilimitado
                 'max_partners' => null,       // ilimitado
             ],
@@ -67,8 +67,8 @@ return [
             'rules' => [
                 'enable_fingerprint' => true,
                 'enable_qr' => true,
-                'max_messages' => 900,
-                'max_members_actives' => 300,
+                'max_messages' => 2000,
+                'max_members_actives' => 600,
                 'products_to_sale' => null,  // ilimitado
                 'max_partners' => null,       // ilimitado
             ],
@@ -80,65 +80,65 @@ return [
             'rules' => [
                 'enable_fingerprint' => true,
                 'enable_qr' => true,
-                'max_messages' => 900,
-                'max_members_actives' => 300,
+                'max_messages' => 2000,
+                'max_members_actives' => 600,
                 'products_to_sale' => null,  // ilimitado
                 'max_partners' => null,       // ilimitado
             ],
             'type' => 'yearly',
         ],
-        'business_monthly' => [
-            'name' => 'Plan Business',
-            'lookup_key' => 'business_monthly',
-            'rules' => [
-                'enable_fingerprint' => true,
-                'enable_qr' => true,
-                'max_messages' => 1600,
-                'max_members_actives' => 500,
-                'products_to_sale' => null,  // ilimitado
-                'max_partners' => null,       // ilimitado
-            ],
-            'type' => 'monthly',
-        ],
-        'business_yearly' => [
-                'name' => 'Plan Business',
-                'lookup_key' => 'business_yearly',
-                'rules' => [
-                    'enable_fingerprint' => true,
-                    'enable_qr' => true,
-                    'max_messages' => 1600,
-                    'max_members_actives' => 500,
-                    'products_to_sale' => null,  // ilimitado
-                    'max_partners' => null,       // ilimitado
-                ],
-                'type' => 'yearly',
-        ],
-        'enterprise_monthly' => [
-            'name' => 'Plan Enterprise',
-            'lookup_key' => 'enterprise_monthly',
-            'rules' => [
-                'enable_fingerprint' => true,
-                'enable_qr' => true,
-                'max_messages' => 3100,
-                'max_members_actives' => 1000,
-                'products_to_sale' => null,  // ilimitado
-                'max_partners' => null,       // ilimitado
-            ],
-            'type' => 'monthly',
-        ],
-        'enterprise_yearly' => [
-            'name' => 'Plan Enterprise',
-            'lookup_key' => 'enterprise_yearly',
-            'rules' => [
-                'enable_fingerprint' => true,
-                'enable_qr' => true,
-                'max_messages' => 3100,
-                'max_members_actives' => 1000,
-                'products_to_sale' => null,  // ilimitado
-                'max_partners' => null,       // ilimitado
-            ],
-            'type' => 'yearly',
-        ],
+        // 'business_monthly' => [
+        //     'name' => 'Plan Business',
+        //     'lookup_key' => 'business_monthly',
+        //     'rules' => [
+        //         'enable_fingerprint' => true,
+        //         'enable_qr' => true,
+        //         'max_messages' => 1600,
+        //         'max_members_actives' => 500,
+        //         'products_to_sale' => null,  // ilimitado
+        //         'max_partners' => null,       // ilimitado
+        //     ],
+        //     'type' => 'monthly',
+        // ],
+        // 'business_yearly' => [
+        //         'name' => 'Plan Business',
+        //         'lookup_key' => 'business_yearly',
+        //         'rules' => [
+        //             'enable_fingerprint' => true,
+        //             'enable_qr' => true,
+        //             'max_messages' => 1600,
+        //             'max_members_actives' => 500,
+        //             'products_to_sale' => null,  // ilimitado
+        //             'max_partners' => null,       // ilimitado
+        //         ],
+        //         'type' => 'yearly',
+        // ],
+        // 'enterprise_monthly' => [
+        //     'name' => 'Plan Enterprise',
+        //     'lookup_key' => 'enterprise_monthly',
+        //     'rules' => [
+        //         'enable_fingerprint' => true,
+        //         'enable_qr' => true,
+        //         'max_messages' => 3100,
+        //         'max_members_actives' => 1000,
+        //         'products_to_sale' => null,  // ilimitado
+        //         'max_partners' => null,       // ilimitado
+        //     ],
+        //     'type' => 'monthly',
+        // ],
+        // 'enterprise_yearly' => [
+        //     'name' => 'Plan Enterprise',
+        //     'lookup_key' => 'enterprise_yearly',
+        //     'rules' => [
+        //         'enable_fingerprint' => true,
+        //         'enable_qr' => true,
+        //         'max_messages' => 3100,
+        //         'max_members_actives' => 1000,
+        //         'products_to_sale' => null,  // ilimitado
+        //         'max_partners' => null,       // ilimitado
+        //     ],
+        //     'type' => 'yearly',
+        // ],
     ]
     : [
         'free' => [
