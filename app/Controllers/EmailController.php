@@ -90,6 +90,7 @@ class EmailController extends Controller
      * - toName: string (opcional) - Nombre del destinatario
      * - customerApiId: string (opcional) - ID del customer relacionado
      * - metadata: object (opcional) - Datos adicionales
+     * - attachments: array (opcional) - Adjuntos en base64
      */
     public function send(): void
     {
@@ -125,6 +126,7 @@ class EmailController extends Controller
                 'adminId' => $data['adminId'] ?? null,
                 'userId' => $data['userId'] ?? null,
                 'metadata' => $data['metadata'] ?? null,
+                'attachments' => $this->normalizeAttachments($data['attachments'] ?? []),
             ]
         );
 
@@ -287,6 +289,7 @@ class EmailController extends Controller
      * - companyName: string (opcional) - Nombre de la empresa
      * - customerApiId: string (opcional) - ID del customer relacionado
      * - metadata: object (opcional) - Datos adicionales
+     * - attachments: array (opcional) - Adjuntos en base64
      */
     public function sendWelcome(): void
     {
@@ -315,6 +318,7 @@ class EmailController extends Controller
                 'adminId' => $data['adminId'] ?? null,
                 'userId' => $data['userId'] ?? null,
                 'metadata' => $data['metadata'] ?? null,
+                'attachments' => $this->normalizeAttachments($data['attachments'] ?? []),
             ]
         );
 
@@ -344,6 +348,7 @@ class EmailController extends Controller
      * - toName: string (opcional) - Nombre del destinatario
      * - customerApiId: string (opcional) - ID del customer relacionado
      * - metadata: object (opcional) - Datos adicionales
+     * - attachments: array (opcional) - Adjuntos en base64
      */
     public function sendNotification(): void
     {
@@ -378,6 +383,7 @@ class EmailController extends Controller
                 'adminId' => $data['adminId'] ?? null,
                 'userId' => $data['userId'] ?? null,
                 'metadata' => $data['metadata'] ?? null,
+                'attachments' => $this->normalizeAttachments($data['attachments'] ?? []),
             ]
         );
 
@@ -634,5 +640,94 @@ class EmailController extends Controller
             'cleaned' => $cleaned,
             'timestamp' => time(),
         ]);
+    }
+
+    /**
+     * Normaliza adjuntos enviados en JSON.
+     *
+     * Formato esperado:
+     * attachments: [
+     *   { name: "archivo.pdf", contentBase64: "...", mime: "application/pdf" }
+     * ]
+     */
+    private function normalizeAttachments($attachments): array
+    {
+        if (empty($attachments)) {
+            return [];
+        }
+
+        if (!is_array($attachments)) {
+            ApiHelper::respond(['error' => 'El campo attachments debe ser un arreglo'], 422);
+        }
+
+        // Permite enviar un solo objeto en vez de un arreglo de objetos.
+        if (isset($attachments['contentBase64']) || isset($attachments['content'])) {
+            $attachments = [$attachments];
+        }
+
+        if (count($attachments) > 5) {
+            ApiHelper::respond(['error' => 'Solo se permiten hasta 5 adjuntos por correo'], 422);
+        }
+
+        $normalized = [];
+        $totalBytes = 0;
+        $maxFileBytes = 10 * 1024 * 1024;
+        $maxTotalBytes = 15 * 1024 * 1024;
+
+        foreach ($attachments as $index => $attachment) {
+            if (!is_array($attachment)) {
+                ApiHelper::respond(['error' => "El adjunto {$index} debe ser un objeto"], 422);
+            }
+
+            $name = trim((string) ($attachment['name'] ?? $attachment['filename'] ?? ''));
+            $contentBase64 = (string) ($attachment['contentBase64'] ?? $attachment['content'] ?? '');
+            $mime = trim((string) ($attachment['mime'] ?? $attachment['mimeType'] ?? 'application/octet-stream'));
+
+            if ($name === '') {
+                ApiHelper::respond(['error' => "El adjunto {$index} requiere name o filename"], 422);
+            }
+
+            if ($contentBase64 === '') {
+                ApiHelper::respond(['error' => "El adjunto {$index} requiere contentBase64"], 422);
+            }
+
+            $name = basename(str_replace('\\', '/', $name));
+            if ($name === '' || preg_match('/[\x00-\x1F\x7F]/', $name)) {
+                ApiHelper::respond(['error' => "El nombre del adjunto {$index} no es valido"], 422);
+            }
+
+            if (str_contains($contentBase64, ',')) {
+                $contentBase64 = substr($contentBase64, strpos($contentBase64, ',') + 1);
+            }
+
+            $contentBase64 = preg_replace('/\s+/', '', $contentBase64);
+            $content = base64_decode($contentBase64, true);
+
+            if ($content === false) {
+                ApiHelper::respond(['error' => "El contenido del adjunto {$index} no es base64 valido"], 422);
+            }
+
+            $fileBytes = strlen($content);
+            if ($fileBytes === 0) {
+                ApiHelper::respond(['error' => "El adjunto {$index} esta vacio"], 422);
+            }
+
+            if ($fileBytes > $maxFileBytes) {
+                ApiHelper::respond(['error' => "El adjunto {$index} excede 10 MB"], 413);
+            }
+
+            $totalBytes += $fileBytes;
+            if ($totalBytes > $maxTotalBytes) {
+                ApiHelper::respond(['error' => 'El total de adjuntos excede 15 MB'], 413);
+            }
+
+            $normalized[] = [
+                'content' => $content,
+                'name' => $name,
+                'mime' => $mime !== '' ? $mime : 'application/octet-stream',
+            ];
+        }
+
+        return $normalized;
     }
 }

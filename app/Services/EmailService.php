@@ -126,7 +126,7 @@ class EmailService
         string $subject,
         string $body,
         ?string $emailTypeCode = 'NORMAL',
-        array $options = []
+        array $options = [],
     ): array {
         if (!$this->isConfigured()) {
             return self::createResult(false, 'El servicio de email no está configurado');
