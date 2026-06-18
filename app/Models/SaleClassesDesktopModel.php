@@ -4,42 +4,36 @@ namespace Models;
 
 require_once __DIR__ . '/BaseDesktopSyncModel.php';
 
-class SaleTicketItemDesktopModel extends BaseDesktopSyncModel
+class SaleClassesDesktopModel extends BaseDesktopSyncModel
 {
-    protected string $table = 'SaleTicketItemDesktop';
+    protected string $table = 'SaleClassesDesktop';
     protected string $primaryKey = 'Id';
     protected bool $autoIncrement = false;
     protected array $columns = [
         'Id',
+        'CustomerApiId',
+        'UserId',
         'SaleTicketId',
-        'ProductId',
-        'ProductCode',
-        'ProductName',
-        'UnitPrice',
-        'Quantity',
-        'LineSubtotal',
-        'LineDiscount',
-        'LineTax',
-        'LineTotal',
+        'SaleTicketItemId',
+        'SubtotalAmount',
+        'DiscountAmount',
+        'TaxAmount',
+        'TotalAmount',
         'CreatedOn',
         'CreatedBy',
         'LastModifiedOn',
         'LastModifiedBy',
         'IsDeleted',
-        'SubscriptionId',
-        'ClassSaleId',
-        'CustomerApiId',
+        'Sync',
     ];
     protected array $nullableColumns = [
-        'ProductId',
-        'ProductCode',
-        'ProductName',
+        'SaleTicketId',
+        'SaleTicketItemId',
+        'CreatedBy',
         'LastModifiedOn',
         'LastModifiedBy',
-        'SubscriptionId',
-        'ClassSaleId',
     ];
-    protected array $booleanColumns = ['IsDeleted'];
+    protected array $booleanColumns = ['IsDeleted', 'Sync'];
     protected ?string $softDeleteColumn = 'IsDeleted';
     protected ?string $orderBy = 'CreatedOn';
 }

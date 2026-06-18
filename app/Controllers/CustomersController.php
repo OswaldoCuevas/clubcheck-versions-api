@@ -29,6 +29,18 @@ require_once __DIR__ . '/../Models/BarcodeLookupCacheDesktopModel.php';
 require_once __DIR__ . '/../Models/AccessDevicesDesktopModel.php';
 require_once __DIR__ . '/../Models/OperationsAccessDevicesDesktopModel.php';
 require_once __DIR__ . '/../Models/UserAccessDevicesDesktopModel.php';
+require_once __DIR__ . '/../Models/AccessUsersDesktopModel.php';
+require_once __DIR__ . '/../Models/ClassCatalogDesktopModel.php';
+require_once __DIR__ . '/../Models/InstructorsDesktopModel.php';
+require_once __DIR__ . '/../Models/ClassInstructorsDesktopModel.php';
+require_once __DIR__ . '/../Models/ClassScheduleGroupsDesktopModel.php';
+require_once __DIR__ . '/../Models/ClassSchedulesDesktopModel.php';
+require_once __DIR__ . '/../Models/ClassEnrollmentsDesktopModel.php';
+require_once __DIR__ . '/../Models/ClassReservationsDesktopModel.php';
+require_once __DIR__ . '/../Models/ClassScheduleInstructorsDesktopModel.php';
+require_once __DIR__ . '/../Models/ClassScheduleReschedulesDesktopModel.php';
+require_once __DIR__ . '/../Models/SaleClassesDesktopModel.php';
+require_once __DIR__ . '/../Models/SaleClassSchedulesDesktopModel.php';
 require_once __DIR__ . '/../Helpers/ApiHelper.php';
 require_once __DIR__ . '/../Services/StripeService.php';
 require_once __DIR__ . '/../Services/JwtService.php';
@@ -61,6 +73,18 @@ use Models\BarcodeLookupCacheDesktopModel;
 use Models\AccessDevicesDesktopModel;
 use Models\OperationsAccessDevicesDesktopModel;
 use Models\UserAccessDevicesDesktopModel;
+use Models\AccessUsersDesktopModel;
+use Models\ClassCatalogDesktopModel;
+use Models\InstructorsDesktopModel;
+use Models\ClassInstructorsDesktopModel;
+use Models\ClassScheduleGroupsDesktopModel;
+use Models\ClassSchedulesDesktopModel;
+use Models\ClassEnrollmentsDesktopModel;
+use Models\ClassReservationsDesktopModel;
+use Models\ClassScheduleInstructorsDesktopModel;
+use Models\ClassScheduleReschedulesDesktopModel;
+use Models\SaleClassesDesktopModel;
+use Models\SaleClassSchedulesDesktopModel;
 use App\Services\StripeService;
 use ApiHelper;
 use App\Services\JwtService;
@@ -111,12 +135,12 @@ class CustomersController extends Controller
             'subscriptions' => new SubscriptionsDesktopModel(),
             'attendances' => new AttendancesDesktopModel(),
             'administrators' => new AdministratorsDesktopModel(),
-            // 'sendEmailsAdmin' => new SendEmailsAdminDesktopModel(),
+            'sendEmailsAdmin' => new SendEmailsAdminDesktopModel(),
             'historyOperations' => new HistoryOperationsDesktopModel(),
             'infoMySubscription' => new InfoMySubscriptionDesktopModel(),
-            // 'whatsapp' => new WhatsAppDesktopModel(),
+            'whatsapp' => new WhatsAppDesktopModel(),
             'appSettings' => new AppSettingsDesktopModel(),
-            // 'sentMessages' => new SentMessagesDesktopModel(),
+            'sentMessages' => new SentMessagesDesktopModel(),
             'products' => new ProductDesktopModel(),
             'productPrices' => new ProductPriceDesktopModel(),
             'productStock' => new ProductStockDesktopModel(),
@@ -128,8 +152,20 @@ class CustomersController extends Controller
             'accessDevices' => new AccessDevicesDesktopModel(),
             'operationsAccessDevices' => new OperationsAccessDevicesDesktopModel(),
             'userAccessDevices' => new UserAccessDevicesDesktopModel(),
-            // 'migrations' => new MigrationsDesktopModel(),
-            //'barcodeLookupCache' => new BarcodeLookupCacheDesktopModel(),
+            'accessUsers' => new AccessUsersDesktopModel(),
+            'classCatalog' => new ClassCatalogDesktopModel(),
+            'instructors' => new InstructorsDesktopModel(),
+            'classInstructors' => new ClassInstructorsDesktopModel(),
+            'classScheduleGroups' => new ClassScheduleGroupsDesktopModel(),
+            'classSchedules' => new ClassSchedulesDesktopModel(),
+            'classEnrollments' => new ClassEnrollmentsDesktopModel(),
+            'classReservations' => new ClassReservationsDesktopModel(),
+            'classScheduleInstructors' => new ClassScheduleInstructorsDesktopModel(),
+            'classScheduleReschedules' => new ClassScheduleReschedulesDesktopModel(),
+            'saleClasses' => new SaleClassesDesktopModel(),
+            'saleClassSchedules' => new SaleClassSchedulesDesktopModel(),
+            'migrations' => new MigrationsDesktopModel(),
+            'barcodeLookupCache' => new BarcodeLookupCacheDesktopModel(),
         ];
     }
 

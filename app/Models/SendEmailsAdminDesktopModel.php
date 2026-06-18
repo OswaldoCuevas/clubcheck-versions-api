@@ -6,7 +6,7 @@ require_once __DIR__ . '/BaseDesktopSyncModel.php';
 
 class SendEmailsAdminDesktopModel extends BaseDesktopSyncModel
 {
-    protected string $table = 'sendemailsadmindesktop';
+    protected string $table = 'SendEmailsAdminDesktop';
     protected string $primaryKey = 'Id';
     protected bool $autoIncrement = false;
     protected array $columns = [
@@ -19,6 +19,7 @@ class SendEmailsAdminDesktopModel extends BaseDesktopSyncModel
         'ExpiresOn',
         'Confirmed',
         'ConfirmedOn',
+        'Sync',
         'CustomerApiId',
     ];
     protected array $nullableColumns = [
@@ -30,8 +31,9 @@ class SendEmailsAdminDesktopModel extends BaseDesktopSyncModel
         'ExpiresOn',
         'Confirmed',
         'ConfirmedOn',
+        'Sync',
         'CustomerApiId',
     ];
-    protected array $booleanColumns = ['Confirmed'];
+    protected array $booleanColumns = ['Confirmed', 'Sync'];
     protected ?string $orderBy = 'SendOn';
 }

@@ -18,6 +18,8 @@ class InfoMySubscriptionDesktopModel extends BaseDesktopSyncModel
         'Trial',
         'UrlWhatsapp',
         'TokenWhatsapp',
+        'IsPlanBasic',
+        'Sync',
         'EnableMessage',
         'ApiToken',
     ];
@@ -29,9 +31,11 @@ class InfoMySubscriptionDesktopModel extends BaseDesktopSyncModel
         'Trial',
         'UrlWhatsapp',
         'TokenWhatsapp',
+        'IsPlanBasic',
+        'Sync',
         'EnableMessage',
         'ApiToken',
     ];
-    protected array $booleanColumns = ['Trial', 'EnableMessage'];
+    protected array $booleanColumns = ['Trial', 'IsPlanBasic', 'Sync', 'EnableMessage'];
     protected ?string $orderBy = 'Id';
 }

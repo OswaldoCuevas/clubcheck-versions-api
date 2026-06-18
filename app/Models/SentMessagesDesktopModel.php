@@ -16,8 +16,10 @@ class SentMessagesDesktopModel extends BaseDesktopSyncModel
         'Message',
         'SentDay',
         'SentHour',
+        'DateSent',
         'Successful',
         'ErrorMessage',
+        'Sync',
         'CustomerApiId',
     ];
     protected array $nullableColumns = [
@@ -26,11 +28,13 @@ class SentMessagesDesktopModel extends BaseDesktopSyncModel
         'Message',
         'SentDay',
         'SentHour',
+        'DateSent',
         'Successful',
         'ErrorMessage',
+        'Sync',
         'CustomerApiId',
     ];
 
-    protected array $booleanColumns = ['Successful'];
+    protected array $booleanColumns = ['Successful', 'Sync'];
     protected ?string $orderBy = 'SentDay';
 }

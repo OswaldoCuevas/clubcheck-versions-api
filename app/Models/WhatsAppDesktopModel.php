@@ -6,7 +6,7 @@ require_once __DIR__ . '/BaseDesktopSyncModel.php';
 
 class WhatsAppDesktopModel extends BaseDesktopSyncModel
 {
-    protected string $table = 'WhatsAppDesktop';
+    protected string $table = 'WhatsappDesktop';
     protected string $primaryKey = 'Id';
     protected bool $autoIncrement = false;
     protected array $columns = [
@@ -14,14 +14,16 @@ class WhatsAppDesktopModel extends BaseDesktopSyncModel
         'SubscriptionId',
         'Warning',
         'Finalized',
+        'Sync',
         'CustomerApiId',
     ];
     protected array $nullableColumns = [
         'SubscriptionId',
         'Warning',
         'Finalized',
+        'Sync',
         'CustomerApiId',
     ];
-    protected array $booleanColumns = ['Warning', 'Finalized'];
+    protected array $booleanColumns = ['Warning', 'Finalized', 'Sync'];
     protected ?string $orderBy = 'Id';
 }

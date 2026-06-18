@@ -6,7 +6,7 @@ require_once __DIR__ . '/BaseDesktopSyncModel.php';
 
 class MigrationsDesktopModel extends BaseDesktopSyncModel
 {
-    protected string $table = 'migrationsdesktop';
+    protected string $table = 'MigrationsDesktop';
     protected string $primaryKey = 'Id';
     protected bool $autoIncrement = false;
     protected array $columns = [

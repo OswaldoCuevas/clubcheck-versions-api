@@ -6,7 +6,7 @@ require_once __DIR__ . '/BaseDesktopSyncModel.php';
 
 class BarcodeLookupCacheDesktopModel extends BaseDesktopSyncModel
 {
-    protected string $table = 'barcodelookupcachedesktop';
+    protected string $table = 'BarcodeLookupCacheDesktop';
     protected string $primaryKey = 'Id';
     protected bool $autoIncrement = false;
     protected array $columns = [
