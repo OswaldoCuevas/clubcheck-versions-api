@@ -48,6 +48,19 @@ return [
             ],
             'type' => 'monthly',
         ],
+        'intermediate_monthly_without_whatsapp' => [
+            'name' => 'Plan Growth',
+            'lookup_key' => 'intermediate_monthly_without_whatsapp',
+            'rules' => [
+                'enable_fingerprint' => true,
+                'enable_qr' => true,
+                'max_messages' => 0,// 
+                'max_members_actives' => 300,
+                'products_to_sale' => null,  // ilimitado
+                'max_partners' => null,       // ilimitado
+            ],
+            'type' => 'monthly',
+        ],
          'intermediate_yearly' => [
             'name' => 'Plan Growth',
             'lookup_key' => 'intermediate_yearly',
