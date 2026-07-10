@@ -31,7 +31,7 @@ return [
                 'max_messages' => 5,
                 'max_members_actives' => 20,
                 'products_to_sale' => 10,
-                'max_partners' => 50,
+                'max_partners' => 350,
             ],
             'type' => 'monthly',
         ],
