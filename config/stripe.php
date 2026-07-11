@@ -47,6 +47,20 @@ return [
                 'max_partners' => null,       // ilimitado
             ],
             'type' => 'monthly',
+             'showBillingIds' =>['cus_UrR2Ei1DYPNutc']
+        ],
+              'intermediate_monthly_without_whatsapp_2' => [
+            'name' => 'Plan Essentials',
+            'lookup_key' => 'intermediate_monthly_without_whatsapp_2',
+            'rules' => [
+                'enable_fingerprint' => true,
+                'enable_qr' => true,
+                'max_messages' => 0,// 
+                'max_members_actives' => 300,
+                'products_to_sale' => null,  // ilimitado
+                'max_partners' => null,       // ilimitado
+            ],
+            'type' => 'monthly',
         ],
         'intermediate_monthly' => [
             'name' => 'Plan Growth',
