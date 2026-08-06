@@ -65,9 +65,9 @@ return [
             'type' => 'monthly',
         ],
 
-            'essential_monthly' => [ // -- nuevo precio
+            'essential_monthly_2' => [ // -- nuevo precio
             'name' => 'Plan Essentials + WhatsApp',
-            'lookup_key' => 'essential_monthly',
+            'lookup_key' => 'essential_monthly_2',
             'rules' => [
                 'enable_fingerprint' => true,
                 'enable_qr' => true,
