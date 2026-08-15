@@ -172,7 +172,7 @@ ob_start();
                                         <i class="fas fa-users" title="Usuarios"></i> Usuarios
                                     </th>
                                     <th scope="col" class="text-center">
-                                        <i class="fas fa-id-card" title="Membresías Activas"></i> Membresías
+                                        <i class="fas fa-id-card" title="Membresías activas / membresías totales"></i> Membresías
                                     </th>
                                     <th scope="col" class="text-center">
                                         <i class="fas fa-box" title="Productos"></i> Productos
@@ -222,6 +222,7 @@ ob_start();
                                         <span class="fw-bold text-success"><?= number_format($stats['users']) ?></span>
                                     </td>
                                     <td class="text-center">
+                                        <small class="text-muted d-block">activas / total</small>
                                         <span class="fw-bold text-info"><?= number_format($stats['activeSubscriptions']) ?></span>
                                         <small class="text-muted">/ <?= number_format($stats['totalSubscriptions']) ?></small>
                                     </td>

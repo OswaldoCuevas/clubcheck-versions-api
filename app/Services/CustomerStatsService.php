@@ -131,11 +131,10 @@ class CustomerStatsService extends Model
     private function countActiveSubscriptions(string $customerApiId): int
     {
         return $this->safeCount(
-            'SELECT COUNT(*) AS total FROM SubscriptionsDesktop 
-             WHERE CustomerApiId = ? 
-             AND (Removed = 0 OR Removed IS NULL) 
-             AND (Finished = 0 OR Finished IS NULL)
-             AND (EndingDate IS NULL OR EndingDate >= CURDATE())',
+            'SELECT COUNT(*) AS total
+             FROM ViewSubscriptions
+             WHERE CustomerApiId = ?
+             AND Expiration > 0',
             [$customerApiId]
         );
     }
@@ -226,10 +225,9 @@ class CustomerStatsService extends Model
     private function countAllActiveSubscriptions(): int
     {
         return $this->safeCount(
-            'SELECT COUNT(*) AS total FROM SubscriptionsDesktop 
-             WHERE (Removed = 0 OR Removed IS NULL) 
-             AND (Finished = 0 OR Finished IS NULL)
-             AND (EndingDate IS NULL OR EndingDate >= CURDATE())'
+            'SELECT COUNT(*) AS total
+             FROM ViewSubscriptions
+             WHERE Expiration > 0'
         );
     }
 
