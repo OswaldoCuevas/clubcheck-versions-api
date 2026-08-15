@@ -43,6 +43,7 @@ ob_start();
                             <label for="customerSelect" class="form-label fw-semibold">
                                 <i class="fas fa-user me-1"></i>Seleccionar Cliente
                             </label>
+                            <input type="search" class="form-control mb-2" id="customerSearch" placeholder="Buscar cliente por nombre o ID...">
                             <select class="form-select" id="customerSelect">
                                 <option value="">-- Selecciona un cliente --</option>
                                 <?php foreach ($customers as $customer): ?>
@@ -224,6 +225,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const refreshDataBtn = document.getElementById('refreshDataBtn');
     const exportDataBtn = document.getElementById('exportDataBtn');
     const searchInput = document.getElementById('searchInput');
+    const customerSearch = document.getElementById('customerSearch');
     const tableKey = '<?= htmlspecialchars($tableKey) ?>';
 
     // Cargar datos
@@ -299,6 +301,17 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.key === 'Enter') {
             loadDataBtn?.click();
         }
+    });
+
+    customerSearch?.addEventListener('input', function() {
+        const searchTerm = this.value.trim().toLowerCase();
+        Array.from(customerSelect.options).forEach(function(option, index) {
+            if (index === 0) {
+                option.hidden = false;
+                return;
+            }
+            option.hidden = searchTerm !== '' && !option.textContent.toLowerCase().includes(searchTerm);
+        });
     });
 });
 </script>

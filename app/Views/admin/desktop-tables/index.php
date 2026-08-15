@@ -10,7 +10,7 @@ ob_start();
             <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
                 <div>
                     <h3 class="mb-1"><i class="fas fa-database me-2"></i>Tablas Desktop</h3>
-                    <p class="text-muted mb-0">Consulta y visualiza los datos de las tablas desktop por cliente.</p>
+                    <p class="text-muted mb-0">Consulta y visualiza los datos de las tablas desktop. Puedes elegir cliente antes o dentro de cada tabla.</p>
                 </div>
                 <div class="d-flex gap-2">
                     <a href="<?= app_url('/admin') ?>" class="btn btn-outline-secondary">
@@ -27,8 +27,9 @@ ob_start();
                             <label for="customerFilter" class="form-label fw-semibold">
                                 <i class="fas fa-filter me-1"></i>Filtrar por Cliente
                             </label>
+                            <input type="search" class="form-control mb-2" id="customerSearch" placeholder="Buscar cliente por nombre o ID...">
                             <select class="form-select" id="customerFilter">
-                                <option value="">Selecciona un cliente para ver sus datos...</option>
+                                <option value="">Abrir sin cliente seleccionado...</option>
                                 <?php foreach ($customers as $customer): ?>
                                     <option value="<?= htmlspecialchars($customer['customerId']) ?>">
                                         <?= htmlspecialchars($customer['name']) ?> 
@@ -131,16 +132,12 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             const tableKey = this.getAttribute('data-table');
             
-            if (!currentCustomerId) {
-                alert('Por favor, selecciona un cliente primero.');
-                customerFilter.focus();
-                return;
-            }
-
             // Redirigir a la vista de la tabla
-            window.location.href = '<?= app_url('/admin/desktop-tables/view') ?>?table=' + 
-                                    encodeURIComponent(tableKey) + 
-                                    '&customer=' + encodeURIComponent(currentCustomerId);
+            let url = '<?= app_url('/admin/desktop-tables/view') ?>?table=' + encodeURIComponent(tableKey);
+            if (currentCustomerId) {
+                url += '&customer=' + encodeURIComponent(currentCustomerId);
+            }
+            window.location.href = url;
         });
     });
 
@@ -150,15 +147,23 @@ document.addEventListener('DOMContentLoaded', function() {
             // Solo si no se hizo click en el botón directamente
             if (!e.target.closest('.view-table-btn')) {
                 const tableKey = this.getAttribute('data-table');
-                if (!currentCustomerId) {
-                    alert('Por favor, selecciona un cliente primero.');
-                    customerFilter.focus();
-                    return;
+                let url = '<?= app_url('/admin/desktop-tables/view') ?>?table=' + encodeURIComponent(tableKey);
+                if (currentCustomerId) {
+                    url += '&customer=' + encodeURIComponent(currentCustomerId);
                 }
-                window.location.href = '<?= app_url('/admin/desktop-tables/view') ?>?table=' + 
-                                        encodeURIComponent(tableKey) + 
-                                        '&customer=' + encodeURIComponent(currentCustomerId);
+                window.location.href = url;
             }
+        });
+    });
+
+    document.getElementById('customerSearch')?.addEventListener('input', function() {
+        const searchTerm = this.value.trim().toLowerCase();
+        Array.from(customerFilter.options).forEach(function(option, index) {
+            if (index === 0) {
+                option.hidden = false;
+                return;
+            }
+            option.hidden = searchTerm !== '' && !option.textContent.toLowerCase().includes(searchTerm);
         });
     });
 });

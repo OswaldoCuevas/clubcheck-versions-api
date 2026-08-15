@@ -32,6 +32,18 @@ require_once __DIR__ . '/../Models/WhatsAppDesktopModel.php';
 require_once __DIR__ . '/../Models/AccessDevicesDesktopModel.php';
 require_once __DIR__ . '/../Models/OperationsAccessDevicesDesktopModel.php';
 require_once __DIR__ . '/../Models/UserAccessDevicesDesktopModel.php';
+require_once __DIR__ . '/../Models/AccessUsersDesktopModel.php';
+require_once __DIR__ . '/../Models/ClassCatalogDesktopModel.php';
+require_once __DIR__ . '/../Models/InstructorsDesktopModel.php';
+require_once __DIR__ . '/../Models/ClassInstructorsDesktopModel.php';
+require_once __DIR__ . '/../Models/ClassScheduleGroupsDesktopModel.php';
+require_once __DIR__ . '/../Models/ClassSchedulesDesktopModel.php';
+require_once __DIR__ . '/../Models/ClassEnrollmentsDesktopModel.php';
+require_once __DIR__ . '/../Models/ClassReservationsDesktopModel.php';
+require_once __DIR__ . '/../Models/ClassScheduleInstructorsDesktopModel.php';
+require_once __DIR__ . '/../Models/ClassScheduleReschedulesDesktopModel.php';
+require_once __DIR__ . '/../Models/SaleClassesDesktopModel.php';
+require_once __DIR__ . '/../Models/SaleClassSchedulesDesktopModel.php';
 
 use Models\AdministratorsDesktopModel;
 use Models\AppSettingsDesktopModel;
@@ -56,6 +68,18 @@ use Models\WhatsAppDesktopModel;
 use Models\AccessDevicesDesktopModel;
 use Models\OperationsAccessDevicesDesktopModel;
 use Models\UserAccessDevicesDesktopModel;
+use Models\AccessUsersDesktopModel;
+use Models\ClassCatalogDesktopModel;
+use Models\InstructorsDesktopModel;
+use Models\ClassInstructorsDesktopModel;
+use Models\ClassScheduleGroupsDesktopModel;
+use Models\ClassSchedulesDesktopModel;
+use Models\ClassEnrollmentsDesktopModel;
+use Models\ClassReservationsDesktopModel;
+use Models\ClassScheduleInstructorsDesktopModel;
+use Models\ClassScheduleReschedulesDesktopModel;
+use Models\SaleClassesDesktopModel;
+use Models\SaleClassSchedulesDesktopModel;
 
 class DesktopTablesController extends Controller
 {
@@ -227,9 +251,93 @@ class DesktopTablesController extends Controller
                 'icon' => 'fa-id-card',
                 'description' => 'Relacion de usuarios con dispositivos de acceso',
             ],
+            'access-users' => [
+                'name' => 'Usuarios de Acceso',
+                'table' => 'AccessUsersDesktop',
+                'model' => AccessUsersDesktopModel::class,
+                'icon' => 'fa-user-lock',
+                'description' => 'Usuarios sincronizados para control de acceso',
+            ],
+            'class-catalog' => [
+                'name' => 'Catálogo de Clases',
+                'table' => 'ClassCatalogDesktop',
+                'model' => ClassCatalogDesktopModel::class,
+                'icon' => 'fa-chalkboard',
+                'description' => 'Catálogo de clases disponibles',
+            ],
+            'instructors' => [
+                'name' => 'Instructores',
+                'table' => 'InstructorsDesktop',
+                'model' => InstructorsDesktopModel::class,
+                'icon' => 'fa-user-tie',
+                'description' => 'Instructores registrados',
+            ],
+            'class-instructors' => [
+                'name' => 'Clases e Instructores',
+                'table' => 'ClassInstructorsDesktop',
+                'model' => ClassInstructorsDesktopModel::class,
+                'icon' => 'fa-user-graduate',
+                'description' => 'Relación entre clases e instructores',
+            ],
+            'class-schedule-groups' => [
+                'name' => 'Grupos de Horarios',
+                'table' => 'ClassScheduleGroupsDesktop',
+                'model' => ClassScheduleGroupsDesktopModel::class,
+                'icon' => 'fa-layer-group',
+                'description' => 'Grupos de horarios de clases',
+            ],
+            'class-schedules' => [
+                'name' => 'Horarios de Clases',
+                'table' => 'ClassSchedulesDesktop',
+                'model' => ClassSchedulesDesktopModel::class,
+                'icon' => 'fa-calendar-days',
+                'description' => 'Horarios programados para clases',
+            ],
+            'class-enrollments' => [
+                'name' => 'Inscripciones a Clases',
+                'table' => 'ClassEnrollmentsDesktop',
+                'model' => ClassEnrollmentsDesktopModel::class,
+                'icon' => 'fa-clipboard-list',
+                'description' => 'Inscripciones de usuarios a clases',
+            ],
+            'class-reservations' => [
+                'name' => 'Reservaciones de Clases',
+                'table' => 'ClassReservationsDesktop',
+                'model' => ClassReservationsDesktopModel::class,
+                'icon' => 'fa-calendar-plus',
+                'description' => 'Reservaciones realizadas para clases',
+            ],
+            'class-schedule-instructors' => [
+                'name' => 'Instructores por Horario',
+                'table' => 'ClassScheduleInstructorsDesktop',
+                'model' => ClassScheduleInstructorsDesktopModel::class,
+                'icon' => 'fa-people-arrows',
+                'description' => 'Asignación de instructores a horarios',
+            ],
+            'class-schedule-reschedules' => [
+                'name' => 'Reprogramaciones',
+                'table' => 'ClassScheduleReschedulesDesktop',
+                'model' => ClassScheduleReschedulesDesktopModel::class,
+                'icon' => 'fa-calendar-week',
+                'description' => 'Cambios y reprogramaciones de horarios',
+            ],
+            'sale-classes' => [
+                'name' => 'Ventas de Clases',
+                'table' => 'SaleClassesDesktop',
+                'model' => SaleClassesDesktopModel::class,
+                'icon' => 'fa-ticket',
+                'description' => 'Ventas asociadas a clases',
+            ],
+            'sale-class-schedules' => [
+                'name' => 'Ventas por Horario',
+                'table' => 'SaleClassSchedulesDesktop',
+                'model' => SaleClassSchedulesDesktopModel::class,
+                'icon' => 'fa-calendar-check',
+                'description' => 'Relación de ventas con horarios de clases',
+            ],
             'whatsapp' => [
                 'name' => 'WhatsApp',
-                'table' => 'WhatsAppDesktop',
+                'table' => 'WhatsappDesktop',
                 'model' => WhatsAppDesktopModel::class,
                 'icon' => 'fa-whatsapp',
                 'description' => 'Configuración y mensajes de WhatsApp',
