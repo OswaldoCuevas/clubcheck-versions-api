@@ -8,6 +8,36 @@ use Core\Controller;
 
 class AuthController extends Controller
 {
+    private function getSafeRedirectAfterLogin(): string
+    {
+        $redirect = $_SESSION['redirect_after_login'] ?? '/admin';
+        unset($_SESSION['redirect_after_login']);
+
+        if (!is_string($redirect) || $redirect === '') {
+            return '/admin';
+        }
+
+        $path = parse_url($redirect, PHP_URL_PATH);
+        if (!is_string($path) || $path === '' || $path[0] !== '/') {
+            return '/admin';
+        }
+
+        $blockedPaths = [
+            '/favicon.ico',
+            '/favicon.png',
+            '/apple-touch-icon.png',
+            '/apple-touch-icon-precomposed.png',
+            '/login',
+            '/logout',
+        ];
+
+        if (in_array($path, $blockedPaths, true) || strpos($path, '/public/assets/') === 0 || strpos($path, '/assets/') === 0) {
+            return '/admin';
+        }
+
+        return $redirect;
+    }
+
     public function login()
     {
         // Si ya está autenticado, redirigir
@@ -33,8 +63,7 @@ class AuthController extends Controller
                 } else {
                     if ($this->userModel->authenticate($username, $password, $rememberMe)) {
                         // Redirigir después del login exitoso
-                        $redirect = $_SESSION['redirect_after_login'] ?? '/admin';
-                        unset($_SESSION['redirect_after_login']);
+                        $redirect = $this->getSafeRedirectAfterLogin();
                         $this->redirect($redirect);
                     } else {
                         $error = 'Usuario o contraseña incorrectos';

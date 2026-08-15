@@ -26,6 +26,10 @@ class AuthMiddleware
         '/api/customers/token',
         '/api/customers/token/register',
         '/api/customers/token/await',
+        '/favicon.ico',
+        '/favicon.png',
+        '/apple-touch-icon.png',
+        '/apple-touch-icon-precomposed.png',
         'version.json',
         // Legacy compatibility
         'login.php',
@@ -44,6 +48,8 @@ class AuthMiddleware
         
         // Verificar si es una ruta pública
         $publicPrefixes = [
+            '/public/assets',
+            '/assets',
             '/api/customers/sessions',
             '/api/customers',
             '/api/email'  // Rutas de email públicas (password reset, etc.)
@@ -93,7 +99,10 @@ class AuthMiddleware
         // Si no está autenticado, redirigir al login
         if (!$userModel->isAuthenticated()) {
             // Guardar la URL actual (sin base path) para redirigir después del login
-            $_SESSION['redirect_after_login'] = UrlHelper::getCurrentPath();
+            $currentPath = UrlHelper::getCurrentPath();
+            if (!self::isIgnorableRedirectPath($currentPath)) {
+                $_SESSION['redirect_after_login'] = $currentPath;
+            }
 
             // Redirigir al login normalizado
             header('Location: ' . UrlHelper::url('/login'));
@@ -113,7 +122,10 @@ class AuthMiddleware
         $userModel = new \Models\UserModel();
         
         if (!$userModel->isAuthenticated()) {
-            $_SESSION['redirect_after_login'] = UrlHelper::getCurrentPath();
+            $currentPath = UrlHelper::getCurrentPath();
+            if (!self::isIgnorableRedirectPath($currentPath)) {
+                $_SESSION['redirect_after_login'] = $currentPath;
+            }
             header('Location: ' . UrlHelper::url('/login'));
             exit;
         }
@@ -124,5 +136,21 @@ class AuthMiddleware
             header('Location: ' . UrlHelper::url('/'));
             exit;
         }
+    }
+
+    private static function isIgnorableRedirectPath(string $path): bool
+    {
+        $blockedPaths = [
+            '/favicon.ico',
+            '/favicon.png',
+            '/apple-touch-icon.png',
+            '/apple-touch-icon-precomposed.png',
+            '/login',
+            '/logout',
+        ];
+
+        return in_array($path, $blockedPaths, true)
+            || strpos($path, '/public/assets/') === 0
+            || strpos($path, '/assets/') === 0;
     }
 }

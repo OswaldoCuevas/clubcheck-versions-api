@@ -77,6 +77,10 @@ try {
         '/api/customers/token/await',
         '/api/customers/validate',
         '/api/licenses/validate',
+        '/favicon.ico',
+        '/favicon.png',
+        '/apple-touch-icon.png',
+        '/apple-touch-icon-precomposed.png',
         '/api/server/timestamp' // Nueva ruta pública para obtener el timestamp del servidor
     ];
 
@@ -84,6 +88,8 @@ try {
 
     if (!$isPublicRoute) {
         $apiPrefixes = [
+            '/public/assets',
+            '/assets',
             '/api/customers/sessions',
             '/api/customers',
             '/api/desktop',
