@@ -18,6 +18,7 @@ class DesktopApiController extends Controller
     private const JWT_TTL_SECONDS = 1296000; // 15 dias
     private const LOGIN_ATTEMPT_WINDOW_SECONDS = 600; // 10 minutos
     private const LOGIN_ATTEMPT_LIMIT = 5;
+    private const REVIEW_ADMIN_PREFIX = 'reviewadm';
 
     private \Database $db;
     private CustomerWebLoginAttemptModel $loginAttemptModel;
@@ -60,18 +61,9 @@ class DesktopApiController extends Controller
             ], 429);
         }
 
-        $row = $this->db->fetchOne(
-            "SELECT c.Id AS CustomerId, c.Name AS CustomerName, c.IsActive, a.Id AS AdminId, a.Username, a.Email, a.Password, a.Role
-             FROM Customers c
-             JOIN AdministratorsDesktop a ON a.CustomerApiId = c.Id
-             WHERE c.CodeAccess = ?
-               AND c.IsActive = 1
-               AND COALESCE(a.Removed, 0) = 0
-               AND a.Role = 2
-               AND (a.Username = ? OR a.Email = ?)
-             LIMIT 1",
-            [$codeAccess, $login, $login]
-        );
+        $row = $this->isReviewAdminAccess($codeAccess)
+            ? $this->findReviewAdminLogin($codeAccess, $login)
+            : $this->findDesktopAdminLogin($codeAccess, $login);
 
         if (!$row || !$this->passwordMatches($password, (string) ($row['Password'] ?? ''))) {
             $this->loginAttemptModel->record([
@@ -114,6 +106,72 @@ class DesktopApiController extends Controller
                 'name' => $row['CustomerName'],
                 'customerId' => $row['CustomerId'],
             ],
+        ]);
+    }
+
+    private function isReviewAdminAccess(string $codeAccess): bool
+    {
+        return substr(strtolower($codeAccess), 0, strlen(self::REVIEW_ADMIN_PREFIX)) === self::REVIEW_ADMIN_PREFIX;
+    }
+
+    private function reviewCustomerCodeAccess(string $codeAccess): string
+    {
+        $customerCodeAccess = trim(substr($codeAccess, strlen(self::REVIEW_ADMIN_PREFIX)));
+        if ($customerCodeAccess === '') {
+            ApiHelper::respond(['error' => 'El codigo de empresa es obligatorio'], 422);
+        }
+
+        return $customerCodeAccess;
+    }
+
+    private function findCustomerByCodeAccess(string $codeAccess): ?array
+    {
+        return $this->db->fetchOne(
+            "SELECT Id AS CustomerId, Name AS CustomerName
+             FROM Customers
+             WHERE CodeAccess = ? AND IsActive = 1
+             LIMIT 1",
+            [$codeAccess]
+        );
+    }
+
+    private function findDesktopAdminLogin(string $codeAccess, string $login): ?array
+    {
+        return $this->db->fetchOne(
+            "SELECT c.Id AS CustomerId, c.Name AS CustomerName, c.IsActive, a.Id AS AdminId, a.Username, a.Email, a.Password, a.Role
+             FROM Customers c
+             JOIN AdministratorsDesktop a ON a.CustomerApiId = c.Id
+             WHERE c.CodeAccess = ?
+               AND c.IsActive = 1
+               AND COALESCE(a.Removed, 0) = 0
+               AND a.Role = 2
+               AND (a.Username = ? OR a.Email = ?)
+             LIMIT 1",
+            [$codeAccess, $login, $login]
+        );
+    }
+
+    private function findReviewAdminLogin(string $codeAccess, string $login): ?array
+    {
+        $customer = $this->findCustomerByCodeAccess($this->reviewCustomerCodeAccess($codeAccess));
+        $user = $this->db->fetchOne(
+            "SELECT Id, Username, Email, PasswordHash, IsActive
+             FROM Users
+             WHERE Username = ? AND IsActive = 1
+             LIMIT 1",
+            [$login]
+        );
+
+        if (!$customer || !$user) {
+            return null;
+        }
+
+        return array_merge($customer, [
+            'AdminId' => null,
+            'Username' => $user['Username'],
+            'Email' => $user['Email'] ?? null,
+            'Password' => $user['PasswordHash'],
+            'Role' => 'review_admin',
         ]);
     }
 
