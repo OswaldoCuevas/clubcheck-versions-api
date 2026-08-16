@@ -300,6 +300,20 @@ return [
         //     ],
         //     'type' => 'yearly',
         // ],
+
+          'plan_ilimited_permanent' => [
+            'name' => 'Plan Permanente Ilimitado',
+            'lookup_key' => 'plan_ilimited_permanent',
+            'rules' => [
+                'enable_fingerprint' => true,
+                'enable_qr' => true,
+                'max_messages' => 0,  // no incluido
+                'max_members_actives' => null, // ilimitado
+                'products_to_sale' => null,  // ilimitado
+                'max_partners' => null,       // ilimitado
+            ],
+            'type' => 'permanent',
+        ],
     ]
     : [
         'free' => [
