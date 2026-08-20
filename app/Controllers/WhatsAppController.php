@@ -154,7 +154,6 @@ class WhatsAppController extends Controller
      *   "phone": "5512345678",
      *   "userId": "xxx" (opcional),
      *   "firstName": "Juan",
-     *   "clubName": "Mi Club",
      *   "startDate": "10/03/2026",
      *   "endDate": "10/04/2026"
      * }
@@ -182,7 +181,6 @@ class WhatsAppController extends Controller
         $result = $service->sendSubscriptionTemplate(
             $payload['phone'],
             $payload['firstName'] ?? 'Cliente',
-            $payload['clubName'] ?? 'tu club',
             $payload['startDate'] ?? '',
             $payload['endDate'] ?? '',
             $payload['customerApiId'],
@@ -206,7 +204,6 @@ class WhatsAppController extends Controller
      *   "subscriptionId": "xxx",
      *   "phone": "5512345678",
      *   "userId": "xxx" (opcional),
-     *   "clubName": "Mi Club",
      *   "days": 3
      * }
      */
@@ -235,7 +232,6 @@ class WhatsAppController extends Controller
         $service = $this->getServiceForCustomer($payload['customerApiId']);
         $result = $service->sendWarningTemplate(
             $payload['phone'],
-            $payload['clubName'] ?? 'tu club',
             $daysText,
             $payload['customerApiId'],
             $payload['userId'] ?? null,
@@ -258,7 +254,6 @@ class WhatsAppController extends Controller
      *   "subscriptionId": "xxx",
      *   "phone": "5512345678",
      *   "userId": "xxx" (opcional),
-     *   "clubName": "Mi Club"
      * }
      */
     public function sendFinalized(): void
@@ -284,7 +279,6 @@ class WhatsAppController extends Controller
         $service = $this->getServiceForCustomer($payload['customerApiId']);
         $result = $service->sendFinalizedTemplate(
             $payload['phone'],
-            $payload['clubName'] ?? 'tu club',
             $payload['customerApiId'],
             $payload['userId'] ?? null,
             $payload['subscriptionId'],
@@ -306,7 +300,6 @@ class WhatsAppController extends Controller
      *   "subscriptionId": "xxx",
      *   "phone": "5512345678",
      *   "userId": "xxx" (opcional),
-     *   "clubName": "Mi Club"
      * }
      */
     public function sendLastDay(): void
@@ -332,7 +325,6 @@ class WhatsAppController extends Controller
         $service = $this->getServiceForCustomer($payload['customerApiId']);
         $result = $service->sendLastDayTemplate(
             $payload['phone'],
-            $payload['clubName'] ?? 'tu club',
             $payload['customerApiId'],
             $payload['userId'] ?? null,
             $payload['subscriptionId'],
@@ -351,7 +343,6 @@ class WhatsAppController extends Controller
      * Body:
      * {
      *   "customerApiId": "xxx",
-     *   "clubName": "Mi Club",
      *   "items": [
      *     {
      *       "template": "subscription|warning|finalized|last_day",
@@ -402,19 +393,6 @@ class WhatsAppController extends Controller
                 'failedCount' => 0,
             ]);
         }
-
-        $clubName = $payload['clubName'] ?? 'tu club';
-     
-        // Agregar clubName a cada item si no lo tiene
-        $items = array_map(function ($item) use ($clubName) {
-            if (!isset($item['parameters'])) {
-                $item['parameters'] = [];
-            }
-            if (!isset($item['parameters']['clubName'])) {
-                $item['parameters']['clubName'] = $clubName;
-            }
-            return $item;
-        }, $items);
 
         $service = $this->getServiceForCustomer($payload['customerApiId']);
         $result = $service->sendBulk($items, $payload['customerApiId']);

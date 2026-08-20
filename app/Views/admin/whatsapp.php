@@ -63,6 +63,37 @@ ob_start();
     </div>
 </div>
 
+<!-- Templates personalizados -->
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0"><i class="fas fa-message me-2"></i>Templates personalizados por evento</h5>
+        <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#templateModal">
+            <i class="fas fa-plus me-1"></i> Agregar template
+        </button>
+    </div>
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="templatesTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Cliente</th>
+                            <th>Evento</th>
+                            <th>Template WhatsApp</th>
+                            <th>Idioma</th>
+                            <th>Variables</th>
+                            <th class="text-end">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td colspan="6" class="text-center py-4 text-muted">Cargando templates...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal: Crear configuración -->
 <div class="modal fade" id="configModal" tabindex="-1" aria-labelledby="configModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -148,6 +179,68 @@ ob_start();
     </div>
 </div>
 
+<!-- Modal: Crear template personalizado -->
+<div class="modal fade" id="templateModal" tabindex="-1" aria-labelledby="templateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <form id="templateForm">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="templateModalLabel"><i class="fas fa-message me-2"></i>Nuevo template personalizado</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="templateCustomerId" class="form-label">Cliente <span class="text-danger">*</span></label>
+                            <select class="form-select" id="templateCustomerId" required>
+                                <option value="">Selecciona un cliente...</option>
+                                <?php foreach ($customers ?? [] as $customer): ?>
+                                <option value="<?= htmlspecialchars($customer['customerId'] ?? '') ?>">
+                                    <?= htmlspecialchars($customer['name'] ?? $customer['customerId'] ?? '') ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="templateEventKey" class="form-label">Evento <span class="text-danger">*</span></label>
+                            <select class="form-select" id="templateEventKey" required></select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label for="templateName" class="form-label">Nombre del template en WhatsApp <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="templateName" placeholder="membership_custom" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="templateLanguageCode" class="form-label">Idioma</label>
+                            <input type="text" class="form-control" id="templateLanguageCode" value="es_MX">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="templateDescription" class="form-label">Descripción</label>
+                        <input type="text" class="form-control" id="templateDescription" placeholder="Uso interno">
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="templateHeaderVariables" class="form-label">Variables header</label>
+                            <select class="form-select" id="templateHeaderVariables" multiple></select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="templateBodyVariables" class="form-label">Variables body</label>
+                            <select class="form-select" id="templateBodyVariables" multiple></select>
+                        </div>
+                    </div>
+                    <div class="form-text">El orden seleccionado debe coincidir con el orden de variables aprobado en Meta.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success"><i class="fas fa-save me-1"></i> Guardar template</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- Modal: Confirmar eliminación -->
 <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -179,6 +272,7 @@ ob_start();
 <?php
 $endpointsJson = json_encode([
     'base' => app_url('/admin/api/whatsapp'),
+    'templates' => app_url('/admin/api/whatsapp/templates'),
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
 $customStyles = <<<CSS
@@ -212,17 +306,25 @@ ob_start();
 document.addEventListener('DOMContentLoaded', function() {
     const endpoints = <?= $endpointsJson ?>;
     const baseUrl = endpoints.base;
+    const templatesUrl = endpoints.templates;
     console.log('Base URL:', baseUrl);
     
     let configs = [];
+    let templates = [];
+    let templateVariables = [];
+    let templateEvents = [];
     let deleteId = null;
 
     const tableBody = document.querySelector('#configsTable tbody');
+    const templatesTableBody = document.querySelector('#templatesTable tbody');
     const refreshButton = document.getElementById('refreshConfigs');
     const alertsContainer = document.getElementById('alertsContainer');
     const configModalEl = document.getElementById('configModal');
     const configModal = configModalEl ? new bootstrap.Modal(configModalEl) : null;
     const configForm = document.getElementById('configForm');
+    const templateModalEl = document.getElementById('templateModal');
+    const templateModal = templateModalEl ? new bootstrap.Modal(templateModalEl) : null;
+    const templateForm = document.getElementById('templateForm');
     const deleteModalEl = document.getElementById('deleteModal');
     const deleteModal = deleteModalEl ? new bootstrap.Modal(deleteModalEl) : null;
     const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
@@ -321,6 +423,100 @@ document.addEventListener('DOMContentLoaded', function() {
         `).join('');
     }
 
+    function selectedValues(select) {
+        return Array.from(select.selectedOptions).map(option => option.value);
+    }
+
+    function populateTemplateSelectors() {
+        const eventSelect = document.getElementById('templateEventKey');
+        const headerSelect = document.getElementById('templateHeaderVariables');
+        const bodySelect = document.getElementById('templateBodyVariables');
+
+        if (eventSelect) {
+            eventSelect.innerHTML = '<option value="">Selecciona un evento...</option>' + templateEvents.map(event =>
+                `<option value="${escapeHtml(event.value)}">${escapeHtml(event.label)}</option>`
+            ).join('');
+        }
+
+        const variableOptions = templateVariables.map(variable =>
+            `<option value="${escapeHtml(variable.SourceKey)}">${escapeHtml(variable.Name)} (${escapeHtml(variable.SourceKey)})</option>`
+        ).join('');
+
+        if (headerSelect) headerSelect.innerHTML = variableOptions;
+        if (bodySelect) bodySelect.innerHTML = variableOptions;
+    }
+
+    function findCustomerName(customerId) {
+        const match = configs.find(config => config.CustomerId === customerId);
+        return match ? (match.CustomerName || customerId) : customerId;
+    }
+
+    function eventLabel(eventKey) {
+        const match = templateEvents.find(event => event.value === eventKey);
+        return match ? match.label : (eventKey || '-');
+    }
+
+    function templateVariableSummary(template) {
+        let components = [];
+        try {
+            components = template.ComponentsJson ? JSON.parse(template.ComponentsJson) : [];
+        } catch (error) {
+            components = [];
+        }
+
+        return components.map(component => {
+            const variables = Array.isArray(component.variables) ? component.variables.join(', ') : '';
+            return `${component.type || 'body'}: ${variables}`;
+        }).filter(Boolean).join('<br>') || '-';
+    }
+
+    function renderTemplatesTable() {
+        if (!templatesTableBody) return;
+
+        if (!templates || templates.length === 0) {
+            templatesTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No hay templates personalizados.</td></tr>';
+            return;
+        }
+
+        templatesTableBody.innerHTML = templates.map(template => `
+            <tr>
+                <td>
+                    <strong>${escapeHtml(findCustomerName(template.CustomerId))}</strong>
+                    <br><small class="text-muted">${escapeHtml(template.CustomerId)}</small>
+                </td>
+                <td>${escapeHtml(eventLabel(template.EventKey))}</td>
+                <td><code>${escapeHtml(template.TemplateName)}</code></td>
+                <td>${escapeHtml(template.LanguageCode || 'es_MX')}</td>
+                <td><small>${templateVariableSummary(template)}</small></td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-outline-danger" title="Eliminar template" onclick="deleteTemplate('${escapeHtml(template.Id)}')">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function loadTemplates() {
+        if (!templatesTableBody) return;
+
+        try {
+            const response = await fetch(templatesUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
+            const data = await response.json();
+            if (data.success) {
+                templates = data.templates || [];
+                templateVariables = data.variables || [];
+                templateEvents = data.events || [];
+                populateTemplateSelectors();
+                renderTemplatesTable();
+            } else {
+                showAlert(data.error || 'Error al cargar templates', 'danger');
+            }
+        } catch (error) {
+            showAlert('Error de conexión al cargar templates: ' + error.message, 'danger');
+        }
+    }
+
     async function loadConfigs() {
         tableBody.innerHTML = `
             <tr>
@@ -349,6 +545,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 configs = data.configurations || [];
                 console.log('Loaded configs:', configs.length);
                 renderTable();
+                renderTemplatesTable();
             } else {
                 console.error('API error:', data.error);
                 showAlert(data.error || 'Error al cargar configuraciones', 'danger');
@@ -513,13 +710,78 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
+    if (templateForm) {
+        templateForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const headerVariables = selectedValues(document.getElementById('templateHeaderVariables'));
+            const bodyVariables = selectedValues(document.getElementById('templateBodyVariables'));
+            const components = [];
+
+            if (headerVariables.length > 0) components.push({ type: 'header', variables: headerVariables });
+            if (bodyVariables.length > 0) components.push({ type: 'body', variables: bodyVariables });
+
+            const payload = {
+                customerId: document.getElementById('templateCustomerId').value,
+                eventKey: document.getElementById('templateEventKey').value,
+                templateName: document.getElementById('templateName').value,
+                languageCode: document.getElementById('templateLanguageCode').value || 'es_MX',
+                description: document.getElementById('templateDescription').value,
+                components: components
+            };
+
+            try {
+                const response = await fetch(templatesUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    if (templateModal) templateModal.hide();
+                    templateForm.reset();
+                    document.getElementById('templateLanguageCode').value = 'es_MX';
+                    showAlert('Template personalizado guardado correctamente', 'success');
+                    loadTemplates();
+                } else {
+                    showAlert(data.error || 'Error al guardar template', 'danger');
+                }
+            } catch (error) {
+                showAlert('Error de conexión', 'danger');
+            }
+        });
+    }
+
+    window.deleteTemplate = async function(id) {
+        try {
+            const response = await fetch(`${templatesUrl}/${id}/delete`, {
+                method: 'POST',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+            });
+            const data = await response.json();
+            if (data.success) {
+                showAlert('Template eliminado correctamente', 'success');
+                loadTemplates();
+            } else {
+                showAlert(data.error || 'Error al eliminar template', 'danger');
+            }
+        } catch (error) {
+            showAlert('Error de conexión', 'danger');
+        }
+    };
+
     // Event listeners
     if (refreshButton) {
-        refreshButton.addEventListener('click', loadConfigs);
+        refreshButton.addEventListener('click', function() {
+            loadConfigs();
+            loadTemplates();
+        });
     }
 
     // Cargar al iniciar
     loadConfigs();
+    loadTemplates();
 });
 </script>
 <?php

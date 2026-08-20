@@ -4,11 +4,25 @@ namespace App\Services;
 
 require_once __DIR__ . '/../Models/MessageSentModel.php';
 require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
+require_once __DIR__ . '/../Models/WhatsAppTemplateModel.php';
+require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
+require_once __DIR__ . '/../enums/WhatsAppEvent.php';
+require_once __DIR__ . '/WhatsApp/WhatsAppTemplateStrategyInterface.php';
+require_once __DIR__ . '/WhatsApp/WhatsAppTemplateComponentBuilder.php';
+require_once __DIR__ . '/WhatsApp/DefaultWhatsAppTemplateStrategy.php';
+require_once __DIR__ . '/WhatsApp/CustomerWhatsAppTemplateStrategy.php';
 require_once __DIR__ . '/../../utils/CustomerPermits.php';
 require_once __DIR__ . '/../../utils/GlobalFunctions.php';
 
+use App\Enums\WhatsAppEvent;
+use App\Services\WhatsApp\CustomerWhatsAppTemplateStrategy;
+use App\Services\WhatsApp\DefaultWhatsAppTemplateStrategy;
+use App\Services\WhatsApp\WhatsAppTemplateComponentBuilder;
+use App\Services\WhatsApp\WhatsAppTemplateStrategyInterface;
 use Models\MessageSentModel;
 use Models\WhatsAppConfigurationModel;
+use Models\WhatsAppTemplateModel;
+use Models\CustomerRegistryModel;
 use CustomerPermits;
 use GlobalFunctions;
 
@@ -25,7 +39,11 @@ class WhatsAppService
     private string $accessToken;
     private array $config;
     private MessageSentModel $messageSentModel;
+    private WhatsAppTemplateModel $templateModel;
+    private WhatsAppTemplateComponentBuilder $componentBuilder;
+    private WhatsAppTemplateStrategyInterface $templateStrategy;
     private ?string $customerId;
+    private string $clubName = 'tu club';
 
     /**
      * Constructor
@@ -38,18 +56,22 @@ class WhatsAppService
     {
         $this->config = require __DIR__ . '/../../config/whatsapp.php';
         $this->customerId = $customerId;
-        
-        // Valores default desde config global
+
         $this->apiUrl = $this->config['api_url'];
         $this->phoneNumberId = $this->config['phone_number_id'];
         $this->accessToken = $this->config['access_token'];
-        
-        // Si se proporciona customerId, intentar cargar su configuración
+
+        $this->messageSentModel = new MessageSentModel();
+        $this->templateModel = new WhatsAppTemplateModel();
+        $this->componentBuilder = new WhatsAppTemplateComponentBuilder();
+
+        // Estrategia base: si no hay configuracion completa del customer,
+        // los eventos se envian con templates y credenciales globales.
+        $this->templateStrategy = new DefaultWhatsAppTemplateStrategy($this->componentBuilder);
+
         if (!empty($customerId)) {
             $this->loadCustomerConfig($customerId);
         }
-        
-        $this->messageSentModel = new MessageSentModel();
     }
 
     /**
@@ -58,19 +80,26 @@ class WhatsAppService
     private function loadCustomerConfig(string $customerId): void
     {
         try {
+            $customerModel = new CustomerRegistryModel();
+            $customer = $customerModel->getCustomer($customerId);
+            if ($customer && !empty($customer['name'])) {
+                $this->clubName = $customer['name'];
+            }
+
             $configModel = new WhatsAppConfigurationModel();
             $customerConfig = $configModel->findByCustomerId($customerId);
             
-            if ($customerConfig) {
-                // Si tiene phoneNumberId, usarlo
-                if (!empty($customerConfig['PhoneNumberId'])) {
-                    $this->phoneNumberId = $customerConfig['PhoneNumberId'];
-                }
-                
-                // Si tiene accessToken propio, usarlo
-                if (!empty($customerConfig['AccessToken'])) {
-                    $this->accessToken = $customerConfig['AccessToken'];
-                }
+            if ($customerConfig && !empty($customerConfig['PhoneNumberId']) && !empty($customerConfig['AccessToken'])) {
+                $this->phoneNumberId = $customerConfig['PhoneNumberId'];
+                $this->accessToken = $customerConfig['AccessToken'];
+
+                // Estrategia customer: intenta usar el template relacionado al evento.
+                // Si no existe, la propia estrategia cae a DefaultWhatsAppTemplateStrategy.
+                $this->templateStrategy = new CustomerWhatsAppTemplateStrategy(
+                    $this->templateModel,
+                    new DefaultWhatsAppTemplateStrategy($this->componentBuilder),
+                    $this->componentBuilder
+                );
             }
         } catch (\Throwable $e) {
             // Si falla la carga, continuar con config global (ya establecida)
@@ -211,6 +240,146 @@ class WhatsAppService
 
     // ==================== TEMPLATES ====================
 
+    private function sendTemplateForEvent(
+        WhatsAppEvent $event,
+        string $phone,
+        array $parameters,
+        array $defaultTemplate,
+        array $defaultComponents,
+        string $description,
+        string $invalidPhoneDescription,
+        string $customerApiId,
+        ?string $userId,
+        ?string $subscriptionId,
+        ?string $username,
+        ?string $errorMessage = null
+    ): array {
+        if (!$this->isValidPhoneNumber($phone)) {
+            $result = self::createResult(false, 'El número de teléfono no tiene un formato válido.', null, 0, $subscriptionId);
+            $this->logMessage($customerApiId, $userId, $username, $phone, $invalidPhoneDescription, $result);
+            return $result;
+        }
+
+        $phone = $this->normalizePhone($phone);
+        $parameters['phone'] = $phone;
+        $parameters['username'] = $username ?? ($parameters['username'] ?? '');
+
+        // La estrategia decide que template usar y con que credenciales enviar:
+        // customer si hay template personalizado; default si no aplica.
+        $message = $this->resolveTemplateMessage($event, $parameters, $defaultTemplate, $defaultComponents, $customerApiId);
+
+        if (!empty($message['errorMessage'])) {
+            $result = self::createResult(false, $message['errorMessage'], null, 0, $subscriptionId);
+            $this->logMessage(
+                $customerApiId,
+                $userId,
+                $username,
+                $phone,
+                $message['description'] ?? $description,
+                $result
+            );
+            return $result;
+        }
+
+        $body = $this->buildTemplatePayload(
+            $phone,
+            $message['name'],
+            $message['language'],
+            $message['components']
+        );
+
+        return $this->sendWithStrategy(
+            $message['strategy'],
+            $body,
+            $phone,
+            $message['description'] ?? $description,
+            $customerApiId,
+            $userId,
+            $subscriptionId,
+            $username,
+            $errorMessage
+        );
+    }
+
+    private function resolveTemplateMessage(
+        WhatsAppEvent $event,
+        array $parameters,
+        array $defaultTemplate,
+        array $defaultComponents,
+        string $customerApiId
+    ): array {
+        // Delegacion pura al contrato de Strategy; aqui no se pregunta si es
+        // customer o default, porque esa decision vive en la implementacion.
+        return $this->templateStrategy->resolveTemplateMessage(
+            $event,
+            $parameters,
+            $defaultTemplate,
+            $defaultComponents,
+            $customerApiId
+        );
+    }
+
+    private function buildTemplatePayload(string $phone, string $templateName, string $language, array $components = []): array
+    {
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            'to' => $phone,
+            'type' => 'template',
+            'template' => [
+                'name' => $templateName,
+                'language' => ['code' => $language],
+            ],
+        ];
+
+        if (!empty($components)) {
+            $payload['template']['components'] = $components;
+        }
+
+        return $payload;
+    }
+
+    private function sendWithStrategy(
+        string $strategy,
+        array $body,
+        string $phone,
+        string $description,
+        string $customerApiId,
+        ?string $userId,
+        ?string $subscriptionId,
+        ?string $username,
+        ?string $errorMessage = null
+    ): array {
+        $currentPhoneNumberId = $this->phoneNumberId;
+        $currentAccessToken = $this->accessToken;
+
+        // El mensaje puede resolverse como default aunque el servicio haya
+        // cargado credenciales del customer, por eso se seleccionan aqui.
+        $credentials = [
+            'default' => [
+                'phoneNumberId' => $this->config['phone_number_id'],
+                'accessToken' => $this->config['access_token'],
+            ],
+            'customer' => [
+                'phoneNumberId' => $this->phoneNumberId,
+                'accessToken' => $this->accessToken,
+            ],
+        ][$strategy] ?? [
+            'phoneNumberId' => $this->config['phone_number_id'],
+            'accessToken' => $this->config['access_token'],
+        ];
+
+        $this->phoneNumberId = $credentials['phoneNumberId'];
+        $this->accessToken = $credentials['accessToken'];
+
+        try {
+            return $this->sendAndLog($body, $phone, $description, $customerApiId, $userId, $subscriptionId, $username, $errorMessage);
+        } finally {
+            $this->phoneNumberId = $currentPhoneNumberId;
+            $this->accessToken = $currentAccessToken;
+        }
+    }
+
     /**
      * Envía un template de nueva suscripción (bienvenida)
      * 
@@ -220,7 +389,6 @@ class WhatsAppService
     public function sendSubscriptionTemplate(
         string $phone,
         string $firstName,
-        string $clubName,
         string $startDate,
         string $endDate,
         string $customerApiId,
@@ -229,54 +397,27 @@ class WhatsAppService
         ?string $username = null,
         ?string $errorMessage = null
     ): array {
-        // Validar teléfono
-        if (!$this->isValidPhoneNumber($phone)) {
-            $description = "Bienvenida de membresía (teléfono inválido): {$startDate} - {$endDate}";
-            $result = self::createResult(
-                false,
-                'El número de teléfono no tiene un formato válido.',
-                null,
-                0,
-                $subscriptionId
-            );
-            $this->logMessage($customerApiId, $userId, $username, $phone, $description, $result);
-            return $result;
-        }
-
-        $phone = $this->normalizePhone($phone);
+        $clubName = $this->clubName;
         $templateConfig = $this->config['templates']['subscription'];
-        
-        $body = [
-            'messaging_product' => 'whatsapp',
-            'recipient_type' => 'individual',
-            'to' => $phone,
-            'type' => 'template',
-            'template' => [
-                'name' => $templateConfig['name'],
-                'language' => ['code' => $templateConfig['language']],
-                'components' => [
-                    [
-                        'type' => 'header',
-                        'parameters' => [
-                            ['type' => 'text', 'text' => GlobalFunctions::FormatName($clubName).":"],
-                        ],
-                    ],
-                    [
-                        'type' => 'body',
-                        'parameters' => [
-                            ['type' => 'text', 'text' => GlobalFunctions::FormatName($firstName)],
-                            ['type' => 'text', 'text' => GlobalFunctions::sanitize($startDate)],
-                            ['type' => 'text', 'text' => GlobalFunctions::sanitize($endDate)],
-                        ],
-                    ],
-                ],
-            ],
-        ];
+        $parameters = compact('firstName', 'clubName', 'startDate', 'endDate');
 
-        $description = "Bienvenida de membresía {$clubName}: {$startDate} - {$endDate}";
-        $result = $this->sendAndLog($body, $phone, $description, $customerApiId, $userId, $subscriptionId, $username, $errorMessage);
-        
-        return $result;
+        return $this->sendTemplateForEvent(
+            WhatsAppEvent::SUBSCRIPTION_CREATED,
+            $phone,
+            $parameters,
+            $templateConfig,
+            [
+                ['type' => 'header', 'variables' => ['clubName'], 'format' => 'name', 'suffix' => ':'],
+                ['type' => 'body', 'variables' => ['firstName', 'startDate', 'endDate'], 'formats' => ['firstName' => 'name']],
+            ],
+            "Bienvenida de membresia: {$startDate} - {$endDate}",
+            "Bienvenida de membresia (telefono invalido): {$startDate} - {$endDate}",
+            $customerApiId,
+            $userId,
+            $subscriptionId,
+            $username,
+            $errorMessage
+        );
     }
 
     /**
@@ -287,7 +428,6 @@ class WhatsAppService
      */
     public function sendWarningTemplate(
         string $phone,
-        string $clubName,
         string $days,
         string $customerApiId,
         ?string $userId = null,
@@ -295,50 +435,27 @@ class WhatsAppService
         ?string $username = null,
         ?string $errorMessage = null
     ): array {
-        // Validar teléfono
-        if (!$this->isValidPhoneNumber($phone)) {
-            $description = "Aviso de membresía (teléfono inválido): vence en {$days}";
-            $result = self::createResult(
-                false,
-                'El número de teléfono no tiene un formato válido.',
-                null,
-                0,
-                $subscriptionId
-            );
-            $this->logMessage($customerApiId, $userId, $username, $phone, $description, $result);
-            return $result;
-        }
-
-        $phone = $this->normalizePhone($phone);
+        $clubName = $this->clubName;
         $templateConfig = $this->config['templates']['warning_subscription'];
+        $parameters = compact('clubName', 'days');
 
-        $body = [
-            'messaging_product' => 'whatsapp',
-            'recipient_type' => 'individual',
-            'to' => $phone,
-            'type' => 'template',
-            'template' => [
-                'name' => $templateConfig['name'],
-                'language' => ['code' => $templateConfig['language']],
-                'components' => [
-                    [
-                        'type' => 'header',
-                        'parameters' => [
-                            ['type' => 'text', 'text' => GlobalFunctions::FormatName($clubName).":"],
-                        ],
-                    ],
-                    [
-                        'type' => 'body',
-                        'parameters' => [
-                            ['type' => 'text', 'text' => GlobalFunctions::sanitize($days)],
-                        ],
-                    ],
-                ],
+        return $this->sendTemplateForEvent(
+            WhatsAppEvent::SUBSCRIPTION_WARNING,
+            $phone,
+            $parameters,
+            $templateConfig,
+            [
+                ['type' => 'header', 'variables' => ['clubName'], 'format' => 'name', 'suffix' => ':'],
+                ['type' => 'body', 'variables' => ['days'], 'format' => 'text'],
             ],
-        ];
-
-        $description = "Aviso de membresía: vence en {$days}. Club: " . GlobalFunctions::FormatName($clubName);
-        return $this->sendAndLog($body, $phone, $description, $customerApiId, $userId, $subscriptionId, $username, $errorMessage);
+            "Aviso de membresia: vence en {$days}. Club: " . GlobalFunctions::FormatName($clubName),
+            "Aviso de membresia (telefono invalido): vence en {$days}",
+            $customerApiId,
+            $userId,
+            $subscriptionId,
+            $username,
+            $errorMessage
+        );
     }
 
     /**
@@ -349,51 +466,32 @@ class WhatsAppService
      */
     public function sendFinalizedTemplate(
         string $phone,
-        string $clubName,
         string $customerApiId,
         ?string $userId = null,
         ?string $subscriptionId = null,
         ?string $username = null,
         ?string $errorMessage = null
     ): array {
-        // Validar teléfono
-        if (!$this->isValidPhoneNumber($phone)) {
-            $description = "Aviso de membresía finalizada (teléfono inválido)";
-            $result = self::createResult(
-                false,
-                'El número de teléfono no tiene un formato válido.',
-                null,
-                0,
-                $subscriptionId
-            );
-            $this->logMessage($customerApiId, $userId, $username, $phone, $description, $result);
-            return $result;
-        }
-
-        $phone = $this->normalizePhone($phone);
+        $clubName = $this->clubName;
         $templateConfig = $this->config['templates']['finalized_subscription'];
+        $parameters = compact('clubName');
 
-        $body = [
-            'messaging_product' => 'whatsapp',
-            'recipient_type' => 'individual',
-            'to' => $phone,
-            'type' => 'template',
-            'template' => [
-                'name' => $templateConfig['name'],
-                'language' => ['code' => $templateConfig['language']],
-                'components' => [
-                    [
-                        'type' => 'header',
-                        'parameters' => [
-                            ['type' => 'text', 'text' => GlobalFunctions::sanitize($clubName).":"],
-                        ],
-                    ],
-                ],
+        return $this->sendTemplateForEvent(
+            WhatsAppEvent::SUBSCRIPTION_FINALIZED,
+            $phone,
+            $parameters,
+            $templateConfig,
+            [
+                ['type' => 'header', 'variables' => ['clubName'], 'format' => 'text', 'suffix' => ':'],
             ],
-        ];
-
-        $description = "Aviso de membresía finalizada. Club: " . GlobalFunctions::FormatName($clubName);
-        return $this->sendAndLog($body, $phone, $description, $customerApiId, $userId, $subscriptionId, $username, $errorMessage);
+            "Aviso de membresia finalizada. Club: " . GlobalFunctions::FormatName($clubName),
+            'Aviso de membresia finalizada (telefono invalido)',
+            $customerApiId,
+            $userId,
+            $subscriptionId,
+            $username,
+            $errorMessage
+        );
     }
 
     /**
@@ -404,51 +502,32 @@ class WhatsAppService
      */
     public function sendLastDayTemplate(
         string $phone,
-        string $clubName,
         string $customerApiId,
         ?string $userId = null,
         ?string $subscriptionId = null,
         ?string $username = null,
         ?string $errorMessage = null
     ): array {
-        // Validar teléfono
-        if (!$this->isValidPhoneNumber($phone)) {
-            $description = "Aviso de último día (teléfono inválido)";
-            $result = self::createResult(
-                false,
-                'El número de teléfono no tiene un formato válido.',
-                null,
-                0,
-                $subscriptionId
-            );
-            $this->logMessage($customerApiId, $userId, $username, $phone, $description, $result);
-            return $result;
-        }
-
-        $phone = $this->normalizePhone($phone);
+        $clubName = $this->clubName;
         $templateConfig = $this->config['templates']['warning_last_day'];
+        $parameters = compact('clubName');
 
-        $body = [
-            'messaging_product' => 'whatsapp',
-            'recipient_type' => 'individual',
-            'to' => $phone,
-            'type' => 'template',
-            'template' => [
-                'name' => $templateConfig['name'],
-                'language' => ['code' => $templateConfig['language']],
-                'components' => [
-                    [
-                        'type' => 'header',
-                        'parameters' => [
-                            ['type' => 'text', 'text' => GlobalFunctions::sanitize($clubName).":"],
-                        ],
-                    ],
-                ],
+        return $this->sendTemplateForEvent(
+            WhatsAppEvent::SUBSCRIPTION_LAST_DAY,
+            $phone,
+            $parameters,
+            $templateConfig,
+            [
+                ['type' => 'header', 'variables' => ['clubName'], 'format' => 'text', 'suffix' => ':'],
             ],
-        ];
-
-        $description = "Aviso de membresía: último día. Club: " . GlobalFunctions::FormatName($clubName);
-        return $this->sendAndLog($body, $phone, $description, $customerApiId, $userId, $subscriptionId, $username, $errorMessage);
+            "Aviso de membresia: ultimo dia. Club: " . GlobalFunctions::FormatName($clubName),
+            'Aviso de ultimo dia (telefono invalido)',
+            $customerApiId,
+            $userId,
+            $subscriptionId,
+            $username,
+            $errorMessage
+        );
     }
 
     // ==================== BULK OPERATIONS ====================
@@ -461,7 +540,7 @@ class WhatsAppService
      * - subscriptionId: string (requerido)
      * - phone: string
      * - userId: string|null
-     * - parameters: array (days, startDate, endDate, firstName, clubName)
+     * - parameters: array (days, startDate, endDate, firstName)
      * 
      * @param array $bulkItems Lista de items a enviar
      * @param string $customerApiId ID del cliente de la API
@@ -588,81 +667,45 @@ class WhatsAppService
         ?string $username,
         ?string $errorMessage = null
     ): array {
-        $clubName = $parameters['clubName'] ?? 'tu club';
+        $event = WhatsAppEvent::fromTemplateType($template);
+        $strategies = [
+            WhatsAppEvent::SUBSCRIPTION_CREATED->value => fn () => $this->sendSubscriptionTemplate(
+                $phone,
+                $parameters['firstName'] ?? 'Cliente',
+                $parameters['startDate'] ?? '',
+                $parameters['endDate'] ?? '',
+                $customerApiId,
+                $userId,
+                $subscriptionId,
+                $username,
+                $errorMessage
+            ),
+            WhatsAppEvent::SUBSCRIPTION_WARNING->value => fn () => (($parameters['days'] ?? null) == 1)
+                ? $this->sendLastDayTemplate($phone, $customerApiId, $userId, $subscriptionId, $username, $errorMessage)
+                : $this->sendWarningTemplate($phone, $parameters['days'] ?? '3', $customerApiId, $userId, $subscriptionId, $username, $errorMessage),
+            WhatsAppEvent::SUBSCRIPTION_FINALIZED->value => fn () => $this->sendFinalizedTemplate(
+                $phone,
+                $customerApiId,
+                $userId,
+                $subscriptionId,
+                $username,
+                $errorMessage
+            ),
+            WhatsAppEvent::SUBSCRIPTION_LAST_DAY->value => fn () => $this->sendLastDayTemplate(
+                $phone,
+                $customerApiId,
+                $userId,
+                $subscriptionId,
+                $username,
+                $errorMessage
+            ),
+        ];
 
-        switch (strtolower($template)) {
-            case 'subscription':
-            case 'new_subscription':
-                return $this->sendSubscriptionTemplate(
-                    $phone,
-                    $parameters['firstName'] ?? 'Cliente',
-                    $clubName,
-                    $parameters['startDate'] ?? '',
-                    $parameters['endDate'] ?? '',
-                    $customerApiId,
-                    $userId,
-                    $subscriptionId,
-                    $username,
-                    $errorMessage
-                );
-
-            case 'warning':
-            case 'warning_subscription':
-                $days = $parameters['days'] ?? '3';
-                return $parameters['days'] == 1  
-                ? $this->sendLastDayTemplate(
-                    $phone,
-                    $clubName,
-                    $customerApiId,
-                    $userId,
-                    $subscriptionId,
-                    $username,
-                    $errorMessage
-                )
-                :  $this->sendWarningTemplate(
-                    $phone,
-                    $clubName,
-                    $days,
-                    $customerApiId,
-                    $userId,
-                    $subscriptionId,
-                    $username,
-                    $errorMessage
-                );
-
-            case 'finalized':
-            case 'finalized_subscription':
-                return $this->sendFinalizedTemplate(
-                    $phone,
-                    $clubName,
-                    $customerApiId,
-                    $userId,
-                    $subscriptionId,
-                    $username,
-                    $errorMessage
-                );
-
-            case 'last_day':
-            case 'warning_last_day':
-                return $this->sendLastDayTemplate(
-                    $phone,
-                    $clubName,
-                    $customerApiId,
-                    $userId,
-                    $subscriptionId,
-                    $username,
-                    $errorMessage
-                );
-
-            default:
-                return self::createResult(
-                    false,
-                    "Template desconocido: {$template}",
-                    null,
-                    0,
-                    $subscriptionId
-                );
+        if (!$event || !isset($strategies[$event->value])) {
+            return self::createResult(false, "Template desconocido: {$template}", null, 0, $subscriptionId);
         }
+
+        return $strategies[$event->value]();
     }
 
     // ==================== LOGGING ====================

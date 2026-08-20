@@ -6,9 +6,11 @@ use Core\Controller;
 use Models\CustomerRegistryModel;
 use Models\CustomerWebLoginAttemptModel;
 use Models\WhatsAppConfigurationModel;
+use Models\WhatsAppTemplateModel;
 use Models\DownloadLogModel;
 use Models\LicenseLogModel;
 use App\Services\WhatsAppService;
+use App\Enums\WhatsAppEvent;
 use App\Services\CustomerStatsService;
 use App\Services\StripeService;
 use App\Services\LicenseService;
@@ -17,9 +19,11 @@ require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
 require_once __DIR__ . '/../Models/CustomerWebLoginAttemptModel.php';
 require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
+require_once __DIR__ . '/../Models/WhatsAppTemplateModel.php';
 require_once __DIR__ . '/../Models/DownloadLogModel.php';
 require_once __DIR__ . '/../Models/LicenseLogModel.php';
 require_once __DIR__ . '/../Services/WhatsAppService.php';
+require_once __DIR__ . '/../enums/WhatsAppEvent.php';
 require_once __DIR__ . '/../Services/CustomerStatsService.php';
 require_once __DIR__ . '/../Services/StripeService.php';
 require_once __DIR__ . '/../Services/LicenseService.php';
@@ -1128,6 +1132,80 @@ class AdminController extends Controller
             'data' => $result['data'] ?? null,
             'error' => $result['error']
         ]);
+    }
+
+    public function whatsappTemplatesJson()
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $templateModel = new WhatsAppTemplateModel();
+        $this->json([
+            'success' => true,
+            'events' => WhatsAppEvent::options(),
+            'variables' => $templateModel->getVariables(),
+            'templates' => $templateModel->getAllWithEvents(),
+        ]);
+    }
+
+    public function whatsappTemplateCreateJson()
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true) ?: [];
+        $customerId = trim((string) ($payload['customerId'] ?? ''));
+        $templateName = trim((string) ($payload['templateName'] ?? ''));
+        $languageCode = trim((string) ($payload['languageCode'] ?? 'es_MX')) ?: 'es_MX';
+        $eventKey = trim((string) ($payload['eventKey'] ?? ''));
+        $components = $payload['components'] ?? [];
+
+        if ($customerId === '' || $templateName === '') {
+            $this->json(['error' => 'customerId y templateName son requeridos'], 422);
+        }
+
+        if (!is_array($components)) {
+            $this->json(['error' => 'components debe ser un array'], 422);
+        }
+
+        if ($eventKey !== '' && !WhatsAppEvent::tryFrom($eventKey)) {
+            $this->json(['error' => 'Evento de WhatsApp invalido'], 422);
+        }
+
+        $templateModel = new WhatsAppTemplateModel();
+        $result = $templateModel->createTemplate([
+            'CustomerId' => $customerId,
+            'TemplateName' => $templateName,
+            'LanguageCode' => $languageCode,
+            'Description' => $payload['description'] ?? null,
+            'ComponentsJson' => $components,
+            'EventKey' => $eventKey,
+            'CreatedBy' => 'admin',
+        ]);
+
+        if (!$result['success']) {
+            $this->json(['error' => $result['error']], 422);
+        }
+
+        $this->json(['success' => true, 'id' => $result['id']]);
+    }
+
+    public function whatsappTemplateDeleteJson(string $id)
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $_SERVER['REQUEST_METHOD'] !== 'DELETE') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $templateModel = new WhatsAppTemplateModel();
+        $this->json($templateModel->deleteTemplate($id));
     }
 
     // ===== Gestión de Tokens JWT =====
