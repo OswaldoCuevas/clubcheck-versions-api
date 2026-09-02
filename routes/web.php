@@ -54,6 +54,9 @@ $router->any('/api/customers/token/register', 'CustomersController', 'registerTo
 $router->any('/api/customers/token/await', 'CustomersController', 'awaitToken');// NO
 $router->any('/api/customers/jwt/validate', 'CustomersController', 'validateJwtToken');
 $router->post('/api/customers/update-client-version', 'CustomersController', 'updateClientVersion', ['customer_jwt']);
+$router->get('/api/customers/announcements/current', 'AnnouncementsController', 'current', ['customer_jwt']);
+$router->post('/api/customers/announcements/viewed', 'AnnouncementsController', 'viewedCurrent', ['customer_jwt']);
+$router->post('/api/customers/announcements/:id/viewed', 'AnnouncementsController', 'viewed', ['customer_jwt']);
 $router->any('/api/customers/desktop/pull', 'CustomersController', 'pullDesktop', ['customer_jwt']);
 $router->any('/api/customers/desktop/push', 'CustomersController', 'pushDesktop', ['customer_jwt']);
 $router->any('/api/customers', 'CustomersController', 'patchCustomer',['customer_jwt']);
@@ -116,6 +119,16 @@ $router->post('/admin/api/customers/regenerate-access-key', 'AdminController', '
 $router->post('/admin/api/customers/:customerId/delete', 'AdminController', 'deleteCustomerJson');// NO, Administrativo
 $router->delete('/admin/api/customers/:customerId', 'AdminController', 'deleteCustomerJson');// NO, Administrativo
 $router->get('/admin/api-docs', 'AdminController', 'apiDocs');// NO, Administrativo
+
+// Announcements Admin
+$router->get('/admin/announcements', 'AdminController', 'announcements');// NO, Administrativo
+$router->get('/admin/api/announcements', 'AdminController', 'announcementsJson');// NO, Administrativo
+$router->post('/admin/api/announcements', 'AdminController', 'announcementSaveJson');// NO, Administrativo
+$router->post('/admin/api/announcements/upload-image', 'AdminController', 'announcementUploadImageJson');// NO, Administrativo
+$router->get('/admin/api/announcements/:id/views', 'AdminController', 'announcementViewsJson');// NO, Administrativo
+$router->post('/admin/api/announcements/:id/activate', 'AdminController', 'announcementActivateJson');// NO, Administrativo
+$router->post('/admin/api/announcements/:id/delete', 'AdminController', 'announcementDeleteJson');// NO, Administrativo
+$router->delete('/admin/api/announcements/:id', 'AdminController', 'announcementDeleteJson');// NO, Administrativo
 
 // WhatsApp Admin CRUD
 $router->get('/admin/whatsapp', 'AdminController', 'whatsapp');// NO, Administrativo

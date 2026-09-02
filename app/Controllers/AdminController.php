@@ -9,6 +9,7 @@ use Models\WhatsAppConfigurationModel;
 use Models\WhatsAppTemplateModel;
 use Models\DownloadLogModel;
 use Models\LicenseLogModel;
+use Models\AnnouncementModel;
 use App\Services\WhatsAppService;
 use App\Enums\WhatsAppEvent;
 use App\Services\CustomerStatsService;
@@ -22,6 +23,7 @@ require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
 require_once __DIR__ . '/../Models/WhatsAppTemplateModel.php';
 require_once __DIR__ . '/../Models/DownloadLogModel.php';
 require_once __DIR__ . '/../Models/LicenseLogModel.php';
+require_once __DIR__ . '/../Models/AnnouncementModel.php';
 require_once __DIR__ . '/../Services/WhatsAppService.php';
 require_once __DIR__ . '/../enums/WhatsAppEvent.php';
 require_once __DIR__ . '/../Services/CustomerStatsService.php';
@@ -383,6 +385,157 @@ class AdminController extends Controller
         }
 
         return 'cus_' . substr($random, 0, 32);
+    }
+
+    public function announcements(): void
+    {
+        $this->requirePermission('admin_access');
+
+        $data = [
+            'currentUser' => $this->userModel->getCurrentUser(),
+            'title' => 'Anuncios - ClubCheck',
+            'isAuthenticated' => true,
+        ];
+
+        $this->view('admin/announcements', $data);
+    }
+
+    public function announcementsJson(): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $model = new AnnouncementModel();
+        $this->json(['announcements' => $model->getAll()]);
+    }
+
+    public function announcementSaveJson(): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true) ?? [];
+        $currentUser = $this->userModel->getCurrentUser();
+
+        try {
+            $model = new AnnouncementModel();
+            $announcement = $model->save($payload, $currentUser['username'] ?? null);
+            $this->json(['success' => true, 'announcement' => $announcement]);
+        } catch (\InvalidArgumentException $e) {
+            $this->json(['error' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            error_log('Announcement save error: ' . $e->getMessage());
+            $this->json(['error' => 'Error al guardar el anuncio'], 500);
+        }
+    }
+
+    public function announcementViewsJson(string $id): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $this->json(['status' => 'ok']);
+        }
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $model = new AnnouncementModel();
+        $announcement = $model->find($id);
+        if (!$announcement) {
+            $this->json(['error' => 'Anuncio no encontrado'], 404);
+        }
+
+        $views = $model->viewsForAnnouncement($id);
+        $this->json([
+            'announcement' => $announcement,
+            'count' => count($views),
+            'views' => $views,
+        ]);
+    }
+
+    public function announcementActivateJson(string $id): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $model = new AnnouncementModel();
+        $currentUser = $this->userModel->getCurrentUser();
+        $announcement = $model->activate($id, $currentUser['username'] ?? null);
+        if (!$announcement) {
+            $this->json(['error' => 'Anuncio no encontrado'], 404);
+        }
+
+        $this->json(['success' => true, 'announcement' => $announcement]);
+    }
+
+    public function announcementDeleteJson(string $id): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $_SERVER['REQUEST_METHOD'] !== 'DELETE') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $model = new AnnouncementModel();
+        if (!$model->deleteById($id)) {
+            $this->json(['error' => 'Anuncio no encontrado'], 404);
+        }
+
+        $this->json(['success' => true]);
+    }
+
+    public function announcementUploadImageJson(): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+        if (empty($_FILES['image']) || !is_uploaded_file($_FILES['image']['tmp_name'])) {
+            $this->json(['error' => 'Imagen no proporcionada'], 422);
+        }
+
+        $file = $_FILES['image'];
+        $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
+        $mime = mime_content_type($file['tmp_name']) ?: '';
+        if (!isset($allowed[$mime])) {
+            $this->json(['error' => 'Formato de imagen no soportado'], 422);
+        }
+        if (($file['size'] ?? 0) > 5 * 1024 * 1024) {
+            $this->json(['error' => 'La imagen no puede superar 5 MB'], 422);
+        }
+
+        $dir = __DIR__ . '/../../uploads/announcements';
+        if (!is_dir($dir) && !mkdir($dir, 0775, true)) {
+            $this->json(['error' => 'No se pudo crear el directorio de imagenes'], 500);
+        }
+
+        $filename = date('YmdHis') . '-' . bin2hex(random_bytes(6)) . '.' . $allowed[$mime];
+        $target = $dir . '/' . $filename;
+        if (!move_uploaded_file($file['tmp_name'], $target)) {
+            $this->json(['error' => 'No se pudo guardar la imagen'], 500);
+        }
+
+        $this->json([
+            'success' => true,
+            'imageUrl' => app_url('/uploads/announcements/' . $filename),
+        ]);
     }
 
     public function apiDocs()

@@ -53,6 +53,24 @@ ob_start();
                                         <div class="card h-100 border-0 shadow-sm hover-shadow">
                                             <div class="card-body d-flex flex-column">
                                                 <div class="d-flex align-items-center mb-3">
+                                                    <span class="icon-circle text-white me-3" style="background-color: #5b2be0;">
+                                                        <i class="fas fa-bullhorn"></i>
+                                                    </span>
+                                                    <div>
+                                                        <h5 class="card-title mb-1">Anuncios</h5>
+                                                        <small class="text-muted">Crea avisos visuales y consulta vistas por cliente</small>
+                                                    </div>
+                                                </div>
+                                                <a href="<?= app_url('/admin/announcements') ?>" class="btn mt-auto" style="background-color: #5b2be0; color: white;">
+                                                    Gestionar anuncios <i class="fas fa-bullhorn ms-2"></i>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card h-100 border-0 shadow-sm hover-shadow">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex align-items-center mb-3">
                                                     <span class="icon-circle bg-primary text-white me-3">
                                                         <i class="fas fa-upload"></i>
                                                     </span>
