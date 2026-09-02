@@ -282,6 +282,7 @@ CREATE TABLE `SubscriptionsDesktop` (
     `EndingDate` VARCHAR(50) NOT NULL,
     `Removed` TINYINT DEFAULT 0,
     `UserId` VARCHAR(36) NOT NULL,
+    `SubscriptionPeriodId` VARCHAR(36) NULL,
     `Payment` DECIMAL(10,2) DEFAULT 0,
     `Warning` TINYINT DEFAULT 0,
     `Finished` TINYINT DEFAULT 0,
@@ -291,6 +292,7 @@ CREATE TABLE `SubscriptionsDesktop` (
     INDEX `idx_SubscriptionsDesktop_CustomerApiId` (`CustomerApiId`),
     INDEX `idx_SubscriptionsDesktop_EndingDate` (`EndingDate`),
     INDEX `idx_SubscriptionsDesktop_UserId` (`UserId`),
+    INDEX `idx_SubscriptionsDesktop_SubscriptionPeriodId` (`SubscriptionPeriodId`),
     CONSTRAINT `fk_SubscriptionsDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE,
     CONSTRAINT `fk_SubscriptionsDesktop_Users` FOREIGN KEY (`UserId`) REFERENCES `UsersDesktop`(`Id`) ON DELETE CASCADE
 )  ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -645,6 +647,10 @@ CREATE TABLE `SubscriptionPeriodDesktop` (
     INDEX `idx_SubscriptionPeriodDesktop_IsDeleted` (`IsDeleted`),
     CONSTRAINT `fk_SubscriptionPeriodDesktop_Customer` FOREIGN KEY (`CustomerApiId`) REFERENCES `Customers`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE `SubscriptionsDesktop`
+    ADD CONSTRAINT `fk_SubscriptionsDesktop_SubscriptionPeriod`
+    FOREIGN KEY (`SubscriptionPeriodId`) REFERENCES `SubscriptionPeriodDesktop`(`Id`) ON DELETE SET NULL;
 
 -- ----------------------------
 -- Table: SyncStatusDesktop
