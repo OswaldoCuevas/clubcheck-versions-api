@@ -94,19 +94,19 @@ return [
             'type' => 'yearly',
         ],
 
-        //  'essential_yearly' => [
-        //     'name' => 'Plan Essentials + WhatsApp',
-        //     'lookup_key' => 'essential_yearly',
-        //     'rules' => [
-        //         'enable_fingerprint' => true,
-        //         'enable_qr' => true,
-        //         'max_messages' => 700,
-        //         'max_members_actives' => 200,
-        //         'products_to_sale' => null,  // ilimitado
-        //         'max_partners' => null,       // ilimitado
-        //     ],
-        //     'type' => 'yearly',
-        // ],
+         'essential_yearly' => [
+            'name' => 'Plan Essentials + WhatsApp',
+            'lookup_key' => 'essential_yearly',
+            'rules' => [
+                'enable_fingerprint' => true,
+                'enable_qr' => true,
+                'max_messages' => 700,
+                'max_members_actives' => 200,
+                'products_to_sale' => null,  // ilimitado
+                'max_partners' => null,       // ilimitado
+            ],
+            'type' => 'yearly',
+        ],
 
 
         // ****************** PLANES GROWHT ***************************
