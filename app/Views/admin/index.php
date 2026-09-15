@@ -53,6 +53,24 @@ ob_start();
                                         <div class="card h-100 border-0 shadow-sm hover-shadow">
                                             <div class="card-body d-flex flex-column">
                                                 <div class="d-flex align-items-center mb-3">
+                                                    <span class="icon-circle text-white me-3" style="background-color: #0d6efd;">
+                                                        <i class="fas fa-chart-pie"></i>
+                                                    </span>
+                                                    <div>
+                                                        <h5 class="card-title mb-1">Dashboard</h5>
+                                                        <small class="text-muted">Ingresos, WhatsApp, clientes y base de datos</small>
+                                                    </div>
+                                                </div>
+                                                <a href="<?= app_url('/admin/dashboard') ?>" class="btn btn-primary mt-auto">
+                                                    Ver dashboard <i class="fas fa-chart-line ms-2"></i>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card h-100 border-0 shadow-sm hover-shadow">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex align-items-center mb-3">
                                                     <span class="icon-circle text-white me-3" style="background-color: #5b2be0;">
                                                         <i class="fas fa-bullhorn"></i>
                                                     </span>
@@ -279,6 +297,24 @@ ob_start();
                                                 </div>
                                                 <a href="<?= app_url('/admin/licenses') ?>" class="btn mt-auto" style="background-color: #6610f2; color: white;">
                                                     Gestionar licencias <i class="fas fa-file-signature ms-2"></i>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card h-100 border-0 shadow-sm hover-shadow">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex align-items-center mb-3">
+                                                    <span class="icon-circle text-white me-3" style="background-color: #198754;">
+                                                        <i class="fas fa-tags"></i>
+                                                    </span>
+                                                    <div>
+                                                        <h5 class="card-title mb-1">Planes Stripe</h5>
+                                                        <small class="text-muted">Alta de precios, reglas y mapeo con Stripe</small>
+                                                    </div>
+                                                </div>
+                                                <a href="<?= app_url('/admin/stripe-plans') ?>" class="btn mt-auto" style="background-color: #198754; color: white;">
+                                                    Gestionar planes <i class="fas fa-tags ms-2"></i>
                                                 </a>
                                             </div>
                                         </div>

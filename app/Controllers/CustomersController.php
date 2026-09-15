@@ -1077,9 +1077,7 @@ class CustomersController extends Controller
         
         try {
             // Obtener configuración del plan "free"
-            $config = require __DIR__ . '/../../config/stripe.php';
-            $plans = $config['plans'] ?? [];
-            $freePlan = $plans['free'] ?? null;
+            $freePlan = $this->stripeService->getPlanRulesByLookupKey('free');
             
             if (!$freePlan) {
                 return;

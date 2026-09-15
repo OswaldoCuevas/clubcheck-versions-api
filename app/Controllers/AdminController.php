@@ -10,9 +10,11 @@ use Models\WhatsAppTemplateModel;
 use Models\DownloadLogModel;
 use Models\LicenseLogModel;
 use Models\AnnouncementModel;
+use Models\StripePlanModel;
 use App\Services\WhatsAppService;
 use App\Enums\WhatsAppEvent;
 use App\Services\CustomerStatsService;
+use App\Services\AdminDashboardService;
 use App\Services\StripeService;
 use App\Services\LicenseService;
 
@@ -24,9 +26,11 @@ require_once __DIR__ . '/../Models/WhatsAppTemplateModel.php';
 require_once __DIR__ . '/../Models/DownloadLogModel.php';
 require_once __DIR__ . '/../Models/LicenseLogModel.php';
 require_once __DIR__ . '/../Models/AnnouncementModel.php';
+require_once __DIR__ . '/../Models/StripePlanModel.php';
 require_once __DIR__ . '/../Services/WhatsAppService.php';
 require_once __DIR__ . '/../enums/WhatsAppEvent.php';
 require_once __DIR__ . '/../Services/CustomerStatsService.php';
+require_once __DIR__ . '/../Services/AdminDashboardService.php';
 require_once __DIR__ . '/../Services/StripeService.php';
 require_once __DIR__ . '/../Services/LicenseService.php';
 
@@ -1703,6 +1707,63 @@ class AdminController extends Controller
         }
     }
 
+    public function dashboard(): void
+    {
+        $this->requirePermission('admin_access');
+
+        $data = [
+            'currentUser' => $this->userModel->getCurrentUser(),
+            'title' => 'Dashboard - ClubCheck',
+            'isAuthenticated' => true,
+        ];
+
+        $this->view('admin/dashboard', $data);
+    }
+
+    public function dashboardJson(): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        try {
+            $service = new AdminDashboardService();
+            $this->json([
+                'success' => true,
+                'dashboard' => $service->getDashboard($this->makeStripeService()),
+                'stripe_dashboard_url' => ($_ENV['APP_MODE'] ?? 'DEV') === 'PROD'
+                    ? 'https://dashboard.stripe.com/'
+                    : 'https://dashboard.stripe.com/test/',
+            ]);
+        } catch (\Throwable $e) {
+            $this->json(['success' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function dashboardSettingsJson(): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true) ?? [];
+        $cost = (float)($payload['whatsapp_message_unit_cost_mxn'] ?? 0);
+
+        try {
+            $service = new AdminDashboardService();
+            $service->updateWhatsappMessageCost($cost);
+            $this->json(['success' => true]);
+        } catch (\InvalidArgumentException $e) {
+            $this->json(['success' => false, 'error' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            $this->json(['success' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
     // ==================== HISTORIAL DE DESCARGAS ====================
 
     /**
@@ -1849,6 +1910,233 @@ class AdminController extends Controller
         ]);
     }
 
+    public function stripePlans(): void
+    {
+        $this->requirePermission('admin_access');
+
+        $data = [
+            'currentUser' => $this->userModel->getCurrentUser(),
+            'title' => 'Planes Stripe - ClubCheck',
+            'isAuthenticated' => true,
+        ];
+
+        $this->view('admin/stripe-plans', $data);
+    }
+
+    public function stripePlansJson(): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        try {
+            $model = new StripePlanModel();
+            $tablesReady = $model->hasPlanTables() && $model->hasPriceFields();
+            $plans = [];
+            $source = 'database';
+
+            if ($tablesReady && $model->hasPlans()) {
+                $plans = array_values($model->getPlans(false));
+            } else {
+                $plans = array_values($this->makeStripeService()->getConfiguredPlans());
+                $source = 'config';
+            }
+
+            if (!in_array('free', array_column($plans, 'lookup_key'), true)) {
+                $freePlan = $this->makeStripeService()->getPlanRulesByLookupKey('free');
+                if ($freePlan) {
+                    array_unshift($plans, $freePlan + [
+                        'unit_amount' => null,
+                        'currency' => 'mxn',
+                        'is_active' => true,
+                        'sort_order' => 0,
+                    ]);
+                }
+            }
+
+            $stripeService = $this->makeStripeService();
+            $stripeLookup = $stripeService->findPricesByLookupKeys(array_column($plans, 'lookup_key'));
+            if (!($stripeLookup['success'] ?? false)) {
+                $pricesByLookupKey = [];
+                foreach (array_column($plans, 'lookup_key') as $lookupKey) {
+                    $single = $stripeService->findPriceByLookupKey($lookupKey);
+                    if (($single['success'] ?? false) && ($single['exists'] ?? false) && !empty($single['price'])) {
+                        $pricesByLookupKey[$lookupKey] = $single['price'];
+                    }
+                }
+                $stripeLookup = [
+                    'success' => true,
+                    'prices' => $pricesByLookupKey,
+                    'fallback' => true,
+                ];
+            }
+
+            if ($stripeLookup['success'] ?? false) {
+                $pricesByLookupKey = $stripeLookup['prices'] ?? [];
+                foreach ($plans as &$plan) {
+                    $stripePrice = $pricesByLookupKey[$plan['lookup_key'] ?? ''] ?? null;
+                    $plan['stripe_exists'] = $stripePrice !== null;
+                    $plan['stripe_price'] = $stripePrice;
+
+                    if ($stripePrice && empty($plan['stripe_price_id'])) {
+                        $plan['stripe_price_id'] = $stripePrice['id'] ?? null;
+                        if ($tablesReady && $source === 'database' && !empty($stripePrice['id'])) {
+                            $model->setStripePriceId($plan['lookup_key'], $stripePrice['id']);
+                        }
+                    }
+                }
+                unset($plan);
+            }
+
+            $this->json([
+                'success' => true,
+                'plans' => $plans,
+                'rules_catalog' => $tablesReady ? $model->getRuleCatalog() : [],
+                'tables_ready' => $tablesReady,
+                'source' => $source,
+                'stripe_checked' => $stripeLookup['success'] ?? false,
+                'stripe_dashboard_base' => ($_ENV['APP_MODE'] ?? 'DEV') === 'PROD'
+                    ? 'https://dashboard.stripe.com/prices/'
+                    : 'https://dashboard.stripe.com/test/prices/',
+            ]);
+        } catch (\Throwable $e) {
+            $this->json(['success' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function stripePlanSaveJson(): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        try {
+            $model = new StripePlanModel();
+            if (!$model->hasPlanTables() || !$model->hasPriceFields()) {
+                $this->json(['success' => false, 'error' => 'Ejecuta primero las migraciones 009_create_stripe_plan_catalog.sql y 010_add_stripe_plan_price_fields.sql'], 400);
+            }
+
+            $payload['rules'] = $this->normalizePlanRules($payload['rules'] ?? []);
+            $payload['showBillingIds'] = $this->normalizeBillingIds($payload['showBillingIds'] ?? []);
+
+            $plan = $model->savePlan($payload);
+            $this->json(['success' => true, 'plan' => $plan]);
+        } catch (\InvalidArgumentException $e) {
+            $this->json(['success' => false, 'error' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            $this->json(['success' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function stripePlanVerifyJson(string $lookupKey): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $service = $this->makeStripeService();
+        $result = $service->findPriceByLookupKey($lookupKey);
+        if (($result['success'] ?? false) && ($result['exists'] ?? false) && !empty($result['price']['id'])) {
+            try {
+                $model = new StripePlanModel();
+                if ($model->hasPlanTables()) {
+                    $model->setStripePriceId($lookupKey, $result['price']['id']);
+                }
+            } catch (\Throwable $e) {
+                // La verificacion contra Stripe ya fue exitosa; no bloquear por sincronizacion local.
+            }
+        }
+        $this->json($result, ($result['success'] ?? false) ? 200 : 400);
+    }
+
+    public function stripePlanCreateStripePriceJson(string $lookupKey): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        try {
+            $model = new StripePlanModel();
+            if (!$model->hasPlanTables() || !$model->hasPriceFields()) {
+                $this->json(['success' => false, 'error' => 'Ejecuta primero las migraciones de planes Stripe'], 400);
+            }
+
+            $plan = $model->getPlanByLookupKey($lookupKey, false);
+            if (!$plan) {
+                $this->json(['success' => false, 'error' => 'Plan no encontrado'], 404);
+            }
+
+            $config = require __DIR__ . '/../../config/stripe.php';
+            $service = $this->makeStripeService($config);
+            $productId = $plan['stripe_product_id'] ?? ($config['product_id'] ?? null);
+            $result = $service->createStripePriceFromPlan($plan, $productId);
+
+            if ($result['success'] ?? false) {
+                $priceId = $result['price']['id'] ?? null;
+                if ($priceId) {
+                    $model->setStripePriceId($lookupKey, $priceId);
+                }
+            }
+
+            $this->json($result, ($result['success'] ?? false) ? 200 : 400);
+        } catch (\Throwable $e) {
+            $this->json(['success' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    private function normalizePlanRules(array $rules): array
+    {
+        $normalized = [];
+        foreach ($rules as $key => $value) {
+            $key = trim((string)$key);
+            if ($key === '') {
+                continue;
+            }
+
+            if ($value === '__null__' || $value === '') {
+                $normalized[$key] = null;
+            } elseif ($value === 'true' || $value === true) {
+                $normalized[$key] = true;
+            } elseif ($value === 'false' || $value === false) {
+                $normalized[$key] = false;
+            } elseif (is_numeric($value)) {
+                $normalized[$key] = (int)$value;
+            } else {
+                $normalized[$key] = $value;
+            }
+        }
+
+        return $normalized;
+    }
+
+    private function normalizeBillingIds($value): array
+    {
+        if (is_string($value)) {
+            $value = preg_split('/[\r\n,]+/', $value);
+        }
+
+        return array_values(array_unique(array_filter(array_map('trim', is_array($value) ? $value : []))));
+    }
+
+    private function makeStripeService(?array $config = null): StripeService
+    {
+        $config ??= require __DIR__ . '/../../config/stripe.php';
+        $appMode = $_ENV['APP_MODE'] ?? 'DEV';
+        $testClockId = ($appMode === 'DEV') ? ($config['test_clock_id'] ?? null) : null;
+
+        return new StripeService($config['secret_key'], $testClockId);
+    }
+
     /**
      * POST /admin/api/licenses/generate
      * Genera una licencia para un cliente desde el panel de administración.
@@ -1888,14 +2176,17 @@ class AdminController extends Controller
         $billingId     = $customer['billingId'] ?? null;
         $machineToken  = trim($payload['machineToken'] ?? '') ?: ($customer['token'] ?? null);
         $config        = require __DIR__ . '/../../config/stripe.php';
+        $appMode       = $_ENV['APP_MODE'] ?? 'DEV';
+        $testClockId   = ($appMode === 'DEV') ? ($config['test_clock_id'] ?? null) : null;
+        $stripeService = new StripeService($config['secret_key'], $testClockId);
         $planLookupKey = trim($payload['planLookupKey'] ?? '');
         $isFreePlan    = $planLookupKey === 'free';
         $isPermanent   = false;
         $expiresAt     = null;
         $planName      = $planLookupKey;
         $rules         = null;
-        $applyFreePlan = function () use ($config, &$planLookupKey, &$planName, &$isPermanent, &$expiresAt, &$rules): void {
-            $freePlan = $config['plans']['free'] ?? null;
+        $applyFreePlan = function () use ($stripeService, &$planLookupKey, &$planName, &$isPermanent, &$expiresAt, &$rules): void {
+            $freePlan = $stripeService->getPlanRulesByLookupKey('free');
             if (!$freePlan) {
                 $this->json(['error' => 'El plan free no esta configurado'], 400);
             }
@@ -1917,10 +2208,6 @@ class AdminController extends Controller
                     $this->json(['error' => 'El cliente no tiene billingId vinculado a Stripe'], 422);
                 }
             } else {
-
-                $appMode       = $_ENV['APP_MODE'] ?? 'DEV';
-                $testClockId   = ($appMode === 'DEV') ? ($config['test_clock_id'] ?? null) : null;
-                $stripeService = new StripeService($config['secret_key'], $testClockId);
 
                 $activeResult = $stripeService->getActiveSubscription($billingId);
 
@@ -1961,13 +2248,11 @@ class AdminController extends Controller
             $this->json(['error' => 'No se pudo determinar el plan'], 400);
         }
 
-        foreach ($config['plans'] ?? [] as $planCfg) {
-            if (($planCfg['lookup_key'] ?? '') === $planLookupKey) {
-                $planName    = $planCfg['name']  ?? $planName;
-                $isPermanent = ($planCfg['type'] ?? '') === 'permanent' ? true : $isPermanent;
-                $rules       = $planCfg['rules'] ?? $rules;
-                break;
-            }
+        $planCfg = $stripeService->getPlanRulesByLookupKey($planLookupKey);
+        if ($planCfg) {
+            $planName    = $planCfg['name']  ?? $planName;
+            $isPermanent = ($planCfg['type'] ?? '') === 'permanent' ? true : $isPermanent;
+            $rules       = $planCfg['rules'] ?? $rules;
         }
 
         try {

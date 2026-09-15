@@ -134,15 +134,8 @@ class StripeController extends Controller
         }
         try {
             // Resolver reglas del plan desde la configuración
-            $config = require __DIR__ . '/../../config/stripe.php';
-            $plans  = $config['plans'] ?? [];
-            $rules  = null;
-            foreach ($plans as $plan) {
-                if (($plan['lookup_key'] ?? '') === $planLookupKey) {
-                    $rules = $plan['rules'] ?? null;
-                    break;
-                }
-            }
+            $plan = $this->stripeService->getPlanRulesByLookupKey($planLookupKey);
+            $rules = $plan['rules'] ?? null;
 
             $customerJwt = $this->resolveOrCreateCustomerJwt($internalCustomerId, $machineToken);
 
@@ -787,7 +780,7 @@ class StripeController extends Controller
         ApiHelper::respond([
             'success' => true,
             'public_key' => $config['public_key'],
-            'plans' => $config['plans'] ?? []
+            'plans' => $this->stripeService->getConfiguredPlans()
         ]);
     }
 
@@ -826,10 +819,10 @@ class StripeController extends Controller
     {
         ApiHelper::allowedMethodsGet();
         $billingId = ApiHelper::getBillingIdByCustomerIdFromSession();
-        $config = require __DIR__ . '/../../config/stripe.php';
+        $configuredPlans = $this->stripeService->getVisibleConfiguredPlans($billingId);
         
         $plans = [];
-        foreach ($config['plans'] ?? [] as $key => $plan) {
+        foreach ($configuredPlans as $key => $plan) {
 
             if(isset($plan['showBillingIds']) && !empty($plan['showBillingIds']) && !in_array($billingId, $plan['showBillingIds'])) {
                 continue; // Si el plan es exclusivo para ciertos billingIds y el cliente no está en la lista, lo omitimos

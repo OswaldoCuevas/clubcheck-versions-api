@@ -2,12 +2,17 @@
 
 namespace App\Services;
 
+require_once __DIR__ . '/../Models/StripePlanModel.php';
+
+use Models\StripePlanModel;
+
 /**
  * Servicio de Stripe para manejo de tarjetas, clientes y suscripciones
  */
 class StripeService
 {
     private \Stripe\StripeClient $stripe;
+    private ?array $plansCache = null;
     private string $offlineMessage = 'Verifique su conexión a internet';
 
     private ?string $testClockId = null;
@@ -389,9 +394,41 @@ class StripeService
      */
     public function getPlanRulesByLookupKey(string $lookupKey): ?array
     {
-        $config = require __DIR__ . '/../../config/stripe.php';
-        $plansConfig = $config['plans'] ?? [];
+        $plansConfig = $this->getConfiguredPlans();
         return $plansConfig[$lookupKey] ?? null;
+    }
+
+    /**
+     * Obtiene todos los planes configurados con la misma estructura anterior de config/stripe.php.
+     */
+    public function getConfiguredPlans(): array
+    {
+        if ($this->plansCache !== null) {
+            return $this->plansCache;
+        }
+
+        try {
+            $model = new StripePlanModel();
+            if ($model->hasPlanTables() && $model->hasPriceFields() && $model->hasPlans()) {
+                return $this->plansCache = $this->sortConfiguredPlans($model->getPlans(true));
+            }
+        } catch (\Throwable $e) {
+            // Si la migracion aun no existe, conservar compatibilidad con config/stripe.php.
+        }
+
+        $config = require __DIR__ . '/../../config/stripe.php';
+        return $this->plansCache = $this->sortConfiguredPlans($config['plans'] ?? []);
+    }
+
+    /**
+     * Lista planes visibles para un billingId respetando showBillingIds.
+     */
+    public function getVisibleConfiguredPlans(?string $billingId = null): array
+    {
+        return $this->sortConfiguredPlans(array_filter($this->getConfiguredPlans(), function (array $plan) use ($billingId): bool {
+            $showBillingIds = $plan['showBillingIds'] ?? [];
+            return empty($showBillingIds) || ($billingId !== null && in_array($billingId, $showBillingIds, true));
+        }));
     }
 
     /**
@@ -642,6 +679,263 @@ class StripeService
     }
 
     /**
+     * Verifica si existe un precio en Stripe por lookup_key.
+     */
+    public function findPriceByLookupKey(string $lookupKey): array
+    {
+        try {
+            $prices = $this->stripe->prices->all([
+                'lookup_keys' => [$lookupKey],
+                'limit' => 1,
+                'expand' => ['data.product']
+            ]);
+
+            $price = $prices->data[0] ?? null;
+            if (!$price) {
+                return [
+                    'success' => true,
+                    'exists' => false,
+                    'price' => null
+                ];
+            }
+
+            return [
+                'success' => true,
+                'exists' => true,
+                'price' => $this->formatStripePrice($price)
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $this->offlineMessage,
+                'debug' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Consulta precios en Stripe por lote y los indexa por lookup_key.
+     */
+    public function findPricesByLookupKeys(array $lookupKeys): array
+    {
+        try {
+            $lookupKeys = array_values(array_unique(array_filter(array_map('trim', $lookupKeys))));
+            if (empty($lookupKeys)) {
+                return [
+                    'success' => true,
+                    'prices' => []
+                ];
+            }
+
+            $pricesByLookupKey = [];
+            foreach (array_chunk($lookupKeys, 10) as $chunk) {
+                $prices = $this->stripe->prices->all([
+                    'lookup_keys' => $chunk,
+                    'limit' => 100,
+                    'expand' => ['data.product']
+                ]);
+
+                foreach ($prices->data as $price) {
+                    $formatted = $this->formatStripePrice($price);
+                    if (!empty($formatted['lookup_key'])) {
+                        $pricesByLookupKey[$formatted['lookup_key']] = $formatted;
+                    }
+                }
+            }
+
+            $missingLookupKeys = array_values(array_diff($lookupKeys, array_keys($pricesByLookupKey)));
+            foreach ($missingLookupKeys as $lookupKey) {
+                $single = $this->findPriceByLookupKey($lookupKey);
+                if (($single['success'] ?? false) && ($single['exists'] ?? false) && !empty($single['price'])) {
+                    $pricesByLookupKey[$lookupKey] = $single['price'];
+                }
+            }
+
+            return [
+                'success' => true,
+                'prices' => $pricesByLookupKey
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $this->offlineMessage,
+                'debug' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Crea un precio en Stripe desde un plan local.
+     */
+    public function createStripePriceFromPlan(array $plan, ?string $productId = null): array
+    {
+        try {
+            $lookupKey = $plan['lookup_key'] ?? null;
+            $unitAmount = $plan['unit_amount'] ?? null;
+            $currency = strtolower($plan['currency'] ?? 'mxn');
+
+            if (!$lookupKey || $unitAmount === null) {
+                return [
+                    'success' => false,
+                    'error' => 'El plan requiere lookup_key y unit_amount para crear el precio en Stripe'
+                ];
+            }
+
+            $existing = $this->findPriceByLookupKey($lookupKey);
+            if (($existing['success'] ?? false) && ($existing['exists'] ?? false)) {
+                return [
+                    'success' => true,
+                    'created' => false,
+                    'price' => $existing['price']
+                ];
+            }
+
+            $payload = [
+                'currency' => $currency,
+                'unit_amount' => (int)$unitAmount,
+                'lookup_key' => $lookupKey,
+                'nickname' => $plan['name'] ?? $lookupKey,
+                'metadata' => [
+                    'clubcheck_lookup_key' => $lookupKey,
+                    'clubcheck_plan_type' => $plan['type'] ?? 'monthly',
+                ],
+            ];
+
+            if ($productId) {
+                $payload['product'] = $productId;
+            } else {
+                $payload['product_data'] = ['name' => $plan['name'] ?? $lookupKey];
+            }
+
+            if (($plan['type'] ?? 'monthly') !== 'permanent') {
+                $payload['recurring'] = [
+                    'interval' => ($plan['type'] ?? 'monthly') === 'yearly' ? 'year' : 'month',
+                    'interval_count' => 1,
+                ];
+            }
+
+            $price = $this->stripe->prices->create($payload);
+
+            return [
+                'success' => true,
+                'created' => true,
+                'price' => $this->formatStripePrice($price)
+            ];
+        } catch (\Stripe\Exception\ApiErrorException $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $this->offlineMessage,
+                'debug' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Resume cobros recibidos y pagos esperados del mes actual desde Stripe.
+     */
+    public function getMonthlyBillingSummary(): array
+    {
+        try {
+            $monthStart = strtotime(date('Y-m-01 00:00:00'));
+            $monthEnd = strtotime(date('Y-m-01 00:00:00', strtotime('+1 month')));
+            $currency = 'mxn';
+
+            $receivedAmount = 0;
+            $startingAfter = null;
+            do {
+                $params = [
+                    'limit' => 100,
+                    'created' => [
+                        'gte' => $monthStart,
+                        'lt' => $monthEnd,
+                    ],
+                ];
+                if ($startingAfter) {
+                    $params['starting_after'] = $startingAfter;
+                }
+
+                $charges = $this->stripe->charges->all($params);
+                foreach ($charges->data as $charge) {
+                    if (($charge->status ?? '') === 'succeeded' && !($charge->refunded ?? false)) {
+                        $receivedAmount += (int)($charge->amount_captured ?? $charge->amount ?? 0);
+                        $currency = $charge->currency ?? $currency;
+                    }
+                    $startingAfter = $charge->id;
+                }
+            } while (!empty($charges->has_more));
+
+            $expectedAmount = 0;
+            $expectedSubscriptions = 0;
+            foreach (['active', 'trialing'] as $status) {
+                $startingAfter = null;
+                do {
+                    $params = [
+                        'status' => $status,
+                        'limit' => 100,
+                        'expand' => ['data.items.data.price'],
+                    ];
+                    if ($startingAfter) {
+                        $params['starting_after'] = $startingAfter;
+                    }
+
+                    $subscriptions = $this->stripe->subscriptions->all($params);
+                    foreach ($subscriptions->data as $subscription) {
+                        $periodEnd = $subscription->current_period_end
+                            ?? ($subscription->items->data[0]->current_period_end ?? null);
+
+                        if (!$periodEnd || $periodEnd < $monthStart || $periodEnd >= $monthEnd) {
+                            $startingAfter = $subscription->id;
+                            continue;
+                        }
+
+                        foreach ($subscription->items->data as $item) {
+                            $price = $item->price ?? null;
+                            if (!$price || ($price->type ?? 'recurring') === 'one_time') {
+                                continue;
+                            }
+
+                            $quantity = (int)($item->quantity ?? 1);
+                            $expectedAmount += ((int)($price->unit_amount ?? 0)) * max(1, $quantity);
+                            $currency = $price->currency ?? $currency;
+                        }
+
+                        $expectedSubscriptions++;
+                        $startingAfter = $subscription->id;
+                    }
+                } while (!empty($subscriptions->has_more));
+            }
+
+            return [
+                'success' => true,
+                'receivedThisMonth' => [
+                    'amount' => $receivedAmount,
+                    'currency' => $currency,
+                    'formatted' => $this->formatMoney($receivedAmount, strtoupper($currency)),
+                ],
+                'expectedThisMonth' => [
+                    'amount' => $expectedAmount,
+                    'currency' => $currency,
+                    'formatted' => $this->formatMoney($expectedAmount, strtoupper($currency)),
+                    'subscriptions' => $expectedSubscriptions,
+                ],
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'receivedThisMonth' => ['amount' => 0, 'currency' => 'mxn', 'formatted' => $this->formatMoney(0)],
+                'expectedThisMonth' => ['amount' => 0, 'currency' => 'mxn', 'formatted' => $this->formatMoney(0), 'subscriptions' => 0],
+                'error' => $this->offlineMessage,
+                'debug' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
      * Lista todos los precios activos de un producto
      */
     public function getProductPrices(string $productId): array
@@ -656,30 +950,14 @@ class StripeService
 
             $result = [];
             foreach ($prices->data as $price) {
-                $result[] = [
-                    'id' => $price->id,
-                    'lookup_key' => $price->lookup_key,
-                    'unit_amount' => $price->unit_amount,
-                    'currency' => $price->currency,
-                    'nickname' => $price->nickname,
-                    'recurring' => $price->recurring ? [
-                        'interval' => $price->recurring->interval,
-                        'interval_count' => $price->recurring->interval_count
-                    ] : null
-                ];
+                $result[] = $this->formatStripePrice($price);
             }
 
-            $stripeConfig = require __DIR__ . '/../../config/stripe.php';
-            $plansConfig = $stripeConfig['plans'] ?? [];
+            $plansConfig = $this->getConfiguredPlans();
 
             //remover los precios que no estén configurados en el config/stripe.php
             $result = array_filter($result, function($price) use ($plansConfig) {
-                foreach ($plansConfig as $plan) {
-                    if (($plan['lookup_key'] ?? null) === $price['lookup_key']) {
-                        return true;
-                    }
-                }
-                return false;
+                return isset($plansConfig[$price['lookup_key'] ?? '']);
             });
 
             //agregar al precio showBillingIds que vbiene del config/stripe.php para saber si se muestra o no en la app dependiendo del billingId del cliente
@@ -692,6 +970,20 @@ class StripeService
                 }
                 return $price;
             }, $result);
+
+            $periodOrder = ['monthly' => 1, 'yearly' => 2, 'permanent' => 3];
+            usort($result, function (array $a, array $b) use ($plansConfig, $periodOrder): int {
+                $aPlan = $plansConfig[$a['lookup_key'] ?? ''] ?? [];
+                $bPlan = $plansConfig[$b['lookup_key'] ?? ''] ?? [];
+                $aPeriod = $periodOrder[$aPlan['type'] ?? 'monthly'] ?? 99;
+                $bPeriod = $periodOrder[$bPlan['type'] ?? 'monthly'] ?? 99;
+
+                if ($aPeriod !== $bPeriod) {
+                    return $aPeriod <=> $bPeriod;
+                }
+
+                return strcmp((string)($a['lookup_key'] ?? ''), (string)($b['lookup_key'] ?? ''));
+            });
 
             return [
                 'success' => true,
@@ -706,6 +998,70 @@ class StripeService
     }
 
     // ==================== HELPERS ====================
+
+    private function formatStripePrice($price): array
+    {
+        return [
+            'id' => $price->id,
+            'lookup_key' => $price->lookup_key,
+            'unit_amount' => $price->unit_amount,
+            'currency' => $price->currency,
+            'nickname' => $price->nickname,
+            'active' => $price->active ?? null,
+            'type' => $price->type ?? null,
+            'product' => is_string($price->product ?? null) ? $price->product : ($price->product->id ?? null),
+            'recurring' => $price->recurring ? [
+                'interval' => $price->recurring->interval,
+                'interval_count' => $price->recurring->interval_count
+            ] : null
+        ];
+    }
+
+    private function sortConfiguredPlans(array $plans): array
+    {
+        $plans = $this->ensureFreePlan($plans);
+        $periodOrder = ['monthly' => 1, 'yearly' => 2, 'permanent' => 3];
+
+        uasort($plans, function (array $a, array $b) use ($periodOrder): int {
+            $aPeriod = $periodOrder[$a['type'] ?? 'monthly'] ?? 99;
+            $bPeriod = $periodOrder[$b['type'] ?? 'monthly'] ?? 99;
+            if ($aPeriod !== $bPeriod) {
+                return $aPeriod <=> $bPeriod;
+            }
+
+            $aSort = (int)($a['sort_order'] ?? 0);
+            $bSort = (int)($b['sort_order'] ?? 0);
+            if ($aSort !== $bSort) {
+                return $aSort <=> $bSort;
+            }
+
+            return strcmp((string)($a['lookup_key'] ?? ''), (string)($b['lookup_key'] ?? ''));
+        });
+
+        return $plans;
+    }
+
+    private function ensureFreePlan(array $plans): array
+    {
+        if (isset($plans['free'])) {
+            return $plans;
+        }
+
+        $config = require __DIR__ . '/../../config/stripe.php';
+        if (isset($config['plans']['free'])) {
+            $plans = ['free' => $config['plans']['free']] + $plans;
+            return $plans;
+        }
+
+        $plans = ['free' => [
+            'name' => 'Plan Start',
+            'lookup_key' => 'free',
+            'rules' => [],
+            'type' => 'monthly',
+        ]] + $plans;
+
+        return $plans;
+    }
 
     // ==================== CUPONES ====================
 
@@ -1299,8 +1655,7 @@ private function formatMoney(int $amountInCents, string $currency = 'MXN'): stri
 public function getCurrentPlan(string $customerId): array
 {
     try {
-        $config = require __DIR__ . '/../../config/stripe.php';
-        $plans = $config['plans'] ?? [];
+        $plans = $this->getConfiguredPlans();
         
         // Obtener suscripción activa
         $subscriptionResult = $this->getActiveSubscription($customerId);
