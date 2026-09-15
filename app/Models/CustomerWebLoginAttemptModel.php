@@ -3,8 +3,10 @@
 namespace Models;
 
 require_once __DIR__ . '/../Core/Model.php';
+require_once __DIR__ . '/ApplicationModel.php';
 
 use Core\Model;
+use Models\ApplicationModel;
 
 class CustomerWebLoginAttemptModel extends Model
 {
@@ -36,11 +38,29 @@ class CustomerWebLoginAttemptModel extends Model
         return mb_substr($value, 0, $maxLength);
     }
 
-    public function getLockoutStatus(string $loginIdentifier, string $codeAccess, int $windowSeconds = 600, int $maxAttempts = 5): array
+    private function appModel(): ApplicationModel
+    {
+        return new ApplicationModel();
+    }
+
+    private function hasAppField(): bool
+    {
+        return $this->appModel()->columnExists('CustomerWebLoginAttempts', 'AppId');
+    }
+
+    public function getLockoutStatus(string $loginIdentifier, string $codeAccess, int $windowSeconds = 600, int $maxAttempts = 5, ?string $appId = null): array
     {
         $loginIdentifier = $this->normalizeIdentifier($loginIdentifier);
         $codeAccess = $this->normalizeIdentifier($codeAccess);
         $since = date('Y-m-d H:i:s', time() - $windowSeconds);
+        $appFilter = '';
+        $params = [$loginIdentifier, $codeAccess, $since];
+
+        if ($this->hasAppField() && $appId !== null) {
+            // El bloqueo se separa por app para no cruzar intentos entre productos.
+            $appFilter = 'AND AppId = ?';
+            $params[] = $appId;
+        }
 
         $row = $this->db->fetchOne(
             'SELECT COUNT(*) AS total, MIN(CreatedAt) AS firstAttemptAt
@@ -48,8 +68,9 @@ class CustomerWebLoginAttemptModel extends Model
              WHERE LoginIdentifier = ?
                AND CodeAccess = ?
                AND WasSuccessful = 0
-               AND CreatedAt >= ?',
-            [$loginIdentifier, $codeAccess, $since]
+               AND CreatedAt >= ?
+               ' . $appFilter,
+            $params
         );
 
         $total = (int) ($row['total'] ?? 0);
@@ -78,7 +99,7 @@ class CustomerWebLoginAttemptModel extends Model
         $loginIdentifier = $this->normalizeIdentifier((string) ($data['loginIdentifier'] ?? ''));
         $codeAccess = $this->normalizeIdentifier((string) ($data['codeAccess'] ?? ''));
 
-        $this->db->insert('CustomerWebLoginAttempts', [
+        $row = [
             'LoginIdentifier' => mb_substr($loginIdentifier, 0, 160),
             'CodeAccess' => mb_substr($codeAccess, 0, 100),
             'CustomerId' => $this->nullableString($data['customerId'] ?? null, 64),
@@ -88,7 +109,13 @@ class CustomerWebLoginAttemptModel extends Model
             'WasSuccessful' => !empty($data['wasSuccessful']) ? 1 : 0,
             'FailureReason' => $this->nullableString($data['failureReason'] ?? null, 80),
             'CreatedAt' => $data['createdAt'] ?? $this->now(),
-        ]);
+        ];
+
+        if ($this->hasAppField()) {
+            $row['AppId'] = $this->nullableString($data['appId'] ?? null, 36);
+        }
+
+        $this->db->insert('CustomerWebLoginAttempts', $row);
     }
 
     public function getAttempts(array $filters = [], int $page = 1, int $perPage = 50): array
@@ -145,8 +172,15 @@ class CustomerWebLoginAttemptModel extends Model
         ];
     }
 
-    public function getSummary(): array
+    public function getSummary(?string $appId = null): array
     {
+        $where = '';
+        $params = [];
+        if ($this->hasAppField() && $appId !== null) {
+            $where = 'WHERE AppId = ?';
+            $params[] = $appId;
+        }
+
         $row = $this->db->fetchOne(
             "SELECT
                 COUNT(*) AS total,
@@ -154,7 +188,9 @@ class CustomerWebLoginAttemptModel extends Model
                 SUM(CASE WHEN WasSuccessful = 0 THEN 1 ELSE 0 END) AS failed,
                 SUM(CASE WHEN WasSuccessful = 0 AND CreatedAt >= DATE_SUB(NOW(), INTERVAL 10 MINUTE) THEN 1 ELSE 0 END) AS failedLast10Minutes,
                 COUNT(DISTINCT CASE WHEN WasSuccessful = 0 AND CreatedAt >= DATE_SUB(NOW(), INTERVAL 10 MINUTE) THEN CONCAT(LoginIdentifier, '|', CodeAccess) END) AS activeFailedCombinations
-             FROM CustomerWebLoginAttempts"
+             FROM CustomerWebLoginAttempts
+             {$where}",
+            $params
         );
 
         return [
@@ -201,6 +237,12 @@ class CustomerWebLoginAttemptModel extends Model
         if ($to !== '') {
             $where[] = 'cwla.CreatedAt <= ?';
             $params[] = $to . (strlen($to) === 10 ? ' 23:59:59' : '');
+        }
+
+        $appId = trim((string) ($filters['appId'] ?? ''));
+        if ($appId !== '' && $this->hasAppField()) {
+            $where[] = 'cwla.AppId = ?';
+            $params[] = $appId;
         }
 
         return [

@@ -4,9 +4,11 @@ namespace Controllers;
 
 use Core\Controller;
 use Models\CustomerRegistryModel;
+use Models\ApplicationModel;
 
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
+require_once __DIR__ . '/../Models/ApplicationModel.php';
 
 // Modelos Desktop
 require_once __DIR__ . '/../Models/AdministratorsDesktopModel.php';
@@ -89,6 +91,11 @@ class DesktopTablesController extends Controller
     {
         parent::__construct();
         $this->initializeDesktopTables();
+    }
+
+    private function selectedAppId(): string
+    {
+        return (new ApplicationModel())->getSelectedApp()['id'];
     }
 
     /**
@@ -354,7 +361,7 @@ class DesktopTablesController extends Controller
 
         $currentUser = $this->userModel->getCurrentUser();
         $registry = new CustomerRegistryModel();
-        $customers = $registry->getCustomers();
+        $customers = $registry->getCustomers($this->selectedAppId());
 
         $data = [
             'currentUser' => $currentUser,
@@ -387,7 +394,7 @@ class DesktopTablesController extends Controller
         $tableInfo = $this->desktopTables[$tableKey];
         $currentUser = $this->userModel->getCurrentUser();
         $registry = new CustomerRegistryModel();
-        $customers = $registry->getCustomers();
+        $customers = $registry->getCustomers($this->selectedAppId());
 
         // Obtener datos si hay un customerApiId seleccionado
         $records = [];
@@ -447,6 +454,12 @@ class DesktopTablesController extends Controller
         // Validar customerApiId
         if (empty($customerApiId)) {
             $this->json(['error' => 'customerApiId es requerido'], 422);
+        }
+
+        $registry = new CustomerRegistryModel();
+        $customer = $registry->getCustomer($customerApiId);
+        if (!$customer || (($customer['appId'] ?? null) !== $this->selectedAppId())) {
+            $this->json(['error' => 'Cliente no pertenece a la app seleccionada'], 403);
         }
 
         $tableInfo = $this->desktopTables[$tableKey];

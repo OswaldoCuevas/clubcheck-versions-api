@@ -3,6 +3,7 @@
 namespace Models;
 
 require_once __DIR__ . '/../Core/Model.php';
+require_once __DIR__ . '/ApplicationModel.php';
 
 use Core\Model;
 
@@ -16,6 +17,11 @@ class CustomerRegistryModel extends Model
     private function normaliseCustomerId(string $customerId): string
     {
         return trim($customerId);
+    }
+
+    private function appModel(): ApplicationModel
+    {
+        return new ApplicationModel();
     }
 
     private function now(): string
@@ -76,10 +82,15 @@ class CustomerRegistryModel extends Model
         return $suffix;
     }
 
-    private function codeAccessExists(string $codeAccess, ?string $ignoreCustomerId = null): bool
+    private function codeAccessExists(string $codeAccess, ?string $ignoreCustomerId = null, ?string $appId = null): bool
     {
         $params = [$codeAccess];
         $sql = 'SELECT Id FROM Customers WHERE CodeAccess = ?';
+
+        if ($appId !== null && $this->appModel()->columnExists('Customers', 'AppId')) {
+            $sql .= ' AND AppId = ?';
+            $params[] = $appId;
+        }
 
         if ($ignoreCustomerId !== null && $ignoreCustomerId !== '') {
             $sql .= ' AND Id <> ?';
@@ -91,12 +102,12 @@ class CustomerRegistryModel extends Model
         return $this->db->fetchOne($sql, $params) !== null;
     }
 
-    private function generateUniqueCodeAccess(string $name, ?string $ignoreCustomerId = null): string
+    private function generateUniqueCodeAccess(string $name, ?string $ignoreCustomerId = null, ?string $appId = null): string
     {
         $base = $this->slugifyCodeAccess($name);
         $candidate = $base;
 
-        while ($this->codeAccessExists($candidate, $ignoreCustomerId)) {
+        while ($this->codeAccessExists($candidate, $ignoreCustomerId, $appId)) {
             $candidate = mb_substr($base, 0, 76) . '_' . $this->randomCodeAccessSuffix();
         }
 
@@ -139,19 +150,32 @@ class CustomerRegistryModel extends Model
         return mb_strtolower(trim($email));
     }
 
-    private function countRecentFailedLoginAttempts(string $emailKey, int $seconds): int
+    private function hasCustomerLoginAttemptAppField(): bool
+    {
+        return $this->appModel()->columnExists('CustomerLoginAttempts', 'AppId');
+    }
+
+    private function countRecentFailedLoginAttempts(string $emailKey, int $seconds, ?string $appId = null): int
     {
         $since = date('Y-m-d H:i:s', time() - $seconds);
+        $where = 'Email = ? AND WasSuccessful = 0 AND CreatedAt >= ?';
+        $params = [$emailKey, $since];
+
+        if ($appId !== null && $this->hasCustomerLoginAttemptAppField()) {
+            // Los intentos fallidos se separan por app porque el email puede repetirse.
+            $where .= ' AND AppId = ?';
+            $params[] = $appId;
+        }
 
         $row = $this->db->fetchOne(
-            'SELECT COUNT(*) AS total FROM CustomerLoginAttempts WHERE Email = ? AND WasSuccessful = 0 AND CreatedAt >= ?',
-            [$emailKey, $since]
+            "SELECT COUNT(*) AS total FROM CustomerLoginAttempts WHERE {$where}",
+            $params
         );
 
         return (int) ($row['total'] ?? 0);
     }
 
-    private function recordLoginAttempt(string $emailKey, ?string $customerId, ?string $deviceName, ?string $ipAddress, bool $wasSuccessful): void
+    private function recordLoginAttempt(string $emailKey, ?string $customerId, ?string $deviceName, ?string $ipAddress, bool $wasSuccessful, ?string $appId = null): void
     {
         $data = [
             'Email' => $emailKey,
@@ -161,6 +185,10 @@ class CustomerRegistryModel extends Model
             'WasSuccessful' => $wasSuccessful ? 1 : 0,
             'CreatedAt' => $this->now(),
         ];
+
+        if ($this->hasCustomerLoginAttemptAppField()) {
+            $data['AppId'] = $appId;
+        }
 
         $this->db->insert('CustomerLoginAttempts', $data);
     }
@@ -332,6 +360,7 @@ class CustomerRegistryModel extends Model
     {
         return [
             'customerId' => $row['Id'],
+            'appId' => $row['AppId'] ?? ApplicationModel::DEFAULT_APP_ID,
             'billingId' => $row['BillingId'] ?? null,
             'planCode' => $row['PlanCode'] ?? null,
             'name' => $row['Name'],
@@ -361,11 +390,19 @@ class CustomerRegistryModel extends Model
         );
     }
 
-    private function findCustomerByEmail(string $email): ?array
+    private function findCustomerByEmail(string $email, ?string $appId = null): ?array
     {
+        $params = [$email];
+        $sql = 'SELECT * FROM Customers WHERE Email = ?';
+
+        if ($appId !== null && $this->appModel()->columnExists('Customers', 'AppId')) {
+            $sql .= ' AND AppId = ?';
+            $params[] = $appId;
+        }
+
         return $this->db->fetchOne(
-            'SELECT * FROM Customers WHERE Email = ?',
-            [$email]
+            $sql,
+            $params
         );
     }
 
@@ -381,13 +418,13 @@ class CustomerRegistryModel extends Model
         return (int) ($row['total'] ?? 0);
     }
 
-    private function assertEmailAvailable(?string $email, ?string $ignoreCustomerId = null): void
+    private function assertEmailAvailable(?string $email, ?string $ignoreCustomerId = null, ?string $appId = null): void
     {
         if ($email === null || $email === '') {
             return;
         }
 
-        $existing = $this->findCustomerByEmail($email);
+        $existing = $this->findCustomerByEmail($email, $appId);
 
         if ($existing === null) {
             return;
@@ -400,13 +437,13 @@ class CustomerRegistryModel extends Model
         throw new \RuntimeException('email_already_registered');
     }
 
-    public function isEmailAvailable(?string $email, ?string $ignoreCustomerId = null): bool
+    public function isEmailAvailable(?string $email, ?string $ignoreCustomerId = null, ?string $appId = null): bool
     {
         if ($email === null || $email === '') {
             return true;
         }
 
-        $existing = $this->findCustomerByEmail($email);
+        $existing = $this->findCustomerByEmail($email, $appId);
 
         if ($existing === null) {
             return true;
@@ -422,9 +459,16 @@ class CustomerRegistryModel extends Model
         return false;
     }
 
-    public function getCustomers(): array
+    public function getCustomers(?string $appId = null): array
     {
-        $rows = $this->db->fetchAll('SELECT * FROM Customers ORDER BY Name ASC, Id ASC');
+        if ($appId !== null && $this->appModel()->columnExists('Customers', 'AppId')) {
+            $rows = $this->db->fetchAll(
+                'SELECT * FROM Customers WHERE AppId = ? ORDER BY Name ASC, Id ASC',
+                [$appId]
+            );
+        } else {
+            $rows = $this->db->fetchAll('SELECT * FROM Customers ORDER BY Name ASC, Id ASC');
+        }
 
         return array_map(fn ($row) => $this->hydrateCustomer($row), $rows);
     }
@@ -478,13 +522,13 @@ class CustomerRegistryModel extends Model
             $codeAccess = $attributes['codeAccess'];
             if ($codeAccess !== null) {
                 $codeAccess = $this->slugifyCodeAccess((string) $codeAccess);
-                if ($this->codeAccessExists($codeAccess, $customerId)) {
+                if ($this->codeAccessExists($codeAccess, $customerId, $existing['AppId'] ?? null)) {
                     throw new \RuntimeException('code_access_already_registered');
                 }
             }
             $update['CodeAccess'] = ($codeAccess === null || $codeAccess === '') ? null : $codeAccess;
         } elseif (array_key_exists('name', $attributes) && !empty($attributes['name']) && empty($existing['CodeAccess'])) {
-            $update['CodeAccess'] = $this->generateUniqueCodeAccess((string) $attributes['name'], $customerId);
+            $update['CodeAccess'] = $this->generateUniqueCodeAccess((string) $attributes['name'], $customerId, $existing['AppId'] ?? null);
         }
 
         if (array_key_exists('billingId', $attributes)) {
@@ -499,7 +543,7 @@ class CustomerRegistryModel extends Model
 
         if (array_key_exists('email', $attributes)) {
             $update['Email'] = $attributes['email'];
-            $this->assertEmailAvailable($update['Email'], $customerId);
+            $this->assertEmailAvailable($update['Email'], $customerId, $existing['AppId'] ?? null);
         }
 
         if (array_key_exists('phone', $attributes)) {
@@ -554,6 +598,7 @@ class CustomerRegistryModel extends Model
 
         $token = $attributes['token'] ?? null;
         $token = ($token === null || $token === '') ? null : $token;
+        $appId = $attributes['appId'] ?? $this->appModel()->getDefaultApp()['id'];
 
         $data = [
             'Id' => $customerId,
@@ -566,7 +611,7 @@ class CustomerRegistryModel extends Model
             'Name' => $attributes['name'] ?? null,
             'CodeAccess' => isset($attributes['codeAccess']) && $attributes['codeAccess'] !== ''
                 ? $this->slugifyCodeAccess((string) $attributes['codeAccess'])
-                : (isset($attributes['name']) && $attributes['name'] !== '' ? $this->generateUniqueCodeAccess((string) $attributes['name'], $customerId) : null),
+                : (isset($attributes['name']) && $attributes['name'] !== '' ? $this->generateUniqueCodeAccess((string) $attributes['name'], $customerId, $appId) : null),
             'Email' => $attributes['email'] ?? null,
             'Phone' => $attributes['phone'] ?? null,
             'DeviceName' => $attributes['deviceName'] ?? null,
@@ -582,11 +627,16 @@ class CustomerRegistryModel extends Model
             'UpdatedAt' => $now,
         ];
 
+        if ($this->appModel()->columnExists('Customers', 'AppId')) {
+            // Customer.AppId es la relacion padre que determina que app sincroniza, factura y muestra al cliente.
+            $data['AppId'] = $appId;
+        }
+
         if ($data['AccessKeyHash'] === null || $data['AccessKeyHash'] === '') {
             throw new \InvalidArgumentException('access_key_hash_required');
         }
 
-        if ($data['CodeAccess'] !== null && $this->codeAccessExists($data['CodeAccess'], $customerId)) {
+        if ($data['CodeAccess'] !== null && $this->codeAccessExists($data['CodeAccess'], $customerId, $appId)) {
             throw new \RuntimeException('code_access_already_registered');
         }
 
@@ -645,8 +695,9 @@ class CustomerRegistryModel extends Model
         $customerId = $specifiedId !== '' ? $specifiedId : $this->generateCustomerId();
 
         $email = isset($payload['email']) && $payload['email'] !== '' ? trim((string) $payload['email']) : null;
+        $appId = $this->appModel()->resolveFromPayload($payload);
 
-        $this->assertEmailAvailable($email, $specifiedId !== '' ? $specifiedId : null);
+        $this->assertEmailAvailable($email, $specifiedId !== '' ? $specifiedId : null, $appId);
 
         if (!isset($payload['privacyAcceptance']) || !is_array($payload['privacyAcceptance'])) {
             throw new \InvalidArgumentException('privacy_acceptance_required');
@@ -677,6 +728,7 @@ class CustomerRegistryModel extends Model
             'token' => isset($payload['token']) ? trim((string) $payload['token']) : null,
             'isActive' => array_key_exists('isActive', $payload) ? (bool) $payload['isActive'] : true,
             'accessKeyHash' => $accessKeyHash,
+            'appId' => $appId,
         ]);
 
         $this->insertPrivacyConsent($customerId, $privacyConsent);
@@ -689,7 +741,7 @@ class CustomerRegistryModel extends Model
         ];
     }
 
-    public function loginWithAccessKey(string $email, string $accessKey, ?string $deviceName = null, ?string $ipAddress = null, ?string $newToken = null): array
+    public function loginWithAccessKey(string $email, string $accessKey, ?string $deviceName = null, ?string $ipAddress = null, ?string $newToken = null, ?string $appId = null): array
     {
         $email = trim((string) $email);
         $accessKey = trim((string) $accessKey);
@@ -706,30 +758,30 @@ class CustomerRegistryModel extends Model
             throw new \InvalidArgumentException('email_and_access_key_required');
         }
 
-        if ($this->countRecentFailedLoginAttempts($emailKey, 3600) >= 5) {
+        if ($this->countRecentFailedLoginAttempts($emailKey, 3600, $appId) >= 5) {
             throw new \RuntimeException('too_many_attempts');
         }
 
-        $row = $this->findCustomerByEmail($email);
+        $row = $this->findCustomerByEmail($email, $appId);
         if ($row === null) {
-            $this->recordLoginAttempt($emailKey, null, $deviceName, $ipAddress, false);
+            $this->recordLoginAttempt($emailKey, null, $deviceName, $ipAddress, false, $appId);
             throw new \RuntimeException('invalid_credentials');
         }
 
         if (empty($row['AccessKeyHash'])) {
-            $this->recordLoginAttempt($emailKey, $row['Id'], $deviceName, $ipAddress, false);
+            $this->recordLoginAttempt($emailKey, $row['Id'], $deviceName, $ipAddress, false, $appId);
             throw new \RuntimeException('invalid_credentials');
         }
 
         $computedHash = $this->hashAccessKey($accessKey);
 
         if (!hash_equals($row['AccessKeyHash'], $computedHash)) {
-            $this->recordLoginAttempt($emailKey, $row['Id'], $deviceName, $ipAddress, false);
+            $this->recordLoginAttempt($emailKey, $row['Id'], $deviceName, $ipAddress, false, $appId);
             throw new \RuntimeException('invalid_credentials');
         }
 
         if (empty($row['WaitingForToken'])) {
-            $this->recordLoginAttempt($emailKey, $row['Id'], $deviceName, $ipAddress, false);
+            $this->recordLoginAttempt($emailKey, $row['Id'], $deviceName, $ipAddress, false, $appId);
             throw new \RuntimeException('customer_not_waiting');
         }
 
@@ -768,7 +820,7 @@ class CustomerRegistryModel extends Model
             );
         }
 
-        $this->recordLoginAttempt($emailKey, $customerId, $deviceName, $ipAddress, true);
+        $this->recordLoginAttempt($emailKey, $customerId, $deviceName, $ipAddress, true, $row['AppId'] ?? $appId);
 
         $fresh = $this->findRawCustomer($customerId);
 
@@ -901,7 +953,7 @@ class CustomerRegistryModel extends Model
             $codeAccess = $attributes['codeAccess'];
             if ($codeAccess !== null) {
                 $codeAccess = $this->slugifyCodeAccess((string) $codeAccess);
-                if ($this->codeAccessExists($codeAccess, $customerId)) {
+                if ($this->codeAccessExists($codeAccess, $customerId, $row['AppId'] ?? null)) {
                     throw new \RuntimeException('code_access_already_registered');
                 }
             }
@@ -914,7 +966,7 @@ class CustomerRegistryModel extends Model
                 $email = trim((string) $email);
             }
             $email = ($email === null || $email === '') ? null : $email;
-            $this->assertEmailAvailable($email, $customerId);
+            $this->assertEmailAvailable($email, $customerId, $row['AppId'] ?? null);
             $update['Email'] = $email;
         }
 
@@ -1060,12 +1112,18 @@ class CustomerRegistryModel extends Model
      * @param bool $includeExpired Si incluir tokens expirados (default: false)
      * @return array Lista de clientes con información de JWT
      */
-    public function getCustomersWithJwt(bool $includeExpired = false): array
+    public function getCustomersWithJwt(bool $includeExpired = false, ?string $appId = null): array
     {
         $query = 'SELECT c.Id, c.Name, c.Email, c.Token, c.TokenJwt, c.TokenJwtCreatedAt, c.TokenJwtExpiresAt, 
                          c.IsActive, c.LastSeen, c.DeviceName
                   FROM Customers c
                   WHERE c.TokenJwt IS NOT NULL';
+        $params = [];
+
+        if ($appId !== null && $this->appModel()->columnExists('Customers', 'AppId')) {
+            $query .= ' AND c.AppId = ?';
+            $params[] = $appId;
+        }
 
         if (!$includeExpired) {
             $query .= ' AND c.TokenJwtExpiresAt > NOW()';
@@ -1073,7 +1131,7 @@ class CustomerRegistryModel extends Model
 
         $query .= ' ORDER BY c.TokenJwtExpiresAt DESC';
 
-        $rows = $this->db->fetchAll($query);
+        $rows = $this->db->fetchAll($query, $params);
 
         return array_map(function ($row) {
             $expiresAt = $row['TokenJwtExpiresAt'] ? strtotime($row['TokenJwtExpiresAt']) : null;
@@ -1100,9 +1158,17 @@ class CustomerRegistryModel extends Model
      * 
      * @return array Estadísticas de tokens
      */
-    public function getJwtStats(): array
+    public function getJwtStats(?string $appId = null): array
     {
         $now = $this->now();
+        $appWhere = '';
+        $params = [$now, $now];
+
+        if ($appId !== null && $this->appModel()->columnExists('Customers', 'AppId')) {
+            // Las estadisticas JWT del admin pertenecen a la app seleccionada.
+            $appWhere = ' AND AppId = ?';
+            $params[] = $appId;
+        }
         
         $stats = $this->db->fetchOne(
             "SELECT 
@@ -1111,8 +1177,8 @@ class CustomerRegistryModel extends Model
                 SUM(CASE WHEN TokenJwt IS NOT NULL AND TokenJwtExpiresAt > ? THEN 1 ELSE 0 END) AS active_jwt,
                 SUM(CASE WHEN TokenJwt IS NOT NULL AND TokenJwtExpiresAt <= ? THEN 1 ELSE 0 END) AS expired_jwt
              FROM Customers
-             WHERE IsActive = 1",
-            [$now, $now]
+             WHERE IsActive = 1{$appWhere}",
+            $params
         );
 
         return [

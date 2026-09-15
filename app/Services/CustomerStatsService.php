@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use Core\Model;
+use Models\ApplicationModel;
 
 require_once __DIR__ . '/../Core/Model.php';
+require_once __DIR__ . '/../Models/ApplicationModel.php';
 
 /**
  * Servicio para obtener estadísticas de clientes desde las tablas desktop.
@@ -63,10 +65,17 @@ class CustomerStatsService extends Model
     /**
      * Obtiene estadísticas de todos los clientes registrados.
      */
-    public function getAllCustomersStats(): array
+    public function getAllCustomersStats(?string $appId = null): array
     {
         try {
-            $customers = $this->db->fetchAll('SELECT Id, Name, Email, PlanCode, IsActive, LastSeen, CreatedAt FROM Customers ORDER BY Name ASC');
+            if ($appId !== null && (new ApplicationModel())->columnExists('Customers', 'AppId')) {
+                $customers = $this->db->fetchAll(
+                    'SELECT Id, AppId, Name, Email, PlanCode, IsActive, LastSeen, CreatedAt FROM Customers WHERE AppId = ? ORDER BY Name ASC',
+                    [$appId]
+                );
+            } else {
+                $customers = $this->db->fetchAll('SELECT Id, Name, Email, PlanCode, IsActive, LastSeen, CreatedAt FROM Customers ORDER BY Name ASC');
+            }
         } catch (\Throwable $e) {
             error_log('CustomerStatsService getAllCustomersStats error: ' . $e->getMessage());
             return [];
@@ -84,6 +93,7 @@ class CustomerStatsService extends Model
             $result[] = [
                 'customer' => [
                     'customerId' => $customer['Id'] ?? '',
+                    'appId' => $customer['AppId'] ?? ApplicationModel::DEFAULT_APP_ID,
                     'name' => $customer['Name'] ?? '',
                     'email' => $customer['Email'] ?? '',
                     'planCode' => $customer['PlanCode'] ?? null,
@@ -101,18 +111,19 @@ class CustomerStatsService extends Model
     /**
      * Obtiene resumen global de estadísticas.
      */
-    public function getGlobalStats(): array
+    public function getGlobalStats(?string $appId = null): array
     {
+        $customerIds = $this->customerIdsForApp($appId);
         return [
-            'totalCustomers' => $this->countTotalCustomers(),
-            'activeCustomers' => $this->countActiveCustomers(),
-            'totalUsers' => $this->countAllUsers(),
-            'totalSubscriptions' => $this->countAllSubscriptions(),
-            'totalActiveSubscriptions' => $this->countAllActiveSubscriptions(),
-            'totalProducts' => $this->countAllProducts(),
-            'totalAttendances' => $this->countAllAttendances(),
-            'todayAttendances' => $this->countAllTodayAttendances(),
-            'monthlyMessages' => $this->countAllMonthlyMessages(),
+            'totalCustomers' => $this->countTotalCustomers($appId),
+            'activeCustomers' => $this->countActiveCustomers($appId),
+            'totalUsers' => $this->sumForCustomers($customerIds, fn(string $id): int => $this->countUsers($id)),
+            'totalSubscriptions' => $this->sumForCustomers($customerIds, fn(string $id): int => $this->countTotalSubscriptions($id)),
+            'totalActiveSubscriptions' => $this->sumForCustomers($customerIds, fn(string $id): int => $this->countActiveSubscriptions($id)),
+            'totalProducts' => $this->sumForCustomers($customerIds, fn(string $id): int => $this->countProducts($id)),
+            'totalAttendances' => $this->sumForCustomers($customerIds, fn(string $id): int => $this->countAttendances($id)),
+            'todayAttendances' => $this->sumForCustomers($customerIds, fn(string $id): int => $this->countTodayAttendances($id)),
+            'monthlyMessages' => $this->sumForCustomers($customerIds, fn(string $id): int => $this->countMessagesSentThisMonth($id)),
         ];
     }
 
@@ -202,14 +213,43 @@ class CustomerStatsService extends Model
     // Métodos de conteo global
     // =============================================
 
-    private function countTotalCustomers(): int
+    private function countTotalCustomers(?string $appId = null): int
     {
+        if ($appId !== null && (new ApplicationModel())->columnExists('Customers', 'AppId')) {
+            return $this->safeCount('SELECT COUNT(*) AS total FROM Customers WHERE AppId = ?', [$appId]);
+        }
+
         return $this->safeCount('SELECT COUNT(*) AS total FROM Customers');
     }
 
-    private function countActiveCustomers(): int
+    private function countActiveCustomers(?string $appId = null): int
     {
+        if ($appId !== null && (new ApplicationModel())->columnExists('Customers', 'AppId')) {
+            return $this->safeCount('SELECT COUNT(*) AS total FROM Customers WHERE AppId = ? AND IsActive = 1', [$appId]);
+        }
+
         return $this->safeCount('SELECT COUNT(*) AS total FROM Customers WHERE IsActive = 1');
+    }
+
+    private function customerIdsForApp(?string $appId): array
+    {
+        if ($appId === null || !(new ApplicationModel())->columnExists('Customers', 'AppId')) {
+            $rows = $this->db->fetchAll('SELECT Id FROM Customers');
+        } else {
+            $rows = $this->db->fetchAll('SELECT Id FROM Customers WHERE AppId = ?', [$appId]);
+        }
+
+        return array_values(array_filter(array_column($rows, 'Id')));
+    }
+
+    private function sumForCustomers(array $customerIds, callable $counter): int
+    {
+        $total = 0;
+        foreach ($customerIds as $customerId) {
+            $total += $counter($customerId);
+        }
+
+        return $total;
     }
 
     private function countAllUsers(): int

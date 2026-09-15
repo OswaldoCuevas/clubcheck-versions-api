@@ -1,19 +1,9 @@
 <?php
-$title = 'Anuncios - ClubCheck';
+$title = 'Anuncios';
 ob_start();
 ?>
 
 <div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-            <h3 class="mb-1"><i class="fas fa-bullhorn me-2"></i>Anuncios</h3>
-            <div class="text-muted">Solo un anuncio puede estar activo a la vez.</div>
-        </div>
-        <a href="<?= app_url('/admin') ?>" class="btn btn-outline-secondary">
-            <i class="fas fa-arrow-left me-2"></i>Panel
-        </a>
-    </div>
-
     <div id="alertBox"></div>
 
     <div class="row g-4">

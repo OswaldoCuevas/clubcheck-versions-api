@@ -3,6 +3,7 @@
 namespace Models;
 
 require_once __DIR__ . '/../Core/Model.php';
+require_once __DIR__ . '/ApplicationModel.php';
 
 use Core\Model;
 
@@ -329,27 +330,35 @@ class WhatsAppConfigurationModel extends Model
     /**
      * Get all active configurations with customer info
      */
-    public function getAllActiveWithCustomerInfo(): array
+    public function getAllActiveWithCustomerInfo(?string $appId = null): array
     {
+        $appFilter = $appId !== null && (new ApplicationModel())->columnExists('Customers', 'AppId') ? 'AND c.AppId = ?' : '';
+        $params = $appFilter !== '' ? [$appId] : [];
         return $this->db->fetchAll(
             "SELECT wc.*, c.Name AS CustomerName, c.Email AS CustomerEmail
              FROM {$this->table} wc
              INNER JOIN Customers c ON c.Id = wc.CustomerId
              WHERE wc.IsActive = 1
-             ORDER BY c.Name ASC"
+             {$appFilter}
+             ORDER BY c.Name ASC",
+            $params
         );
     }
 
     /**
      * Get all configurations (including inactive) with customer info
      */
-    public function getAllWithCustomerInfo(): array
+    public function getAllWithCustomerInfo(?string $appId = null): array
     {
+        $where = $appId !== null && (new ApplicationModel())->columnExists('Customers', 'AppId') ? 'WHERE c.AppId = ?' : '';
+        $params = $where !== '' ? [$appId] : [];
         return $this->db->fetchAll(
             "SELECT wc.*, c.Name AS CustomerName, c.Email AS CustomerEmail
              FROM {$this->table} wc
              INNER JOIN Customers c ON c.Id = wc.CustomerId
-             ORDER BY wc.CreatedAt DESC"
+             {$where}
+             ORDER BY wc.CreatedAt DESC",
+            $params
         );
     }
 

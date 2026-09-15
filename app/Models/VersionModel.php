@@ -3,39 +3,52 @@
 namespace Models;
 
 require_once __DIR__ . '/../Core/Model.php';
+require_once __DIR__ . '/ApplicationModel.php';
 
 use Core\Model;
+use Models\ApplicationModel;
 
 class VersionModel extends Model
 {
-    /**
-     * Obtener la versión más reciente de la aplicación
-     */
-    public function getLatestVersion()
+    private function appModel(): ApplicationModel
     {
-        $sql = "SELECT `Id`, `Name`, `Url`, `Sha256`, `SetupUrl`, `SetupSha256`, `SetupFileSize`, `IsMandatory`, `ReleaseNotes`, `UploadDate` 
-                FROM `AppVersions` 
-                ORDER BY `UploadDate` DESC, `Id` DESC 
-                LIMIT 1";
-        
-        $result = $this->db->query($sql);
-        
-        if ($result && $row = $result->fetch_assoc()) {
-            return [
-                'latestVersion' => $row['Name'],
-                'url' => $row['Url'],
-                'sha256' => $row['Sha256'],
-                'setupUrl' => $row['SetupUrl'],
-                'setupSha256' => $row['SetupSha256'],
-                'setupFileSize' => $row['SetupFileSize'],
-                'mandatory' => (bool) $row['IsMandatory'],
-                'releaseNotes' => $row['ReleaseNotes'],
-                'uploadDate' => $row['UploadDate'],
-                'timestamp' => $row['UploadDate']
-            ];
+        return new ApplicationModel();
+    }
+
+    private function hasAppField(): bool
+    {
+        return $this->appModel()->columnExists('AppVersions', 'AppId');
+    }
+
+    private function resolveAppId(?string $appId): string
+    {
+        return $appId ?: $this->appModel()->getDefaultApp()['id'];
+    }
+
+    public function getLatestVersion(?string $appId = null): array
+    {
+        $hasAppField = $this->hasAppField();
+        $where = '';
+        $params = [];
+
+        if ($hasAppField) {
+            // Las versiones son por app; sin migracion se conserva el comportamiento global anterior.
+            $where = 'WHERE `AppId` = ?';
+            $params[] = $this->resolveAppId($appId);
         }
-        
-        // Si no hay versión, retornar valores por defecto
+
+        $sql = "SELECT `Id`, `Name`, `Url`, `Sha256`, `SetupUrl`, `SetupSha256`, `SetupFileSize`, `IsMandatory`, `ReleaseNotes`, `UploadDate`"
+            . ($hasAppField ? ', `AppId`' : '')
+            . " FROM `AppVersions`
+                {$where}
+                ORDER BY `UploadDate` DESC, `Id` DESC
+                LIMIT 1";
+
+        $row = $this->db->fetchOne($sql, $params);
+        if ($row) {
+            return $this->mapVersion($row);
+        }
+
         return [
             'latestVersion' => '0.0.0.0',
             'url' => '',
@@ -46,31 +59,47 @@ class VersionModel extends Model
             'mandatory' => false,
             'releaseNotes' => '',
             'uploadDate' => null,
-            'timestamp' => null
+            'timestamp' => null,
+            'appId' => $this->resolveAppId($appId),
         ];
     }
-    
-    /**
-     * Guardar o actualizar una versión
-     */
-    public function saveVersion($version, $url, $sha256, $isMandatory, $releaseNotes, $uploadDate, $setupUrl = '', $setupSha256 = '', $setupFileSize = null)
-    {
-        // Escapar valores
-        $name = $this->db->escape_string($version);
-        $url = $this->db->escape_string($url);
-        $sha256 = $this->db->escape_string($sha256);
-        $setupUrl = $this->db->escape_string($setupUrl);
-        $setupSha256 = $this->db->escape_string($setupSha256);
-        $setupFileSize = $setupFileSize ? intval($setupFileSize) : 'NULL';
-        $isMandatory = $isMandatory ? 1 : 0;
-        $releaseNotes = $this->db->escape_string($releaseNotes);
-        $uploadDate = $this->db->escape_string($uploadDate);
-        
-        // Insertar o actualizar si la versión ya existe
-        $sql = "INSERT INTO `AppVersions` 
-                (`Name`, `Url`, `Sha256`, `SetupUrl`, `SetupSha256`, `SetupFileSize`, `IsMandatory`, `ReleaseNotes`, `UploadDate`) 
-                VALUES 
-                ('$name', '$url', '$sha256', '$setupUrl', '$setupSha256', $setupFileSize, $isMandatory, '$releaseNotes', '$uploadDate')
+
+    public function saveVersion(
+        $version,
+        $url,
+        $sha256,
+        $isMandatory,
+        $releaseNotes,
+        $uploadDate,
+        $setupUrl = '',
+        $setupSha256 = '',
+        $setupFileSize = null,
+        ?string $appId = null
+    ): bool {
+        $columns = ['Name', 'Url', 'Sha256', 'SetupUrl', 'SetupSha256', 'SetupFileSize', 'IsMandatory', 'ReleaseNotes', 'UploadDate'];
+        $params = [
+            $version,
+            $url,
+            $sha256,
+            $setupUrl,
+            $setupSha256,
+            $setupFileSize ? (int) $setupFileSize : null,
+            $isMandatory ? 1 : 0,
+            $releaseNotes,
+            $uploadDate,
+        ];
+
+        if ($this->hasAppField()) {
+            array_unshift($columns, 'AppId');
+            array_unshift($params, $this->resolveAppId($appId));
+        }
+
+        $fields = '`' . implode('`, `', $columns) . '`';
+        $placeholders = implode(', ', array_fill(0, count($columns), '?'));
+
+        $sql = "INSERT INTO `AppVersions`
+                ({$fields})
+                VALUES ({$placeholders})
                 ON DUPLICATE KEY UPDATE
                 `Url` = VALUES(`Url`),
                 `Sha256` = VALUES(`Sha256`),
@@ -80,51 +109,63 @@ class VersionModel extends Model
                 `IsMandatory` = VALUES(`IsMandatory`),
                 `ReleaseNotes` = VALUES(`ReleaseNotes`),
                 `UploadDate` = VALUES(`UploadDate`)";
-        
-        return $this->db->query($sql);
+
+        $this->db->execute_query($sql, $params);
+        return true;
     }
-    
-    /**
-     * Verificar si una versión existe
-     */
-    public function versionExists($version)
+
+    public function versionExists($version, ?string $appId = null): bool
     {
-        $name = $this->db->escape_string($version);
-        $sql = "SELECT `Id` FROM `AppVersions` WHERE `Name` = '$name' LIMIT 1";
-        $result = $this->db->query($sql);
-        
-        return $result && $result->num_rows > 0;
-    }
-    
-    /**
-     * Obtener una versión específica
-     */
-    public function getVersion($version)
-    {
-        $name = $this->db->escape_string($version);
-        $sql = "SELECT `Id`, `Name`, `Url`, `Sha256`, `SetupUrl`, `SetupSha256`, `SetupFileSize`, `IsMandatory`, `ReleaseNotes`, `UploadDate` 
-                FROM `AppVersions` 
-                WHERE `Name` = '$name' 
-                LIMIT 1";
-        
-        $result = $this->db->query($sql);
-        
-        if ($result && $row = $result->fetch_assoc()) {
-            return [
-                'id' => $row['Id'],
-                'latestVersion' => $row['Name'],
-                'url' => $row['Url'],
-                'sha256' => $row['Sha256'],
-                'setupUrl' => $row['SetupUrl'],
-                'setupSha256' => $row['SetupSha256'],
-                'setupFileSize' => $row['SetupFileSize'],
-                'mandatory' => (bool) $row['IsMandatory'],
-                'releaseNotes' => $row['ReleaseNotes'],
-                'uploadDate' => $row['UploadDate'],
-                'timestamp' => $row['UploadDate']
-            ];
+        $where = '`Name` = ?';
+        $params = [$version];
+
+        if ($this->hasAppField()) {
+            $where .= ' AND `AppId` = ?';
+            $params[] = $this->resolveAppId($appId);
         }
-        
-        return null;
+
+        $row = $this->db->fetchOne("SELECT `Id` FROM `AppVersions` WHERE {$where} LIMIT 1", $params);
+
+        return $row !== null;
+    }
+
+    public function getVersion($version, ?string $appId = null): ?array
+    {
+        $hasAppField = $this->hasAppField();
+        $where = '`Name` = ?';
+        $params = [$version];
+
+        if ($hasAppField) {
+            $where .= ' AND `AppId` = ?';
+            $params[] = $this->resolveAppId($appId);
+        }
+
+        $sql = "SELECT `Id`, `Name`, `Url`, `Sha256`, `SetupUrl`, `SetupSha256`, `SetupFileSize`, `IsMandatory`, `ReleaseNotes`, `UploadDate`"
+            . ($hasAppField ? ', `AppId`' : '')
+            . " FROM `AppVersions`
+                WHERE {$where}
+                LIMIT 1";
+
+        $row = $this->db->fetchOne($sql, $params);
+
+        return $row ? $this->mapVersion($row) : null;
+    }
+
+    private function mapVersion(array $row): array
+    {
+        return [
+            'id' => $row['Id'],
+            'latestVersion' => $row['Name'],
+            'url' => $row['Url'],
+            'sha256' => $row['Sha256'],
+            'setupUrl' => $row['SetupUrl'],
+            'setupSha256' => $row['SetupSha256'],
+            'setupFileSize' => $row['SetupFileSize'],
+            'mandatory' => (bool) $row['IsMandatory'],
+            'releaseNotes' => $row['ReleaseNotes'],
+            'uploadDate' => $row['UploadDate'],
+            'timestamp' => $row['UploadDate'],
+            'appId' => $row['AppId'] ?? $this->appModel()->getDefaultApp()['id'],
+        ];
     }
 }

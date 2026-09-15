@@ -3,6 +3,7 @@
 namespace Models;
 
 require_once __DIR__ . '/../Core/Model.php';
+require_once __DIR__ . '/ApplicationModel.php';
 
 use Core\Model;
 
@@ -418,8 +419,16 @@ class CustomerIpLogModel extends Model
     /**
      * Obtiene resumen de accesos por cliente para el panel de admin
      */
-    public function getCustomerIpSummary(): array
+    public function getCustomerIpSummary(?string $appId = null): array
     {
+        $appWhere = '';
+        $params = [];
+        if ($appId !== null && (new ApplicationModel())->columnExists('Customers', 'AppId')) {
+            // El resumen admin de IPs se limita a los clientes de la app seleccionada.
+            $appWhere = 'AND c.AppId = ?';
+            $params[] = $appId;
+        }
+
         $rows = $this->db->fetchAll(
             'SELECT 
                 c.Id AS CustomerId,
@@ -439,8 +448,10 @@ class CustomerIpLogModel extends Model
              FROM Customers c
              LEFT JOIN CustomerIpLogs ipl ON ipl.CustomerId = c.Id AND ipl.IsActive = 1
              WHERE c.IsActive = 1
+             ' . $appWhere . '
              GROUP BY c.Id, c.Name, c.Email, c.DeviceName, c.Token, c.TokenJwt, c.TokenJwtExpiresAt, c.IsActive, c.LastSeen
-             ORDER BY c.Name ASC'
+             ORDER BY c.Name ASC',
+            $params
         );
         
         return array_map(function($row) {

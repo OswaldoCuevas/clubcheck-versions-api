@@ -1,5 +1,5 @@
 <?php
-$title = 'Historial de Descargas - ClubCheck';
+$title = 'Historial de Descargas';
 
 ob_start();
 ?>
@@ -7,18 +7,8 @@ ob_start();
 <div class="container mt-4">
     <div class="row justify-content-center">
         <div class="col-12">
-            <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-                <div>
-                    <h3 class="mb-1">
-                        <i class="fas fa-download me-2"></i>
-                        Historial de Descargas
-                    </h3>
-                    <p class="text-muted mb-0">Registro de todas las descargas de archivos ejecutables agrupadas por IP.</p>
-                </div>
+            <div class="d-flex flex-wrap justify-content-end align-items-center mb-3 gap-2">
                 <div class="d-flex gap-2">
-                    <a href="<?= app_url('/admin') ?>" class="btn btn-outline-secondary">
-                        <i class="fas fa-arrow-left me-2"></i>Volver al panel
-                    </a>
                     <button type="button" class="btn btn-outline-secondary" id="refreshDownloads">
                         <i class="fas fa-rotate"></i>
                         Actualizar

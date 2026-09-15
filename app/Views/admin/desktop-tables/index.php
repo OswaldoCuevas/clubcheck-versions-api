@@ -1,5 +1,5 @@
 <?php
-$title = 'Tablas Desktop - ClubCheck';
+$title = 'Tablas Desktop';
 
 ob_start();
 ?>
@@ -7,17 +7,7 @@ ob_start();
 <div class="container mt-4">
     <div class="row justify-content-center">
         <div class="col-12">
-            <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
-                <div>
-                    <h3 class="mb-1"><i class="fas fa-database me-2"></i>Tablas Desktop</h3>
-                    <p class="text-muted mb-0">Consulta y visualiza los datos de las tablas desktop. Puedes elegir cliente antes o dentro de cada tabla.</p>
-                </div>
-                <div class="d-flex gap-2">
-                    <a href="<?= app_url('/admin') ?>" class="btn btn-outline-secondary">
-                        <i class="fas fa-arrow-left me-2"></i>Volver al panel
-                    </a>
-                </div>
-            </div>
+
 
             <!-- Filtro de clientes -->
             <div class="card shadow-sm mb-4">
@@ -32,7 +22,7 @@ ob_start();
                                 <option value="">Abrir sin cliente seleccionado...</option>
                                 <?php foreach ($customers as $customer): ?>
                                     <option value="<?= htmlspecialchars($customer['customerId']) ?>">
-                                        <?= htmlspecialchars($customer['name']) ?> 
+                                        <?= htmlspecialchars($customer['name']) ?>
                                         (<?= htmlspecialchars($customer['customerId']) ?>)
                                     </option>
                                 <?php endforeach; ?>
@@ -67,7 +57,7 @@ ob_start();
                                 <p class="card-text text-muted small mb-3 flex-grow-1">
                                     <?= htmlspecialchars($tableInfo['description']) ?>
                                 </p>
-                                <a href="#" class="btn btn-outline-primary btn-sm view-table-btn" 
+                                <a href="#" class="btn btn-outline-primary btn-sm view-table-btn"
                                    data-table="<?= htmlspecialchars($tableKey) ?>">
                                     <i class="fas fa-eye me-1"></i>Ver datos
                                 </a>
@@ -109,7 +99,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Manejar cambio de filtro de cliente
     customerFilter.addEventListener('change', function() {
         currentCustomerId = this.value;
-        
+
         if (currentCustomerId) {
             const selectedOption = this.options[this.selectedIndex];
             selectedCustomerName.textContent = selectedOption.text;
@@ -131,7 +121,7 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.addEventListener('click', function(e) {
             e.preventDefault();
             const tableKey = this.getAttribute('data-table');
-            
+
             // Redirigir a la vista de la tabla
             let url = '<?= app_url('/admin/desktop-tables/view') ?>?table=' + encodeURIComponent(tableKey);
             if (currentCustomerId) {

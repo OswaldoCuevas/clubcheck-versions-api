@@ -49,6 +49,11 @@ abstract class BaseDesktopSyncModel extends Model
     return $this->db->fetchAll($sql, $params);
     }
 
+    public function getTableName(): string
+    {
+        return $this->table;
+    }
+
     public function push(string $customerApiId, array $records): array
     {
         $customerApiId = trim($customerApiId);

@@ -11,6 +11,7 @@ use Models\DownloadLogModel;
 use Models\LicenseLogModel;
 use Models\AnnouncementModel;
 use Models\StripePlanModel;
+use Models\ApplicationModel;
 use App\Services\WhatsAppService;
 use App\Enums\WhatsAppEvent;
 use App\Services\CustomerStatsService;
@@ -27,6 +28,7 @@ require_once __DIR__ . '/../Models/DownloadLogModel.php';
 require_once __DIR__ . '/../Models/LicenseLogModel.php';
 require_once __DIR__ . '/../Models/AnnouncementModel.php';
 require_once __DIR__ . '/../Models/StripePlanModel.php';
+require_once __DIR__ . '/../Models/ApplicationModel.php';
 require_once __DIR__ . '/../Services/WhatsAppService.php';
 require_once __DIR__ . '/../enums/WhatsAppEvent.php';
 require_once __DIR__ . '/../Services/CustomerStatsService.php';
@@ -36,20 +38,130 @@ require_once __DIR__ . '/../Services/LicenseService.php';
 
 class AdminController extends Controller
 {
+    private function applicationModel(): ApplicationModel
+    {
+        return new ApplicationModel();
+    }
+
+    private function selectedAppId(): string
+    {
+        // El contexto en sesion separa la informacion administrativa por aplicacion.
+        return $this->applicationModel()->getSelectedApp()['id'];
+    }
+
+    private function selectedStripeService(): StripeService
+    {
+        return $this->makeStripeService($this->applicationModel()->getStripeConfig($this->selectedAppId()));
+    }
+
     public function index()
     {
         // Requerir permisos de administrador
         $this->requirePermission('admin_access');
 
-        $currentUser = $this->userModel->getCurrentUser();
+        $this->redirect('/admin/dashboard');
+    }
+
+    public function selectApplication(): void
+    {
+        $this->requirePermission('admin_access');
+
+        $appId = trim((string)($_POST['appId'] ?? $_GET['appId'] ?? ''));
+        $redirect = trim((string)($_POST['redirect'] ?? $_GET['redirect'] ?? '/admin/dashboard'));
+        $redirect = str_starts_with($redirect, '/admin') ? $redirect : '/admin/dashboard';
+
+        $this->applicationModel()->setSelectedApp($appId);
+        $this->redirect($redirect);
+    }
+
+    public function applications(): void
+    {
+        $this->requirePermission('admin_access');
+
+        $model = $this->applicationModel();
+        $selectedApp = $model->getSelectedApp();
 
         $data = [
-            'currentUser' => $currentUser,
-            'title' => 'Panel Administrativo - ClubCheck',
+            'currentUser' => $this->userModel->getCurrentUser(),
+            'title' => 'Aplicaciones',
             'isAuthenticated' => true,
+            'multiAppReady' => $model->isReady(),
+            'missingMultiAppTables' => $model->missingTables(),
+            'apps' => $model->all(false),
+            'selectedApp' => $selectedApp,
+            'settings' => $model->getSettings($selectedApp['id'], true),
+            'syncTables' => $model->syncTables($selectedApp['id'], []),
         ];
 
-        $this->view('admin/index', $data);
+        $this->view('admin/applications', $data);
+    }
+
+    public function saveApplication(): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        try {
+            $app = $this->applicationModel()->save([
+                'id' => $_POST['id'] ?? '',
+                'name' => $_POST['name'] ?? '',
+                'slug' => $_POST['slug'] ?? '',
+                'iconClass' => $_POST['iconClass'] ?? '',
+                'color' => $_POST['color'] ?? '',
+                'description' => $_POST['description'] ?? '',
+                'isActive' => isset($_POST['isActive']),
+            ]);
+            $this->applicationModel()->setSelectedApp($app['id']);
+            $this->redirect('/admin/applications');
+        } catch (\Throwable $e) {
+            $_SESSION['admin_flash_error'] = $e->getMessage();
+            $this->redirect('/admin/applications');
+        }
+    }
+
+    public function saveApplicationSettings(): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $appId = trim((string)($_POST['appId'] ?? $this->selectedAppId()));
+
+        try {
+            // Las credenciales quedan por app; valores vacios mantienen fallback al .env actual.
+            $this->applicationModel()->saveSettings($appId, $_POST['settings'] ?? []);
+            $_SESSION['admin_flash_success'] = 'Configuracion guardada.';
+        } catch (\Throwable $e) {
+            $_SESSION['admin_flash_error'] = $e->getMessage();
+        }
+
+        $this->redirect('/admin/applications');
+    }
+
+    public function saveApplicationSyncTables(): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $appId = trim((string)($_POST['appId'] ?? $this->selectedAppId()));
+
+        try {
+            // Este catalogo decide que bulks participan en pull/push para clientes de la app.
+            $this->applicationModel()->saveSyncTables($appId, $_POST['sync'] ?? []);
+            $_SESSION['admin_flash_success'] = 'Tablas de sincronizacion actualizadas.';
+        } catch (\Throwable $e) {
+            $_SESSION['admin_flash_error'] = $e->getMessage();
+        }
+
+        $this->redirect('/admin/applications');
     }
 
     public function customers()
@@ -58,11 +170,11 @@ class AdminController extends Controller
 
         $currentUser = $this->userModel->getCurrentUser();
         $registry = new CustomerRegistryModel();
-        $customers = $registry->getCustomers();
+        $customers = $registry->getCustomers($this->selectedAppId());
 
         $data = [
             'currentUser' => $currentUser,
-            'title' => 'Clientes - ClubCheck',
+            'title' => 'Clientes',
             'customers' => $customers,
             'isAuthenticated' => true,
         ];
@@ -85,13 +197,14 @@ class AdminController extends Controller
             'codeAccess' => $_GET['codeAccess'] ?? '',
             'from' => $_GET['from'] ?? '',
             'to' => $_GET['to'] ?? '',
+            'appId' => $this->selectedAppId(),
         ];
 
         $data = [
             'currentUser' => $currentUser,
-            'title' => 'Intentos de Login Web - ClubCheck',
+            'title' => 'Intentos de Login Web',
             'attempts' => $attemptModel->getAttempts($filters, $page, $perPage),
-            'summary' => $attemptModel->getSummary(),
+            'summary' => $attemptModel->getSummary($this->selectedAppId()),
             'filters' => $filters,
             'isAuthenticated' => true,
         ];
@@ -120,11 +233,12 @@ class AdminController extends Controller
             'codeAccess' => $_GET['codeAccess'] ?? '',
             'from' => $_GET['from'] ?? '',
             'to' => $_GET['to'] ?? '',
+            'appId' => $this->selectedAppId(),
         ];
 
         $this->json([
             'attempts' => $attemptModel->getAttempts($filters, $page, $perPage),
-            'summary' => $attemptModel->getSummary(),
+            'summary' => $attemptModel->getSummary($this->selectedAppId()),
             'generatedAt' => date('Y-m-d H:i:s'),
         ]);
     }
@@ -142,7 +256,7 @@ class AdminController extends Controller
         }
 
         $registry = new CustomerRegistryModel();
-        $customers = $registry->getCustomers();
+        $customers = $registry->getCustomers($this->selectedAppId());
 
         $this->json([
             'count' => count($customers),
@@ -333,6 +447,9 @@ class AdminController extends Controller
             if ($customerId === '') {
                 $customerId = $this->generateCustomerId();
             }
+
+            // Los clientes creados desde admin pertenecen a la app seleccionada en el layout.
+            $attributes['appId'] = $this->selectedAppId();
         }
 
         try {
@@ -397,7 +514,7 @@ class AdminController extends Controller
 
         $data = [
             'currentUser' => $this->userModel->getCurrentUser(),
-            'title' => 'Anuncios - ClubCheck',
+            'title' => 'Anuncios',
             'isAuthenticated' => true,
         ];
 
@@ -416,7 +533,7 @@ class AdminController extends Controller
         }
 
         $model = new AnnouncementModel();
-        $this->json(['announcements' => $model->getAll()]);
+        $this->json(['announcements' => $model->getAll($this->selectedAppId())]);
     }
 
     public function announcementSaveJson(): void
@@ -435,7 +552,7 @@ class AdminController extends Controller
 
         try {
             $model = new AnnouncementModel();
-            $announcement = $model->save($payload, $currentUser['username'] ?? null);
+            $announcement = $model->save($payload, $currentUser['username'] ?? null, $this->selectedAppId());
             $this->json(['success' => true, 'announcement' => $announcement]);
         } catch (\InvalidArgumentException $e) {
             $this->json(['error' => $e->getMessage()], 422);
@@ -457,12 +574,12 @@ class AdminController extends Controller
         }
 
         $model = new AnnouncementModel();
-        $announcement = $model->find($id);
+        $announcement = $model->find($id, $this->selectedAppId());
         if (!$announcement) {
             $this->json(['error' => 'Anuncio no encontrado'], 404);
         }
 
-        $views = $model->viewsForAnnouncement($id);
+        $views = $model->viewsForAnnouncement($id, $this->selectedAppId());
         $this->json([
             'announcement' => $announcement,
             'count' => count($views),
@@ -480,7 +597,7 @@ class AdminController extends Controller
 
         $model = new AnnouncementModel();
         $currentUser = $this->userModel->getCurrentUser();
-        $announcement = $model->activate($id, $currentUser['username'] ?? null);
+        $announcement = $model->activate($id, $currentUser['username'] ?? null, $this->selectedAppId());
         if (!$announcement) {
             $this->json(['error' => 'Anuncio no encontrado'], 404);
         }
@@ -497,7 +614,7 @@ class AdminController extends Controller
         }
 
         $model = new AnnouncementModel();
-        if (!$model->deleteById($id)) {
+        if (!$model->deleteById($id, $this->selectedAppId())) {
             $this->json(['error' => 'Anuncio no encontrado'], 404);
         }
 
@@ -551,7 +668,7 @@ class AdminController extends Controller
         $sections = [
             [
                 'title' => 'Clientes y tokens',
-                'description' => 'Administración de registros persistentes para cada instalación del escritorio ClubCheck.',
+                'description' => 'Administración de registros persistentes para cada instalación del escritorio.',
                 'endpoints' => [
                     [
                         'method' => 'GET',
@@ -598,7 +715,7 @@ class AdminController extends Controller
                                 'documentUrl' => 'https://clubcheck.mx/legal/privacidad-2025.pdf',
                                 'ipAddress' => '203.0.113.45',
                                 'acceptedAt' => '2025-10-10T11:31:22Z',
-                                'userAgent' => 'ClubCheck Desktop 2.5.0',
+                                'userAgent' => 'Desktop App 2.5.0',
                             ],
                         ],
                         'responseExample' => [
@@ -1036,7 +1153,7 @@ class AdminController extends Controller
 
         $data = [
             'currentUser' => $currentUser,
-            'title' => 'API Endpoints - ClubCheck',
+            'title' => 'API Endpoints',
             'sections' => $sections,
             'isAuthenticated' => true,
         ];
@@ -1056,11 +1173,11 @@ class AdminController extends Controller
 
         $currentUser = $this->userModel->getCurrentUser();
         $registry = new CustomerRegistryModel();
-        $customers = $registry->getCustomers();
+        $customers = $registry->getCustomers($this->selectedAppId());
 
         $data = [
             'currentUser' => $currentUser,
-            'title' => 'Configuración WhatsApp - ClubCheck',
+            'title' => 'WhatsApp Business',
             'customers' => $customers,
             'isAuthenticated' => true,
         ];
@@ -1085,7 +1202,7 @@ class AdminController extends Controller
         }
 
         $configModel = new WhatsAppConfigurationModel();
-        $configs = $configModel->getAllWithCustomerInfo();
+        $configs = $configModel->getAllWithCustomerInfo($this->selectedAppId());
 
         $this->json([
             'success' => true,
@@ -1379,7 +1496,7 @@ class AdminController extends Controller
 
         $data = [
             'currentUser' => $currentUser,
-            'title' => 'Tokens JWT - ClubCheck',
+            'title' => 'Tokens JWT',
             'isAuthenticated' => true,
         ];
 
@@ -1408,10 +1525,10 @@ class AdminController extends Controller
         $ipLogModel = new \Models\CustomerIpLogModel();
 
         // Obtener estadísticas de JWT
-        $stats = $registry->getJwtStats();
+        $stats = $registry->getJwtStats($this->selectedAppId());
 
         // Obtener resumen de clientes con IPs
-        $customerSummary = $ipLogModel->getCustomerIpSummary();
+        $customerSummary = $ipLogModel->getCustomerIpSummary($this->selectedAppId());
 
         $this->json([
             'success' => true,
@@ -1442,6 +1559,11 @@ class AdminController extends Controller
 
         if ($customerId === '') {
             $this->json(['error' => 'customerId es obligatorio'], 422);
+        }
+        $registry = new CustomerRegistryModel();
+        $customer = $registry->getCustomer($customerId);
+        if (!$customer || (($customer['appId'] ?? $this->selectedAppId()) !== $this->selectedAppId())) {
+            $this->json(['error' => 'Cliente no pertenece a la app seleccionada'], 403);
         }
 
         require_once __DIR__ . '/../Services/CustomerJwtService.php';
@@ -1502,6 +1624,10 @@ class AdminController extends Controller
         }
 
         $registry = new CustomerRegistryModel();
+        $customer = $registry->getCustomer($customerId);
+        if (!$customer || (($customer['appId'] ?? $this->selectedAppId()) !== $this->selectedAppId())) {
+            $this->json(['success' => false, 'error' => 'Cliente no pertenece a la app seleccionada'], 403);
+        }
         $result = $registry->revokeJwtToken($customerId);
 
         if (!$result) {
@@ -1534,6 +1660,12 @@ class AdminController extends Controller
 
         if ($customerId === '') {
             $this->json(['error' => 'customerId es obligatorio'], 422);
+        }
+
+        $registry = new CustomerRegistryModel();
+        $customer = $registry->getCustomer($customerId);
+        if (!$customer || (($customer['appId'] ?? $this->selectedAppId()) !== $this->selectedAppId())) {
+            $this->json(['error' => 'Cliente no pertenece a la app seleccionada'], 403);
         }
 
         require_once __DIR__ . '/../Models/CustomerIpLogModel.php';
@@ -1572,6 +1704,21 @@ class AdminController extends Controller
 
         require_once __DIR__ . '/../Models/CustomerIpLogModel.php';
         $ipLogModel = new \Models\CustomerIpLogModel();
+        $appModel = $this->applicationModel();
+        if ($appModel->columnExists('Customers', 'AppId')) {
+            $db = new \Database();
+            $ipRow = $db->fetchOne(
+                'SELECT ipl.Id
+                 FROM CustomerIpLogs ipl
+                 INNER JOIN Customers c ON c.Id = ipl.CustomerId
+                 WHERE ipl.Id = ? AND c.AppId = ?
+                 LIMIT 1',
+                [$id, $this->selectedAppId()]
+            );
+            if (!$ipRow) {
+                $this->json(['success' => false, 'error' => 'Registro de IP no pertenece a la app seleccionada'], 403);
+            }
+        }
 
         $result = $ipLogModel->setFlagged($id, $flagged, $reason);
 
@@ -1597,8 +1744,8 @@ class AdminController extends Controller
         
         try {
             $statsService = new CustomerStatsService();
-            $globalStats = $statsService->getGlobalStats();
-            $customersStats = $statsService->getAllCustomersStats();
+            $globalStats = $statsService->getGlobalStats($this->selectedAppId());
+            $customersStats = $statsService->getAllCustomersStats($this->selectedAppId());
         } catch (\Throwable $e) {
             error_log('CustomerStats error: ' . $e->getMessage());
             $globalStats = [
@@ -1617,7 +1764,7 @@ class AdminController extends Controller
 
         $data = [
             'currentUser' => $currentUser,
-            'title' => 'Estadísticas de Clientes - ClubCheck',
+            'title' => 'Estadísticas de Clientes',
             'globalStats' => $globalStats,
             'customersStats' => $customersStats,
             'isAuthenticated' => true,
@@ -1644,8 +1791,8 @@ class AdminController extends Controller
 
         try {
             $statsService = new CustomerStatsService();
-            $globalStats = $statsService->getGlobalStats();
-            $customersStats = $statsService->getAllCustomersStats();
+            $globalStats = $statsService->getGlobalStats($this->selectedAppId());
+            $customersStats = $statsService->getAllCustomersStats($this->selectedAppId());
 
             $this->json([
                 'global' => $globalStats,
@@ -1690,6 +1837,10 @@ class AdminController extends Controller
                 $this->json(['error' => 'Cliente no encontrado'], 404);
             }
 
+            if (($customer['appId'] ?? $this->selectedAppId()) !== $this->selectedAppId()) {
+                $this->json(['error' => 'Cliente no pertenece a la app seleccionada'], 403);
+            }
+
             $statsService = new CustomerStatsService();
             $stats = $statsService->getCustomerStats($customerId);
 
@@ -1713,7 +1864,7 @@ class AdminController extends Controller
 
         $data = [
             'currentUser' => $this->userModel->getCurrentUser(),
-            'title' => 'Dashboard - ClubCheck',
+            'title' => 'Dashboard',
             'isAuthenticated' => true,
         ];
 
@@ -1732,7 +1883,7 @@ class AdminController extends Controller
             $service = new AdminDashboardService();
             $this->json([
                 'success' => true,
-                'dashboard' => $service->getDashboard($this->makeStripeService()),
+                'dashboard' => $service->getDashboard($this->selectedStripeService(), $this->selectedAppId()),
                 'stripe_dashboard_url' => ($_ENV['APP_MODE'] ?? 'DEV') === 'PROD'
                     ? 'https://dashboard.stripe.com/'
                     : 'https://dashboard.stripe.com/test/',
@@ -1755,7 +1906,7 @@ class AdminController extends Controller
 
         try {
             $service = new AdminDashboardService();
-            $service->updateWhatsappMessageCost($cost);
+            $service->updateWhatsappMessageCost($cost, $this->selectedAppId());
             $this->json(['success' => true]);
         } catch (\InvalidArgumentException $e) {
             $this->json(['success' => false, 'error' => $e->getMessage()], 422);
@@ -1783,12 +1934,12 @@ class AdminController extends Controller
         $searchIp = isset($_GET['ip']) ? trim($_GET['ip']) : null;
         
         // Obtener datos
-        $downloads = $downloadLogModel->getDownloadsGroupedByIp($page, $perPage, $searchIp);
-        $summary = $downloadLogModel->getDownloadsSummary();
+        $downloads = $downloadLogModel->getDownloadsGroupedByIp($page, $perPage, $searchIp, $this->selectedAppId());
+        $summary = $downloadLogModel->getDownloadsSummary($this->selectedAppId());
 
         $data = [
             'currentUser' => $currentUser,
-            'title' => 'Historial de Descargas - ClubCheck',
+            'title' => 'Historial de Descargas',
             'downloads' => $downloads,
             'summary' => $summary,
             'searchIp' => $searchIp,
@@ -1822,8 +1973,8 @@ class AdminController extends Controller
         $searchIp = isset($_GET['ip']) ? trim($_GET['ip']) : null;
         
         // Obtener datos
-        $downloads = $downloadLogModel->getDownloadsGroupedByIp($page, $perPage, $searchIp ?: null);
-        $summary = $downloadLogModel->getDownloadsSummary();
+        $downloads = $downloadLogModel->getDownloadsGroupedByIp($page, $perPage, $searchIp ?: null, $this->selectedAppId());
+        $summary = $downloadLogModel->getDownloadsSummary($this->selectedAppId());
 
         $this->json([
             'downloads' => $downloads,
@@ -1855,7 +2006,7 @@ class AdminController extends Controller
         }
 
         $downloadLogModel = new DownloadLogModel();
-        $downloads = $downloadLogModel->getDownloadsByIp($ipAddress);
+        $downloads = $downloadLogModel->getDownloadsByIp($ipAddress, 100, $this->selectedAppId());
 
         $this->json([
             'ipAddress' => $ipAddress,
@@ -1868,7 +2019,7 @@ class AdminController extends Controller
 
     /**
      * GET /admin/licenses
-     * Panel de licencias generadas
+     * Vista de licencias generadas
      */
     public function licenses(): void
     {
@@ -1878,7 +2029,7 @@ class AdminController extends Controller
 
         $data = [
             'currentUser'     => $currentUser,
-            'title'           => 'Licencias - ClubCheck',
+            'title'           => 'Licencias',
             'isAuthenticated' => true,
         ];
 
@@ -1902,7 +2053,7 @@ class AdminController extends Controller
         }
 
         $logModel = new LicenseLogModel();
-        $licenses = $logModel->getAll();
+        $licenses = $logModel->getAll(0, 0, $this->selectedAppId());
 
         $this->json([
             'count'    => count($licenses),
@@ -1916,7 +2067,7 @@ class AdminController extends Controller
 
         $data = [
             'currentUser' => $this->userModel->getCurrentUser(),
-            'title' => 'Planes Stripe - ClubCheck',
+            'title' => 'Planes Stripe',
             'isAuthenticated' => true,
         ];
 
@@ -1937,8 +2088,10 @@ class AdminController extends Controller
             $plans = [];
             $source = 'database';
 
-            if ($tablesReady && $model->hasPlans()) {
-                $plans = array_values($model->getPlans(false));
+            $appId = $this->selectedAppId();
+
+            if ($tablesReady && $model->hasPlans($appId)) {
+                $plans = array_values($model->getPlans(false, $appId));
             } else {
                 $plans = array_values($this->makeStripeService()->getConfiguredPlans());
                 $source = 'config';
@@ -1983,7 +2136,7 @@ class AdminController extends Controller
                     if ($stripePrice && empty($plan['stripe_price_id'])) {
                         $plan['stripe_price_id'] = $stripePrice['id'] ?? null;
                         if ($tablesReady && $source === 'database' && !empty($stripePrice['id'])) {
-                            $model->setStripePriceId($plan['lookup_key'], $stripePrice['id']);
+                            $model->setStripePriceId($plan['lookup_key'], $stripePrice['id'], $appId);
                         }
                     }
                 }
@@ -1993,7 +2146,7 @@ class AdminController extends Controller
             $this->json([
                 'success' => true,
                 'plans' => $plans,
-                'rules_catalog' => $tablesReady ? $model->getRuleCatalog() : [],
+                'rules_catalog' => $tablesReady ? $model->getRuleCatalog($appId) : [],
                 'tables_ready' => $tablesReady,
                 'source' => $source,
                 'stripe_checked' => $stripeLookup['success'] ?? false,
@@ -2024,6 +2177,7 @@ class AdminController extends Controller
 
             $payload['rules'] = $this->normalizePlanRules($payload['rules'] ?? []);
             $payload['showBillingIds'] = $this->normalizeBillingIds($payload['showBillingIds'] ?? []);
+            $payload['app_id'] = $this->selectedAppId();
 
             $plan = $model->savePlan($payload);
             $this->json(['success' => true, 'plan' => $plan]);
@@ -2048,7 +2202,7 @@ class AdminController extends Controller
             try {
                 $model = new StripePlanModel();
                 if ($model->hasPlanTables()) {
-                    $model->setStripePriceId($lookupKey, $result['price']['id']);
+                    $model->setStripePriceId($lookupKey, $result['price']['id'], $this->selectedAppId());
                 }
             } catch (\Throwable $e) {
                 // La verificacion contra Stripe ya fue exitosa; no bloquear por sincronizacion local.
@@ -2071,12 +2225,13 @@ class AdminController extends Controller
                 $this->json(['success' => false, 'error' => 'Ejecuta primero las migraciones de planes Stripe'], 400);
             }
 
-            $plan = $model->getPlanByLookupKey($lookupKey, false);
+            $appId = $this->selectedAppId();
+            $plan = $model->getPlanByLookupKey($lookupKey, false, $appId);
             if (!$plan) {
                 $this->json(['success' => false, 'error' => 'Plan no encontrado'], 404);
             }
 
-            $config = require __DIR__ . '/../../config/stripe.php';
+            $config = $this->applicationModel()->getStripeConfig($appId);
             $service = $this->makeStripeService($config);
             $productId = $plan['stripe_product_id'] ?? ($config['product_id'] ?? null);
             $result = $service->createStripePriceFromPlan($plan, $productId);
@@ -2084,11 +2239,58 @@ class AdminController extends Controller
             if ($result['success'] ?? false) {
                 $priceId = $result['price']['id'] ?? null;
                 if ($priceId) {
-                    $model->setStripePriceId($lookupKey, $priceId);
+                    $model->setStripePriceId($lookupKey, $priceId, $appId);
                 }
             }
 
             $this->json($result, ($result['success'] ?? false) ? 200 : 400);
+        } catch (\Throwable $e) {
+            $this->json(['success' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function stripePlanRuleSaveJson(): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        try {
+            $model = new StripePlanModel();
+            if (!$model->hasPlanTables()) {
+                $this->json(['success' => false, 'error' => 'Ejecuta primero las migraciones de planes Stripe'], 400);
+            }
+            if (!$model->hasRuleCatalogAppField()) {
+                $this->json(['success' => false, 'error' => 'Ejecuta la migracion 015_make_stripe_rule_catalog_app_specific.sql para administrar reglas por app'], 400);
+            }
+
+            $rule = $model->saveRuleCatalogEntry($payload, $this->selectedAppId());
+            $this->json(['success' => true, 'rule' => $rule]);
+        } catch (\InvalidArgumentException $e) {
+            $this->json(['success' => false, 'error' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            $this->json(['success' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function stripePlanRuleUnlinkJson(string $ruleId): void
+    {
+        $this->requirePermission('admin_access');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'DELETE' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['error' => 'Method not allowed'], 405);
+        }
+
+        try {
+            $model = new StripePlanModel();
+            $model->unlinkRuleFromApp((int)$ruleId, $this->selectedAppId());
+            $this->json(['success' => true]);
+        } catch (\InvalidArgumentException $e) {
+            $this->json(['success' => false, 'error' => $e->getMessage()], 422);
         } catch (\Throwable $e) {
             $this->json(['success' => false, 'error' => $e->getMessage()], 500);
         }
@@ -2128,13 +2330,14 @@ class AdminController extends Controller
         return array_values(array_unique(array_filter(array_map('trim', is_array($value) ? $value : []))));
     }
 
-    private function makeStripeService(?array $config = null): StripeService
+    private function makeStripeService(?array $config = null, ?string $appId = null): StripeService
     {
-        $config ??= require __DIR__ . '/../../config/stripe.php';
+        $appId ??= $this->selectedAppId();
+        $config ??= $this->applicationModel()->getStripeConfig($appId);
         $appMode = $_ENV['APP_MODE'] ?? 'DEV';
         $testClockId = ($appMode === 'DEV') ? ($config['test_clock_id'] ?? null) : null;
 
-        return new StripeService($config['secret_key'], $testClockId);
+        return new StripeService($config['secret_key'], $testClockId, $appId);
     }
 
     /**
@@ -2142,7 +2345,7 @@ class AdminController extends Controller
      * Genera una licencia para un cliente desde el panel de administración.
      *
      * Body: {
-     *   "customerId":     "...",        // ID interno ClubCheck (requerido)
+     *   "customerId":     "...",        // ID interno de la app (requerido)
      *   "planLookupKey":  "...",        // opcional: usa la suscripción activa de Stripe si no se indica
      *   "machineToken":   "...",        // opcional: usa el token registrado del cliente si no se indica
      *   "expiresAt":      1780000000   // opcional: solo para planes recurrentes sin suscripción Stripe
@@ -2175,10 +2378,8 @@ class AdminController extends Controller
 
         $billingId     = $customer['billingId'] ?? null;
         $machineToken  = trim($payload['machineToken'] ?? '') ?: ($customer['token'] ?? null);
-        $config        = require __DIR__ . '/../../config/stripe.php';
-        $appMode       = $_ENV['APP_MODE'] ?? 'DEV';
-        $testClockId   = ($appMode === 'DEV') ? ($config['test_clock_id'] ?? null) : null;
-        $stripeService = new StripeService($config['secret_key'], $testClockId);
+        $customerAppId = $customer['appId'] ?? $this->selectedAppId();
+        $stripeService = $this->makeStripeService($this->applicationModel()->getStripeConfig($customerAppId), $customerAppId);
         $planLookupKey = trim($payload['planLookupKey'] ?? '');
         $isFreePlan    = $planLookupKey === 'free';
         $isPermanent   = false;
@@ -2318,6 +2519,7 @@ class AdminController extends Controller
 
             $logModel = new LicenseLogModel();
             $logModel->createLog([
+                'AppId'         => $customerAppId,
                 'CustomerId'    => $customerId,
                 'BillingId'     => $billingId,
                 'CustomerName'  => $customer['name']  ?? '',

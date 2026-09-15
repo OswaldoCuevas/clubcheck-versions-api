@@ -5,12 +5,14 @@ namespace Controllers;
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Helpers/ApiHelper.php';
 require_once __DIR__ . '/../Models/CustomerWebLoginAttemptModel.php';
+require_once __DIR__ . '/../Models/ApplicationModel.php';
 require_once __DIR__ . '/../Services/JwtService.php';
 require_once __DIR__ . '/../../utils/database.php';
 
 use ApiHelper;
 use App\Services\JwtService;
 use Core\Controller;
+use Models\ApplicationModel;
 use Models\CustomerWebLoginAttemptModel;
 
 class DesktopApiController extends Controller
@@ -35,6 +37,7 @@ class DesktopApiController extends Controller
         ApiHelper::allowedMethodsPost();
 
         $payload = ApiHelper::getJsonBody();
+        $appId = (new ApplicationModel())->resolveFromPayload($payload);
         $codeAccess = $this->requiredString($payload, 'codeAccess');
         $login = trim((string) ($payload['login'] ?? $payload['username'] ?? $payload['email'] ?? $payload['administrator'] ?? ''));
         if ($login === '') {
@@ -48,7 +51,8 @@ class DesktopApiController extends Controller
             $login,
             $codeAccess,
             self::LOGIN_ATTEMPT_WINDOW_SECONDS,
-            self::LOGIN_ATTEMPT_LIMIT
+            self::LOGIN_ATTEMPT_LIMIT,
+            $appId
         );
 
         if ($lockout['isLocked']) {
@@ -60,17 +64,27 @@ class DesktopApiController extends Controller
             ], 429);
         }
 
+        $appFilter = '';
+        $queryParams = [$codeAccess];
+        if ((new ApplicationModel())->columnExists('Customers', 'AppId')) {
+            // El CodeAccess ahora puede repetirse entre apps, por eso el login desktop debe conocer la app.
+            $appFilter = 'AND (c.AppId = ? OR c.AppId IS NULL)';
+            $queryParams[] = $appId;
+        }
+        array_push($queryParams, $login, $login);
+
         $row = $this->db->fetchOne(
             "SELECT c.Id AS CustomerId, c.Name AS CustomerName, c.IsActive, a.Id AS AdminId, a.Username, a.Email, a.Password, a.Role
              FROM Customers c
              JOIN AdministratorsDesktop a ON a.CustomerApiId = c.Id
              WHERE c.CodeAccess = ?
                AND c.IsActive = 1
+               {$appFilter}
                AND COALESCE(a.Removed, 0) = 0
                AND a.Role = 2
                AND (a.Username = ? OR a.Email = ?)
              LIMIT 1",
-            [$codeAccess, $login, $login]
+            $queryParams
         );
 
         if (!$row || !$this->passwordMatches($password, (string) ($row['Password'] ?? ''))) {
@@ -79,6 +93,7 @@ class DesktopApiController extends Controller
                 'codeAccess' => $codeAccess,
                 'customerId' => $row['CustomerId'] ?? null,
                 'adminId' => $row['AdminId'] ?? null,
+                'appId' => $appId,
                 'ipAddress' => $ipAddress,
                 'userAgent' => $userAgent,
                 'wasSuccessful' => false,
@@ -93,6 +108,7 @@ class DesktopApiController extends Controller
             'codeAccess' => $codeAccess,
             'customerId' => $row['CustomerId'] ?? null,
             'adminId' => $row['AdminId'] ?? null,
+            'appId' => $appId,
             'ipAddress' => $ipAddress,
             'userAgent' => $userAgent,
             'wasSuccessful' => true,
@@ -103,6 +119,7 @@ class DesktopApiController extends Controller
         $token = $jwt->createToken([
             'name' => $row['CustomerName'],
             'customerId' => $row['CustomerId'],
+            'appId' => $appId,
         ], self::JWT_TTL_SECONDS);
 
         ApiHelper::respond([
@@ -113,6 +130,7 @@ class DesktopApiController extends Controller
             'customer' => [
                 'name' => $row['CustomerName'],
                 'customerId' => $row['CustomerId'],
+                'appId' => $appId,
             ],
         ]);
     }

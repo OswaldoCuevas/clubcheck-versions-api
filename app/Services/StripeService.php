@@ -16,12 +16,14 @@ class StripeService
     private string $offlineMessage = 'Verifique su conexión a internet';
 
     private ?string $testClockId = null;
+    private ?string $appId = null;
 
-    public function __construct(string $apiKey, ?string $testClockId = null)
+    public function __construct(string $apiKey, ?string $testClockId = null, ?string $appId = null)
     {
         \Stripe\Stripe::setApiKey($apiKey);
         $this->stripe = new \Stripe\StripeClient($apiKey);
         $this->testClockId = $testClockId;
+        $this->appId = $appId;
     }
 
     // ==================== TOKENS ====================
@@ -409,8 +411,9 @@ class StripeService
 
         try {
             $model = new StripePlanModel();
-            if ($model->hasPlanTables() && $model->hasPriceFields() && $model->hasPlans()) {
-                return $this->plansCache = $this->sortConfiguredPlans($model->getPlans(true));
+            if ($model->hasPlanTables() && $model->hasPriceFields() && $model->hasPlans($this->appId)) {
+                // AppId permite que el servicio conserve la estructura anterior, pero con catalogo por aplicacion.
+                return $this->plansCache = $this->sortConfiguredPlans($model->getPlans(true, $this->appId));
             }
         } catch (\Throwable $e) {
             // Si la migracion aun no existe, conservar compatibilidad con config/stripe.php.

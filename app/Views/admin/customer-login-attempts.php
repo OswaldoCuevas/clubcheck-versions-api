@@ -1,5 +1,5 @@
 <?php
-$title = 'Intentos de Login Web - ClubCheck';
+$title = 'Intentos de Login Web';
 
 $attemptRows = $attempts['data'] ?? [];
 $pagination = $attempts['pagination'] ?? ['page' => 1, 'perPage' => 50, 'total' => 0, 'totalPages' => 1];
@@ -30,9 +30,6 @@ ob_start();
             </h1>
             <p class="text-muted mb-0">Registros del endpoint /api/desktop/login por usuario y codeAccess.</p>
         </div>
-        <a href="<?= app_url('/admin') ?>" class="btn btn-outline-secondary">
-            <i class="fas fa-arrow-left me-2"></i>Volver
-        </a>
     </div>
 
     <div class="row g-3 mb-4">

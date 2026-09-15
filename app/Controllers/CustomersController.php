@@ -5,6 +5,7 @@ namespace Controllers;
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Models/CustomerSessionModel.php';
 require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
+require_once __DIR__ . '/../Models/ApplicationModel.php';
 require_once __DIR__ . '/../Models/UsersDesktopModel.php';
 require_once __DIR__ . '/../Models/SubscriptionsDesktopModel.php';
 require_once __DIR__ . '/../Models/AttendancesDesktopModel.php';
@@ -49,6 +50,7 @@ require_once __DIR__ . '/../Services/LicenseService.php';
 use Core\Controller;
 use Models\CustomerRegistryModel;
 use Models\CustomerSessionModel;
+use Models\ApplicationModel;
 use Models\UsersDesktopModel;
 use Models\SubscriptionsDesktopModel;
 use Models\AttendancesDesktopModel;
@@ -167,6 +169,35 @@ class CustomersController extends Controller
             'migrations' => new MigrationsDesktopModel(),
             'barcodeLookupCache' => new BarcodeLookupCacheDesktopModel(),
         ];
+    }
+
+    private function applicationModel(): ApplicationModel
+    {
+        return new ApplicationModel();
+    }
+
+    private function resolveAppIdFromPayload(array $payload): string
+    {
+        return $this->applicationModel()->resolveFromPayload($payload);
+    }
+
+    private function stripeServiceForApp(string $appId): StripeService
+    {
+        $config = $this->applicationModel()->getStripeConfig($appId);
+        $appMode = $_ENV['APP_MODE'] ?? 'DEV';
+        $testClockId = ($appMode === 'DEV') ? ($config['test_clock_id'] ?? null) : null;
+
+        return new StripeService($config['secret_key'], $testClockId, $appId);
+    }
+
+    private function enabledDesktopModelsForCustomer(string $customerApiId, string $direction): array
+    {
+        $appModel = $this->applicationModel();
+        $appId = $appModel->getCustomerAppId($customerApiId);
+        $enabledKeys = $appModel->enabledBulkKeys($appId, $this->desktopModels, $direction);
+
+        // El catalogo de sync por app decide que tablas se incluyen en pull/push sin duplicar endpoints.
+        return array_intersect_key($this->desktopModels, array_flip($enabledKeys));
     }
 
     private function normalizeTermsAndConditionsAcceptancePayload($value, bool $required): ?array
@@ -612,7 +643,7 @@ class CustomersController extends Controller
 
         $bulks = [];
 
-        foreach ($this->desktopModels as $bulk => $model) {
+        foreach ($this->enabledDesktopModelsForCustomer($customerApiId, 'pull') as $bulk => $model) {
             $includeFlag = $includeRemovedByBulk[$bulk] ?? $includeRemoved;
             $bulks[$bulk] = $model->pull($customerApiId, $includeFlag);
         }
@@ -654,7 +685,7 @@ class CustomersController extends Controller
 
         $results = [];
 
-        foreach ($this->desktopModels as $bulk => $model) {
+        foreach ($this->enabledDesktopModelsForCustomer($customerApiId, 'push') as $bulk => $model) {
             $records = $bulksPayload[$bulk] ?? [];
 
             if (!is_array($records)) {
@@ -679,11 +710,16 @@ class CustomersController extends Controller
         ApiHelper::allowedMethodsPost();
 
         $payload = ApiHelper::getJsonBody();
+        $appId = $this->resolveAppIdFromPayload($payload);
         $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
 
         $customerId = ApiHelper::getCustomerIdFromSession($customerId) ?? $customerId;
 
         $existing = $customerId !== '' ? $this->customerRegistry->getCustomer($customerId) : null;
+        if ($existing !== null && !empty($existing['appId'])) {
+            // Un cliente existente conserva su app; el request no debe moverlo entre aplicaciones.
+            $appId = $existing['appId'];
+        }
 
         $attributes = [];
         $privacyAcceptanceInput = array_key_exists('privacyAcceptance', $payload) ? $payload['privacyAcceptance'] : null;
@@ -779,8 +815,8 @@ class CustomersController extends Controller
                     ], 422);
                 }
 
-                // Crear cliente en Stripe
-                $stripeResult = $this->stripeService->createCustomer(
+                // Crear cliente en Stripe usando las credenciales de la app del customer.
+                $stripeResult = $this->stripeServiceForApp($appId)->createCustomer(
                     $attributes['name'],
                     $attributes['email'],
                     $attributes['phone'] ?? null
@@ -809,6 +845,7 @@ class CustomersController extends Controller
                     'deviceName' => $attributes['deviceName'] ?? null,
                     'token' => $attributes['token'] ?? null,
                     'isActive' => $attributes['isActive'] ?? true,
+                    'appId' => $appId,
                     'privacyAcceptance' => $privacyAcceptance,
                     'termsAndConditionsAcceptance' => $termsAndConditionsAcceptance,
                 ]);
@@ -881,6 +918,7 @@ class CustomersController extends Controller
         ApiHelper::allowedMethodsPost();
 
         $payload = ApiHelper::getJsonBody();
+        $appId = $this->resolveAppIdFromPayload($payload);
 
         $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
         $name = isset($payload['name']) ? trim((string) $payload['name']) : '';
@@ -937,8 +975,8 @@ class CustomersController extends Controller
                     ], 422);
                 }
 
-                // Crear cliente en Stripe
-                $stripeResult = $this->stripeService->createCustomer(
+                // Crear cliente en Stripe usando las credenciales de la app del customer.
+                $stripeResult = $this->stripeServiceForApp($appId)->createCustomer(
                     $name,
                     $email,
                     $phone
@@ -972,6 +1010,7 @@ class CustomersController extends Controller
                 'phone' => $phone,
                 'deviceName' => $deviceName,
                 'token' => $token,
+                'appId' => $appId,
                 'privacyAcceptance' => $privacyAcceptance,
                 'termsAndConditionsAcceptance' => $termsAndConditionsAcceptance,
             ]);
@@ -1077,7 +1116,8 @@ class CustomersController extends Controller
         
         try {
             // Obtener configuración del plan "free"
-            $freePlan = $this->stripeService->getPlanRulesByLookupKey('free');
+            $freePlanAppId = $internalCustomerId ? $this->applicationModel()->getCustomerAppId($internalCustomerId) : $this->applicationModel()->getDefaultApp()['id'];
+            $freePlan = $this->stripeServiceForApp($freePlanAppId)->getPlanRulesByLookupKey('free');
             
             if (!$freePlan) {
                 return;
@@ -1135,6 +1175,7 @@ class CustomersController extends Controller
                 require_once __DIR__ . '/../Models/LicenseLogModel.php';
                 $logModel = new \Models\LicenseLogModel();
                 $logModel->createLog([
+                    'AppId' => $internalCustomerId ? $this->applicationModel()->getCustomerAppId($internalCustomerId) : $this->applicationModel()->getDefaultApp()['id'],
                     'CustomerId' => $internalCustomerId,
                     'BillingId' => $billingId,
                     'CustomerName' => $customerName,
@@ -1163,6 +1204,7 @@ class CustomersController extends Controller
         ApiHelper::allowedMethodsPost();
 
         $payload = ApiHelper::getJsonBody();
+        $appId = $this->resolveAppIdFromPayload($payload);
 
         $email = isset($payload['email']) ? trim((string) $payload['email']) : '';
         $accessKey = isset($payload['accessKey']) ? trim((string) $payload['accessKey']) : '';
@@ -1184,9 +1226,9 @@ class CustomersController extends Controller
         $ipAddress = $_SERVER['REMOTE_ADDR'] ?? null;
 
         try {
-            $customer = $this->customerRegistry->loginWithAccessKey($email, $accessKey, $deviceName, $ipAddress, $token);
+            $customer = $this->customerRegistry->loginWithAccessKey($email, $accessKey, $deviceName, $ipAddress, $token, $appId);
 
-            $subscription = $this->stripeService->getActiveSubscription($customer['billingId']);
+            $subscription = $this->stripeServiceForApp($customer['appId'] ?? $appId)->getActiveSubscription($customer['billingId']);
         } catch (\InvalidArgumentException $e) {
             ApiHelper::respond([
                 'error' => 'Debes proporcionar email y accessKey válidos'
@@ -1271,6 +1313,7 @@ class CustomersController extends Controller
         }
 
         $payload = ApiHelper::getJsonBody();
+        $appId = $this->resolveAppIdFromPayload($payload);
 
         $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
         $customerId = ApiHelper::getCustomerIdFromSession($customerId) ?? $customerId;
@@ -1278,6 +1321,11 @@ class CustomersController extends Controller
             ApiHelper::respond([
                 'error' => 'El campo customerId es obligatorio'
             ], 422);
+        }
+        $existingCustomer = $this->customerRegistry->getCustomer($customerId);
+        if ($existingCustomer !== null && !empty($existingCustomer['appId'])) {
+            // La app del customer padre gobierna cualquier patch de datos.
+            $appId = $existingCustomer['appId'];
         }
 
         $attributes = [];
@@ -1407,7 +1455,7 @@ class CustomersController extends Controller
         }
 
         if ($existing === null) {
-            $emailAvailable = $this->customerRegistry->isEmailAvailable($normalizedEmail);
+            $emailAvailable = $this->customerRegistry->isEmailAvailable($normalizedEmail, null, $appId);
             if (!$emailAvailable) {
                 ApiHelper::respond([
                     'error' => 'El correo ya está registrado para otro cliente',

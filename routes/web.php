@@ -109,6 +109,12 @@ $router->get('/api/customers/whatsapp/business-profile', 'WhatsAppController', '
 
 // Rutas administrativas
 $router->any('/admin', 'AdminController', 'index');// NO, Administrativo
+$router->get('/admin/app/select', 'AdminController', 'selectApplication');// NO, Administrativo
+$router->post('/admin/app/select', 'AdminController', 'selectApplication');// NO, Administrativo
+$router->get('/admin/applications', 'AdminController', 'applications');// NO, Administrativo
+$router->post('/admin/applications/save', 'AdminController', 'saveApplication');// NO, Administrativo
+$router->post('/admin/applications/settings', 'AdminController', 'saveApplicationSettings');// NO, Administrativo
+$router->post('/admin/applications/sync-tables', 'AdminController', 'saveApplicationSyncTables');// NO, Administrativo
 $router->get('/admin/dashboard', 'AdminController', 'dashboard');// NO, Administrativo
 $router->get('/admin/api/dashboard', 'AdminController', 'dashboardJson');// NO, Administrativo
 $router->post('/admin/api/dashboard/settings', 'AdminController', 'dashboardSettingsJson');// NO, Administrativo
@@ -181,6 +187,8 @@ $router->post('/admin/api/licenses/generate', 'AdminController', 'generateLicens
 $router->get('/admin/stripe-plans', 'AdminController', 'stripePlans');// NO, Administrativo
 $router->get('/admin/api/stripe-plans', 'AdminController', 'stripePlansJson');// NO, Administrativo
 $router->post('/admin/api/stripe-plans', 'AdminController', 'stripePlanSaveJson');// NO, Administrativo
+$router->post('/admin/api/stripe-plan-rules', 'AdminController', 'stripePlanRuleSaveJson');// NO, Administrativo
+$router->delete('/admin/api/stripe-plan-rules/:ruleId', 'AdminController', 'stripePlanRuleUnlinkJson');// NO, Administrativo
 $router->get('/admin/api/stripe-plans/:lookupKey/verify', 'AdminController', 'stripePlanVerifyJson');// NO, Administrativo
 $router->post('/admin/api/stripe-plans/:lookupKey/create-stripe-price', 'AdminController', 'stripePlanCreateStripePriceJson');// NO, Administrativo
 

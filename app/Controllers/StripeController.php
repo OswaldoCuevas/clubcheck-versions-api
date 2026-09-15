@@ -7,12 +7,14 @@ require_once __DIR__ . '/../Services/StripeService.php';
 require_once __DIR__ . '/../Services/LicenseService.php';
 require_once __DIR__ . '/../Helpers/ApiHelper.php';
 require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
+require_once __DIR__ . '/../Models/ApplicationModel.php';
 
 use Core\Controller;
 use App\Services\StripeService;
 use App\Services\LicenseService;
 use ApiHelper;
 use Models\CustomerRegistryModel;
+use Models\ApplicationModel;
 
 /**
  * Controller para endpoints de Stripe
@@ -58,6 +60,33 @@ class StripeController extends Controller
         }
         $model = new CustomerRegistryModel();
         return $model->getCustomer($customerId) ?? null;
+    }
+
+    private function getAppIdFromSession(): string
+    {
+        $customer = $this->getCustomerFromSession();
+        return $customer['appId'] ?? (new ApplicationModel())->getDefaultApp()['id'];
+    }
+
+    private function resolveAppIdFromPayload(array $payload): string
+    {
+        return (new ApplicationModel())->resolveFromPayload($payload, $this->getAppIdFromSession());
+    }
+
+    private function stripeServiceForApp(string $appId): StripeService
+    {
+        $appModel = new ApplicationModel();
+        $config = $appModel->getStripeConfig($appId);
+        $appMode = $_ENV['APP_MODE'] ?? 'DEV';
+        $testClockId = ($appMode === 'DEV') ? ($config['test_clock_id'] ?? null) : null;
+
+        // Las llamadas publicas de Stripe deben usar las credenciales de la app ligada al customer.
+        return new StripeService($config['secret_key'], $testClockId, $appId);
+    }
+
+    private function currentStripeService(): StripeService
+    {
+        return $this->stripeServiceForApp($this->getAppIdFromSession());
     }
 
     /**
@@ -134,7 +163,7 @@ class StripeController extends Controller
         }
         try {
             // Resolver reglas del plan desde la configuración
-            $plan = $this->stripeService->getPlanRulesByLookupKey($planLookupKey);
+            $plan = $this->currentStripeService()->getPlanRulesByLookupKey($planLookupKey);
             $rules = $plan['rules'] ?? null;
 
             $customerJwt = $this->resolveOrCreateCustomerJwt($internalCustomerId, $machineToken);
@@ -161,6 +190,7 @@ class StripeController extends Controller
                 require_once __DIR__ . '/../Models/LicenseLogModel.php';
                 $logModel = new \Models\LicenseLogModel();
                 $logModel->createLog([
+                    'AppId'         => $internalCustomerId ? (new ApplicationModel())->getCustomerAppId($internalCustomerId) : $this->getAppIdFromSession(),
                     'CustomerId'    => $internalCustomerId,
                     'BillingId'     => $stripeCustomerId,
                     'CustomerName'  => $customerName,
@@ -278,7 +308,8 @@ class StripeController extends Controller
         // 3. Consultar suscripción activa en Stripe
         $subscription = null;
         if (!empty($customer['billingId'])) {
-            $stripeResult = $this->stripeService->getActiveSubscription($customer['billingId']);
+            // Validacion publica: se usa la app del customer encontrado, no la app default de sesion.
+            $stripeResult = $this->stripeServiceForApp($customer['appId'] ?? (new ApplicationModel())->getDefaultApp()['id'])->getActiveSubscription($customer['billingId']);
             if ($stripeResult['success'] ?? false) {
                 $subscription = $stripeResult;
             }
@@ -327,7 +358,7 @@ class StripeController extends Controller
         ApiHelper::allowedMethodsPost();
         $input = ApiHelper::getJsonBody();
 
-        $result = $this->stripeService->createCustomer(
+        $result = $this->stripeServiceForApp($this->resolveAppIdFromPayload($input))->createCustomer(
             $input['name'],
             $input['email'],
             $input['phone'] ?? null
@@ -344,7 +375,7 @@ class StripeController extends Controller
     {
         ApiHelper::allowedMethodsGet();
         $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
-        $result = $this->stripeService->getCustomer($customerId);
+        $result = $this->currentStripeService()->getCustomer($customerId);
         if (!empty($result['success']) && $result['success'] === true) {
             try {
                 $registry = new CustomerRegistryModel();
@@ -376,7 +407,7 @@ class StripeController extends Controller
         ApiHelper::allowedMethodsPut();
         $input = ApiHelper::getJsonBody();
         $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
-        $result = $this->stripeService->updateCustomer(
+        $result = $this->currentStripeService()->updateCustomer(
             $customerId,
             $input['name'] ?? null,
             $input['email'] ?? null,
@@ -405,7 +436,7 @@ class StripeController extends Controller
 
         $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
 
-        $result = $this->stripeService->addCard($customerId, $input['token_id']);
+        $result = $this->currentStripeService()->addCard($customerId, $input['token_id']);
         ApiHelper::respond($result, $result['success'] ? 201 : 400);
     }
 
@@ -417,7 +448,7 @@ class StripeController extends Controller
     {
         ApiHelper::allowedMethodsGet();
         $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
-        $result = $this->stripeService->listCards($customerId);
+        $result = $this->currentStripeService()->listCards($customerId);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
 
@@ -429,7 +460,7 @@ class StripeController extends Controller
     {
         ApiHelper::allowedMethodsDelete();
         $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
-        $success = $this->stripeService->deleteCard($customerId, $cardId);
+        $success = $this->currentStripeService()->deleteCard($customerId, $cardId);
         ApiHelper::respond([
             'success' => $success,
             'message' => $success ? 'Tarjeta eliminada' : 'No se pudo eliminar la tarjeta'
@@ -444,7 +475,7 @@ class StripeController extends Controller
     {
         ApiHelper::allowedMethodsPut();
         $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
-        $result = $this->stripeService->setDefaultCard($customerId, $cardId);
+        $result = $this->currentStripeService()->setDefaultCard($customerId, $cardId);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
 
@@ -467,7 +498,7 @@ class StripeController extends Controller
         // Resolver price_id desde lookup_key si se proporciona
         $priceId = $input['price_id'] ?? null;
         if (empty($priceId) && !empty($input['plan_lookup_key'])) {
-            $priceId = $this->stripeService->getPriceIdByLookupKey($input['plan_lookup_key']);
+            $priceId = $this->currentStripeService()->getPriceIdByLookupKey($input['plan_lookup_key']);
         }
 
         if (empty($priceId)) {
@@ -476,7 +507,7 @@ class StripeController extends Controller
 
         $trialDays  = (int)($input['trial_days'] ?? 0);
         $couponCode = $input['coupon_code'] ?? null;
-        $result     = $this->stripeService->createSubscription($customerId, $priceId, $trialDays, 'error_if_incomplete', $couponCode);
+        $result     = $this->currentStripeService()->createSubscription($customerId, $priceId, $trialDays, 'error_if_incomplete', $couponCode);
 
         if ($result['success']) {
             $customer = $this->getCustomerFromSession();
@@ -488,7 +519,7 @@ class StripeController extends Controller
                 // Para suscripciones, usar current_period_end
                 $planLookupKey = $result['lookup_key'] ?? $input['plan_lookup_key'] ?? $priceId;
                 $expiresAt     = $isPermanent ? null : ($result['current_period_end'] ?? null);
-                $plan = $this->stripeService->getPlanRulesByLookupKey($planLookupKey);
+                $plan = $this->currentStripeService()->getPlanRulesByLookupKey($planLookupKey);
                 
                 $this->attachLicense(
                     $result,
@@ -518,7 +549,7 @@ class StripeController extends Controller
     {
         ApiHelper::allowedMethodsGet();
         $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
-        $result = $this->stripeService->getActiveSubscription($customerId);
+        $result = $this->currentStripeService()->getActiveSubscription($customerId);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
 
@@ -538,16 +569,16 @@ class StripeController extends Controller
         }
 
         $cancelAtPeriodEnd = (bool)$input['cancel_at_period_end'];
-        $result = $this->stripeService->updateSubscription($subscriptionId, $cancelAtPeriodEnd);
+        $result = $this->currentStripeService()->updateSubscription($subscriptionId, $cancelAtPeriodEnd);
 
         // Al reactivar (cancel_at_period_end = false) adjuntar licencia según tipo de plan
         if ($result['success'] && !$cancelAtPeriodEnd) {
             $customer = $this->getCustomerFromSession();
             if ($customer && !empty($customer['billingId'])) {
-                $activeResult = $this->stripeService->getActiveSubscription($customer['billingId']);
+                $activeResult = $this->currentStripeService()->getActiveSubscription($customer['billingId']);
                 $pl  = $activeResult['permanent_license'] ?? null;
                 $sub = $activeResult['subscription']      ?? null;
-                $plan = $this->stripeService->getPlanRulesByLookupKey($pl['lookup_key'] ?? ($sub['lookup_key'] ?? ''));
+                $plan = $this->currentStripeService()->getPlanRulesByLookupKey($pl['lookup_key'] ?? ($sub['lookup_key'] ?? ''));
                 if ($pl) {
                     $this->attachLicense(
                         $result,
@@ -599,7 +630,7 @@ class StripeController extends Controller
 
         $priceId = $input['price_id'] ?? null;
         if (empty($priceId) && !empty($input['plan_lookup_key'])) {
-            $priceId = $this->stripeService->getPriceIdByLookupKey($input['plan_lookup_key']);
+            $priceId = $this->currentStripeService()->getPriceIdByLookupKey($input['plan_lookup_key']);
         }
 
         if (empty($priceId)) {
@@ -607,7 +638,7 @@ class StripeController extends Controller
         }
 
         $couponCode = $input['coupon_code'] ?? null;
-        $result     = $this->stripeService->changePlan($subscriptionId, $priceId, $couponCode);
+        $result     = $this->currentStripeService()->changePlan($subscriptionId, $priceId, $couponCode);
 
         // Si el resultado indica que requiere compra separada (plan permanente)
         if (!$result['success'] && ($result['requires_separate_purchase'] ?? false)) {
@@ -622,7 +653,7 @@ class StripeController extends Controller
                 $isPermanent = $result['is_permanent_license'] ?? false;
                 $planLookupKey = $result['lookup_key'] ?? $input['plan_lookup_key'] ?? $priceId;
                 $expiresAt   = $isPermanent ? null : ($result['current_period_end'] ?? null);
-                $plan = $this->stripeService->getPlanRulesByLookupKey($planLookupKey);
+                $plan = $this->currentStripeService()->getPlanRulesByLookupKey($planLookupKey);
                 
                 $this->attachLicense(
                     $result,
@@ -667,7 +698,7 @@ class StripeController extends Controller
             ApiHelper::respond(['success' => false, 'error' => 'No se encontró información del cliente'], 401);
         }
 
-        $activeResult = $this->stripeService->getActiveSubscription($customer['billingId']);
+        $activeResult = $this->currentStripeService()->getActiveSubscription($customer['billingId']);
         if (!$activeResult['success']) {
             ApiHelper::respond(['success' => false, 'error' => 'Error al obtener suscripción'], 400);
         }
@@ -678,7 +709,7 @@ class StripeController extends Controller
         // Licencia permanente: siempre devolver
         if ($pl) {
             $result = ['success' => true, 'renewed' => false];
-            $plan = $this->stripeService->getPlanRulesByLookupKey($pl['lookup_key'] ?? '');
+            $plan = $this->currentStripeService()->getPlanRulesByLookupKey($pl['lookup_key'] ?? '');
 
             $this->attachLicense(
                 $result,
@@ -717,7 +748,7 @@ class StripeController extends Controller
             'current_period_end' => $stripeDate,
         ];
 
-        $plan = $this->stripeService->getPlanRulesByLookupKey($sub['lookup_key'] ?? '');
+        $plan = $this->currentStripeService()->getPlanRulesByLookupKey($sub['lookup_key'] ?? '');
         $this->attachLicense(
             $result,
             $customer['billingId'],
@@ -748,14 +779,15 @@ class StripeController extends Controller
     {
         ApiHelper::allowedMethodsGet();
         $billingId = ApiHelper::getBillingIdByCustomerIdFromSession();
-        $config = require __DIR__ . '/../../config/stripe.php';
+        $appId = (new ApplicationModel())->resolveFromPayload($_GET, $this->getAppIdFromSession());
+        $config = (new ApplicationModel())->getStripeConfig($appId);
         $productId = $config['product_id'];
 
         if (empty($productId)) {
             ApiHelper::respond(['success' => false, 'error' => 'Se requiere product_id'], 400);
         }
 
-        $result = $this->stripeService->getProductPrices($productId);
+        $result = $this->stripeServiceForApp($appId)->getProductPrices($productId);
 
         // remover planes que no correspondan al billingId sabiendo que price tiene el campo showBillingIds
         // y reindexar el resultado para que JSON lo represente como lista (array) en lugar de objeto
@@ -775,12 +807,14 @@ class StripeController extends Controller
     public function getPublicConfig(): void
     {
         ApiHelper::allowedMethodsGet();
-        $config = require __DIR__ . '/../../config/stripe.php';
+        // Permite pedir config publica antes del login: /api/customers/stripe/config?app=clubcheck
+        $appId = (new ApplicationModel())->resolveFromPayload($_GET, $this->getAppIdFromSession());
+        $config = (new ApplicationModel())->getStripeConfig($appId);
         
         ApiHelper::respond([
             'success' => true,
             'public_key' => $config['public_key'],
-            'plans' => $this->stripeService->getConfiguredPlans()
+            'plans' => $this->stripeServiceForApp($appId)->getConfiguredPlans()
         ]);
     }
 
@@ -819,7 +853,7 @@ class StripeController extends Controller
     {
         ApiHelper::allowedMethodsGet();
         $billingId = ApiHelper::getBillingIdByCustomerIdFromSession();
-        $configuredPlans = $this->stripeService->getVisibleConfiguredPlans($billingId);
+        $configuredPlans = $this->stripeServiceForApp($this->getAppIdFromSession())->getVisibleConfiguredPlans($billingId);
         
         $plans = [];
         foreach ($configuredPlans as $key => $plan) {
@@ -892,7 +926,7 @@ class StripeController extends Controller
     {
         ApiHelper::allowedMethodsGet();
         $customerId = ApiHelper::getBillingIdByCustomerIdFromSession($billingId);
-        $result = $this->stripeService->getCurrentPlan($customerId);
+        $result = $this->currentStripeService()->getCurrentPlan($customerId);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
 
@@ -944,7 +978,7 @@ class StripeController extends Controller
         $input = ApiHelper::getJsonBody();
         $this->requireFields($input, ['coupon_code']);
 
-        $result = $this->stripeService->validateCoupon($input['coupon_code']);
+        $result = $this->currentStripeService()->validateCoupon($input['coupon_code']);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
 
@@ -980,7 +1014,7 @@ class StripeController extends Controller
 
         $priceId = $input['price_id'] ?? null;
         if (empty($priceId) && !empty($input['plan_lookup_key'])) {
-            $priceId = $this->stripeService->getPriceIdByLookupKey($input['plan_lookup_key']);
+            $priceId = $this->currentStripeService()->getPriceIdByLookupKey($input['plan_lookup_key']);
         }
 
         if (empty($priceId)) {
@@ -988,7 +1022,7 @@ class StripeController extends Controller
         }
 
         $couponCode = $input['coupon_code'] ?? null;
-        $result = $this->stripeService->previewPlanChange($subscriptionId, $priceId, $couponCode);
+        $result = $this->currentStripeService()->previewPlanChange($subscriptionId, $priceId, $couponCode);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
 
@@ -1008,7 +1042,7 @@ class StripeController extends Controller
 
         $priceId = $input['price_id'] ?? null;
         if (empty($priceId) && !empty($input['plan_lookup_key'])) {
-            $priceId = $this->stripeService->getPriceIdByLookupKey($input['plan_lookup_key']);
+            $priceId = $this->currentStripeService()->getPriceIdByLookupKey($input['plan_lookup_key']);
         }
 
         if (empty($priceId)) {
@@ -1017,7 +1051,7 @@ class StripeController extends Controller
 
         $trialDays = (int)($input['trial_days'] ?? 0);
         $couponCode = $input['coupon_code'] ?? null;
-        $result = $this->stripeService->previewNewSubscription($customerId, $priceId, $trialDays, $couponCode);
+        $result = $this->currentStripeService()->previewNewSubscription($customerId, $priceId, $trialDays, $couponCode);
         ApiHelper::respond($result, $result['success'] ? 200 : 400);
     }
 }

@@ -9,6 +9,15 @@ $useAdminLayout = $isAuthenticatedLayout
     && (!isset($hideNavbar) || !$hideNavbar)
     && str_starts_with($layoutCurrentPath, '/admin');
 
+$adminApps = [];
+$selectedAdminApp = null;
+if ($useAdminLayout) {
+    require_once __DIR__ . '/../../Models/ApplicationModel.php';
+    $applicationModelForLayout = new \Models\ApplicationModel();
+    $selectedAdminApp = $applicationModelForLayout->getSelectedApp();
+    $adminApps = $applicationModelForLayout->all();
+}
+
 $adminTitle = isset($title) ? htmlspecialchars($title) : 'Dashboard';
 $adminUserName = htmlspecialchars($currentUser['username'] ?? 'Usuario');
 $adminUserRole = htmlspecialchars($currentUser['role'] ?? 'Administrador');
@@ -21,12 +30,12 @@ $adminDate = $days[(int) date('w', $timestamp)] . ', ' . date('j', $timestamp) .
 $adminSections = [
     'Operacion' => [
         ['label' => 'Dashboard', 'url' => '/admin/dashboard', 'icon' => 'fa-solid fa-chart-line'],
-        ['label' => 'Panel', 'url' => '/admin', 'icon' => 'fa-solid fa-table-cells-large', 'exact' => true],
         ['label' => 'Clientes', 'url' => '/admin/customers', 'icon' => 'fa-solid fa-users'],
         ['label' => 'Estadisticas', 'url' => '/admin/customer-stats', 'icon' => 'fa-solid fa-chart-pie'],
         ['label' => 'Descargas', 'url' => '/admin/downloads', 'icon' => 'fa-solid fa-download'],
     ],
     'Sistema' => [
+        ['label' => 'Aplicaciones', 'url' => '/admin/applications', 'icon' => 'fa-solid fa-layer-group'],
         ['label' => 'Planes Stripe', 'url' => '/admin/stripe-plans', 'icon' => 'fa-solid fa-credit-card'],
         ['label' => 'WhatsApp', 'url' => '/admin/whatsapp', 'icon' => 'fa-brands fa-whatsapp'],
         ['label' => 'Licencias', 'url' => '/admin/licenses', 'icon' => 'fa-solid fa-key'],
@@ -54,7 +63,7 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= isset($title) ? htmlspecialchars($title) : 'ClubCheck' ?></title>
+    <title><?= isset($title) ? htmlspecialchars($title) : htmlspecialchars($selectedAdminApp['name'] ?? 'Admin') ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -202,6 +211,11 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
             backdrop-filter: blur(14px);
         }
 
+        .admin-mobile-menu,
+        .admin-sidebar-backdrop {
+            display: none;
+        }
+
         .admin-brand {
             display: flex;
             align-items: center;
@@ -229,6 +243,82 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
             background: linear-gradient(145deg, #dff0ff, #ffffff);
             color: var(--admin-blue);
             box-shadow: inset 0 0 0 1px #c7e2fb;
+        }
+
+        .admin-app-switcher {
+            margin-bottom: 24px;
+        }
+
+        .admin-app-label {
+            display: block;
+            padding: 0 8px 8px;
+            color: #7d92a8;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .admin-app-select-wrap {
+            position: relative;
+        }
+
+        .admin-app-current {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            min-height: 48px;
+            padding: 7px 38px 7px 9px;
+            border: 1px solid var(--admin-line);
+            border-radius: 10px;
+            background: #f7fbff;
+            color: var(--admin-text);
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.72);
+        }
+
+        .admin-app-icon {
+            width: 34px;
+            height: 34px;
+            display: grid;
+            place-items: center;
+            flex: 0 0 34px;
+            border-radius: 8px;
+            background: #e2f1ff;
+            color: var(--admin-blue);
+        }
+
+        .admin-app-name {
+            display: block;
+            min-width: 0;
+            overflow: hidden;
+            color: var(--admin-text);
+            font-weight: 700;
+            line-height: 1.1;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .admin-app-caption {
+            display: block;
+            margin-top: 2px;
+            color: var(--admin-muted);
+            font-size: 12px;
+            line-height: 1.1;
+        }
+
+        .admin-app-select {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .admin-app-chevron {
+            position: absolute;
+            top: 50%;
+            right: 13px;
+            color: #4d8ed0;
+            transform: translateY(-50%);
+            pointer-events: none;
         }
 
         .admin-nav-section {
@@ -372,15 +462,54 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
                 display: block;
             }
 
+            .admin-mobile-menu {
+                position: fixed;
+                z-index: 45;
+                top: 18px;
+                left: 14px;
+                width: 48px;
+                height: 48px;
+                display: grid;
+                place-items: center;
+                border: 1px solid var(--admin-line);
+                border-radius: 50%;
+                background: rgba(255,255,255,0.96);
+                color: var(--admin-text);
+                box-shadow: 0 12px 26px rgba(47, 128, 237, 0.16);
+            }
+
+            .admin-sidebar-backdrop {
+                position: fixed;
+                inset: 0;
+                z-index: 35;
+                display: block;
+                visibility: hidden;
+                opacity: 0;
+                background: rgba(21, 57, 91, 0.22);
+                transition: opacity 0.18s ease, visibility 0.18s ease;
+            }
+
+            body.admin-menu-open .admin-sidebar-backdrop {
+                visibility: visible;
+                opacity: 1;
+            }
+
             .admin-sidebar {
-                position: sticky;
-                z-index: 20;
+                position: fixed;
+                z-index: 40;
                 top: 0;
-                width: 100%;
-                height: auto;
-                padding: 12px 14px;
-                border-right: 0;
-                border-bottom: 1px solid var(--admin-line);
+                left: 0;
+                width: min(82vw, 310px);
+                height: 100vh;
+                padding: 22px 18px;
+                border-right: 1px solid var(--admin-line);
+                border-bottom: 0;
+                transform: translateX(-105%);
+                transition: transform 0.22s ease;
+            }
+
+            body.admin-menu-open .admin-sidebar {
+                transform: translateX(0);
             }
 
             .admin-brand {
@@ -388,36 +517,34 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
                 font-size: 20px;
             }
 
+            .admin-app-switcher {
+                margin-bottom: 10px;
+            }
+
             .admin-nav {
-                display: flex;
-                gap: 8px;
-                overflow-x: auto;
-                padding-bottom: 2px;
+                display: block;
             }
 
             .admin-nav-section {
-                display: contents;
+                margin: 18px 0;
             }
 
-            .admin-nav-title,
-            .admin-sidebar-footer {
-                display: none;
+            .admin-nav-title {
+                display: block;
             }
 
             .admin-nav-link {
-                flex: 0 0 auto;
-                margin: 0;
-                min-height: 40px;
-                white-space: nowrap;
+                min-height: 44px;
             }
 
             .admin-main {
-                padding: 20px 14px 36px;
+                padding: 24px 14px 36px;
             }
 
             .admin-topbar {
                 align-items: flex-start;
                 margin-bottom: 16px;
+                padding-left: 64px;
             }
 
             .admin-user-meta {
@@ -427,11 +554,16 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
 
         @media (max-width: 640px) {
             .admin-topbar {
-                flex-direction: column;
+                min-height: 54px;
+                align-items: center;
+                justify-content: flex-end;
+            }
+
+            .admin-topbar > div:first-child {
+                display: none;
             }
 
             .admin-user {
-                width: 100%;
                 justify-content: flex-end;
             }
         }
@@ -442,11 +574,36 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
 <body class="<?= $useAdminLayout ? 'has-admin-shell' : '' ?>">
     <?php if ($useAdminLayout): ?>
         <div class="admin-shell">
-            <aside class="admin-sidebar">
-                <a class="admin-brand" href="<?= app_url('/admin/dashboard') ?>">
-                    <span class="admin-brand-mark"><i class="fas fa-check"></i></span>
-                    ClubCheck
-                </a>
+            <button type="button" class="admin-mobile-menu" id="adminMobileMenuBtn" aria-label="Abrir menu">
+                <i class="fas fa-bars"></i>
+            </button>
+            <div class="admin-sidebar-backdrop" id="adminSidebarBackdrop"></div>
+
+            <aside class="admin-sidebar" id="adminSidebar">
+
+                <form class="admin-app-switcher" method="post" action="<?= app_url('/admin/app/select') ?>">
+                    <label class="admin-app-label" for="adminAppSelect">Aplicacion</label>
+                    <div class="admin-app-select-wrap">
+                        <div class="admin-app-current">
+                            <span class="admin-app-icon" style="color: <?= htmlspecialchars($selectedAdminApp['color'] ?? '#2f80ed') ?>">
+                                <i class="<?= htmlspecialchars($selectedAdminApp['iconClass'] ?? 'fa-solid fa-layer-group') ?>"></i>
+                            </span>
+                            <span class="min-w-0">
+                                <span class="admin-app-name"><?= htmlspecialchars($selectedAdminApp['name'] ?? 'Aplicacion') ?></span>
+                                <span class="admin-app-caption">Cambiar contexto</span>
+                            </span>
+                        </div>
+                        <select class="admin-app-select" id="adminAppSelect" name="appId" onchange="this.form.submit()">
+                            <?php foreach ($adminApps as $app): ?>
+                                <option value="<?= htmlspecialchars($app['id']) ?>" <?= (($selectedAdminApp['id'] ?? null) === $app['id']) ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($app['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <i class="fas fa-chevron-down admin-app-chevron"></i>
+                    </div>
+                    <input type="hidden" name="redirect" value="<?= htmlspecialchars($layoutCurrentPath) ?>">
+                </form>
 
                 <nav class="admin-nav" aria-label="Navegacion administrativa">
                     <?php foreach ($adminSections as $sectionLabel => $items): ?>
@@ -495,7 +652,7 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
             <div class="container">
                 <a class="navbar-brand" href="<?= app_url('/') ?>">
                     <i class="fas fa-cloud-upload-alt me-2"></i>
-                    ClubCheck Versioning
+                    Versiones
                 </a>
                 <div class="navbar-nav ms-auto">
                     <?php if ($isAuthenticatedLayout): ?>
@@ -535,6 +692,25 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
     <?= isset($customScripts) ? $customScripts : '' ?>
 
     <script>
+        (function() {
+            const menuButton = document.getElementById('adminMobileMenuBtn');
+            const backdrop = document.getElementById('adminSidebarBackdrop');
+            const sidebar = document.getElementById('adminSidebar');
+            if (!menuButton || !backdrop || !sidebar) {
+                return;
+            }
+
+            const setOpen = (open) => {
+                document.body.classList.toggle('admin-menu-open', open);
+                menuButton.setAttribute('aria-label', open ? 'Cerrar menu' : 'Abrir menu');
+                menuButton.innerHTML = open ? '<i class="fas fa-xmark"></i>' : '<i class="fas fa-bars"></i>';
+            };
+
+            menuButton.addEventListener('click', () => setOpen(!document.body.classList.contains('admin-menu-open')));
+            backdrop.addEventListener('click', () => setOpen(false));
+            sidebar.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => setOpen(false)));
+        })();
+
         setTimeout(function() {
             const alerts = document.querySelectorAll('.alert');
             alerts.forEach(function(alert) {

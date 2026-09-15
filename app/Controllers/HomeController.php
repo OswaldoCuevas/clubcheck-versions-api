@@ -4,8 +4,10 @@ namespace Controllers;
 
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Models/VersionModel.php';
+require_once __DIR__ . '/../Models/ApplicationModel.php';
 
 use Core\Controller;
+use Models\ApplicationModel;
 use Models\VersionModel;
 
 class HomeController extends Controller
@@ -27,6 +29,11 @@ class HomeController extends Controller
                 die('Error: No se pudo crear el directorio de uploads. Verifica los permisos.');
             }
         }
+    }
+
+    private function selectedAppId(): string
+    {
+        return (new ApplicationModel())->getSelectedApp()['id'];
     }
 
     public function index()
@@ -58,7 +65,8 @@ class HomeController extends Controller
         }
 
         // Leer versión actual desde la base de datos
-        $currentVersion = $this->versionModel->getLatestVersion();
+        // Leer la version de la app seleccionada en el panel admin.
+        $currentVersion = $this->versionModel->getLatestVersion($this->selectedAppId());
 
         // Datos para la vista
         $data = [
@@ -202,7 +210,7 @@ class HomeController extends Controller
         // Actualizar base de datos
         $uploadDateTime = date('Y-m-d H:i:s'); // Formato MySQL
         
-        if ($this->versionModel->saveVersion($version, $exeFileUrl, $exeSha256, $mandatory, $releaseNotes, $uploadDateTime, $setupFileUrl, $setupSha256, $setupFileSize)) {
+        if ($this->versionModel->saveVersion($version, $exeFileUrl, $exeSha256, $mandatory, $releaseNotes, $uploadDateTime, $setupFileUrl, $setupSha256, $setupFileSize, $this->selectedAppId())) {
             // Limpiar backups antiguos (mantener solo los últimos 5)
             $this->cleanOldBackups();
             

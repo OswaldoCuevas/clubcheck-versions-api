@@ -1,19 +1,12 @@
 <?php
-$title = 'Planes Stripe - ClubCheck';
+$title = 'Planes Stripe';
 
 ob_start();
 ?>
 
 <div class="container mt-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-        <div>
-            <h3 class="mb-1">Planes Stripe</h3>
-            <p class="text-muted mb-0">Catalogo local de precios, reglas y clientes con precios historicos.</p>
-        </div>
+    <div class="d-flex flex-wrap justify-content-end align-items-center mb-3 gap-2">
         <div class="d-flex gap-2">
-            <a href="<?= app_url('/admin') ?>" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left me-2"></i>Volver al panel
-            </a>
             <button type="button" class="btn btn-outline-secondary" id="refreshBtn">
                 <i class="fas fa-rotate me-1"></i>Actualizar
             </button>
@@ -24,6 +17,23 @@ ob_start();
     </div>
 
     <div id="alertsContainer"></div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-body">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <div>
+                    <h5 class="mb-1">Catalogo de reglas</h5>
+                    <p class="text-muted mb-0 small">Reglas disponibles solo para la app seleccionada.</p>
+                </div>
+                <button type="button" class="btn btn-outline-primary" id="newRuleBtn">
+                    <i class="fas fa-sliders me-1"></i>Nueva regla
+                </button>
+            </div>
+            <div id="rulesCatalogContainer" class="rule-catalog-list">
+                <span class="text-muted">Cargando reglas...</span>
+            </div>
+        </div>
+    </div>
 
     <div class="card shadow-sm">
         <div class="card-body p-0">
@@ -49,6 +59,52 @@ ob_start();
                     </tbody>
                 </table>
             </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="ruleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <form id="ruleForm">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="ruleModalTitle">Nueva regla</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="ruleId">
+                    <div class="row g-3">
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold">Clave</label>
+                            <input type="text" class="form-control font-monospace" id="catalogRuleKey" placeholder="max_messages" required>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold">Nombre</label>
+                            <input type="text" class="form-control" id="catalogRuleName" placeholder="Mensajes WhatsApp" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold">Tipo</label>
+                            <select class="form-select" id="catalogRuleType">
+                                <option value="integer">Numero</option>
+                                <option value="boolean">Si/No</option>
+                                <option value="decimal">Decimal</option>
+                                <option value="string">Texto</option>
+                                <option value="json">JSON</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Descripcion</label>
+                            <textarea class="form-control" id="catalogRuleDescription" rows="3"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>Guardar regla
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -134,6 +190,8 @@ ob_start();
 const endpoints = <?= json_encode([
     'list' => app_url('/admin/api/stripe-plans'),
     'save' => app_url('/admin/api/stripe-plans'),
+    'saveRule' => app_url('/admin/api/stripe-plan-rules'),
+    'unlinkRule' => app_url('/admin/api/stripe-plan-rules/{ruleId}'),
     'verify' => app_url('/admin/api/stripe-plans/{lookupKey}/verify'),
     'createPrice' => app_url('/admin/api/stripe-plans/{lookupKey}/create-stripe-price'),
 ], JSON_UNESCAPED_SLASHES) ?>;
@@ -141,14 +199,18 @@ const endpoints = <?= json_encode([
 let plans = [];
 let rulesCatalog = [];
 let modal;
+let ruleModal;
 let stripeDashboardBase = 'https://dashboard.stripe.com/test/prices/';
 
 document.addEventListener('DOMContentLoaded', () => {
     modal = new bootstrap.Modal(document.getElementById('planModal'));
+    ruleModal = new bootstrap.Modal(document.getElementById('ruleModal'));
     document.getElementById('refreshBtn').addEventListener('click', loadPlans);
     document.getElementById('newPlanBtn').addEventListener('click', () => openPlanModal());
+    document.getElementById('newRuleBtn').addEventListener('click', () => openRuleModal());
     document.getElementById('addRuleBtn').addEventListener('click', () => addRuleRow('', ''));
     document.getElementById('planForm').addEventListener('submit', savePlan);
+    document.getElementById('ruleForm').addEventListener('submit', saveRule);
     loadPlans();
 });
 
@@ -164,6 +226,7 @@ async function loadPlans() {
         plans = data.plans || [];
         rulesCatalog = data.rules_catalog || [];
         stripeDashboardBase = data.stripe_dashboard_base || stripeDashboardBase;
+        ensureRulesDatalist();
 
         if (!data.tables_ready) {
             showAlert('Ejecuta las migraciones 009_create_stripe_plan_catalog.sql y 010_add_stripe_plan_price_fields.sql antes de administrar planes.', 'warning');
@@ -173,11 +236,38 @@ async function loadPlans() {
             showAlert('Los planes cargaron, pero no se pudo consultar Stripe para hacer el match automatico.', 'warning');
         }
 
+        renderRuleCatalog();
         renderPlans();
     } catch (e) {
         showAlert(e.message, 'danger');
         tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted">No se pudieron cargar los planes.</td></tr>';
     }
+}
+
+function renderRuleCatalog() {
+    const container = document.getElementById('rulesCatalogContainer');
+    if (!rulesCatalog.length) {
+        container.innerHTML = '<span class="text-muted">No hay reglas en el catalogo de esta app.</span>';
+        return;
+    }
+
+    container.innerHTML = rulesCatalog.map(rule => `
+        <div class="rule-catalog-pill">
+            <span>
+                <strong>${esc(rule.Name || rule.RuleKey)}</strong>
+                <small>${esc(rule.RuleKey)}</small>
+            </span>
+            <span class="rule-catalog-actions">
+                <em>${ruleTypeLabel(rule.ValueType)}</em>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="openRuleModal(${Number(rule.Id) || 0})" title="Editar regla">
+                    <i class="fas fa-pen"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="unlinkRule(${Number(rule.Id) || 0}, '${js(rule.RuleKey)}')" title="Desvincular de esta app">
+                    <i class="fas fa-link-slash"></i>
+                </button>
+            </span>
+        </div>
+    `).join('');
 }
 
 function renderPlans() {
@@ -242,6 +332,17 @@ function openPlanModal(lookupKey = null) {
     modal.show();
 }
 
+function openRuleModal(ruleId = null) {
+    const rule = ruleId ? rulesCatalog.find(item => Number(item.Id) === Number(ruleId)) : null;
+    document.getElementById('ruleModalTitle').textContent = rule ? 'Editar regla' : 'Nueva regla';
+    document.getElementById('ruleId').value = rule?.Id || '';
+    document.getElementById('catalogRuleKey').value = rule?.RuleKey || '';
+    document.getElementById('catalogRuleName').value = rule?.Name || '';
+    document.getElementById('catalogRuleType').value = rule?.ValueType || 'integer';
+    document.getElementById('catalogRuleDescription').value = rule?.Description || '';
+    ruleModal.show();
+}
+
 function defaultRules() {
     const defaults = {};
     rulesCatalog.forEach(rule => {
@@ -272,11 +373,55 @@ function addRuleRow(key, value) {
 }
 
 function ensureRulesDatalist() {
-    if (document.getElementById('rulesList')) return;
-    const datalist = document.createElement('datalist');
-    datalist.id = 'rulesList';
+    let datalist = document.getElementById('rulesList');
+    if (!datalist) {
+        datalist = document.createElement('datalist');
+        datalist.id = 'rulesList';
+        document.body.appendChild(datalist);
+    }
+
     datalist.innerHTML = rulesCatalog.map(rule => `<option value="${esc(rule.RuleKey)}">${esc(rule.Name || rule.RuleKey)}</option>`).join('');
-    document.body.appendChild(datalist);
+}
+
+async function saveRule(event) {
+    event.preventDefault();
+    const payload = {
+        id: document.getElementById('ruleId').value,
+        rule_key: document.getElementById('catalogRuleKey').value.trim(),
+        name: document.getElementById('catalogRuleName').value.trim(),
+        value_type: document.getElementById('catalogRuleType').value,
+        description: document.getElementById('catalogRuleDescription').value.trim()
+    };
+
+    try {
+        const res = await fetch(endpoints.saveRule, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'No se pudo guardar la regla');
+        ruleModal.hide();
+        showAlert('Regla guardada para esta app.', 'success');
+        await loadPlans();
+    } catch (e) {
+        showAlert(e.message, 'danger');
+    }
+}
+
+async function unlinkRule(ruleId, ruleKey) {
+    if (!ruleId) return;
+    if (!confirm(`Se quitara la regla "${ruleKey}" del catalogo de esta app y de sus planes. Continuar?`)) return;
+
+    try {
+        const res = await fetch(endpoints.unlinkRule.replace('{ruleId}', encodeURIComponent(ruleId)), { method: 'DELETE' });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'No se pudo desvincular la regla');
+        showAlert('Regla desvinculada de esta app.', 'success');
+        await loadPlans();
+    } catch (e) {
+        showAlert(e.message, 'danger');
+    }
 }
 
 async function savePlan(event) {
@@ -353,6 +498,11 @@ async function createStripePrice(lookupKey) {
 
 function statusEl(lookupKey) {
     return document.getElementById(`stripeStatus-${cssId(lookupKey)}`);
+}
+
+function ruleTypeLabel(type) {
+    const labels = { boolean: 'Si/No', integer: 'Numero', decimal: 'Decimal', string: 'Texto', json: 'JSON' };
+    return labels[type] || type || 'Regla';
 }
 
 function periodBadge(type) {
@@ -437,6 +587,54 @@ $customStyles = <<<CSS
     max-height: 34vh;
     overflow-y: auto;
     padding-right: 0.5rem;
+}
+
+.rule-catalog-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.rule-catalog-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    min-width: 220px;
+    padding: 10px 12px;
+    border: 1px solid #d7eafd;
+    border-radius: 8px;
+    background: #f8fbff;
+    color: #15395b;
+    text-align: left;
+}
+
+.rule-catalog-pill:hover {
+    border-color: #9fcdfa;
+    background: #edf7ff;
+}
+
+.rule-catalog-pill strong,
+.rule-catalog-pill small {
+    display: block;
+}
+
+.rule-catalog-pill small {
+    color: #6b8299;
+    font-family: monospace;
+}
+
+.rule-catalog-pill em {
+    color: #1769aa;
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 700;
+}
+
+.rule-catalog-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
 CSS;
 

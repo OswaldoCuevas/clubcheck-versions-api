@@ -3,6 +3,7 @@
 namespace Models;
 
 require_once __DIR__ . '/../Core/Model.php';
+require_once __DIR__ . '/ApplicationModel.php';
 
 use Core\Model;
 
@@ -11,22 +12,38 @@ class AnnouncementModel extends Model
     private string $table = 'Announcements';
     private string $viewsTable = 'AnnouncementViews';
 
-    public function getAll(): array
+    private function hasAppField(): bool
     {
+        return (new ApplicationModel())->columnExists($this->table, 'AppId');
+    }
+
+    public function getAll(?string $appId = null): array
+    {
+        $where = $appId !== null && $this->hasAppField() ? 'WHERE a.AppId = ?' : '';
+        $params = $where !== '' ? [$appId] : [];
         $rows = $this->db->fetchAll(
             "SELECT a.*,
                     COUNT(v.Id) AS ViewsCount
              FROM {$this->table} a
              LEFT JOIN {$this->viewsTable} v ON v.AnnouncementId = a.Id
+             {$where}
              GROUP BY a.Id
-             ORDER BY a.IsActive DESC, a.UpdatedAt DESC"
+             ORDER BY a.IsActive DESC, a.UpdatedAt DESC",
+            $params
         );
 
         return array_map([$this, 'mapAnnouncement'], $rows);
     }
 
-    public function viewsForAnnouncement(string $announcementId): array
+    public function viewsForAnnouncement(string $announcementId, ?string $appId = null): array
     {
+        $appJoin = '';
+        $params = [$announcementId];
+        if ($appId !== null && $this->hasAppField()) {
+            $appJoin = 'AND a.AppId = ?';
+            $params[] = $appId;
+        }
+
         return $this->db->fetchAll(
             "SELECT v.Id,
                     v.AnnouncementId,
@@ -39,24 +56,41 @@ class AnnouncementModel extends Model
                     v.IpAddress,
                     v.UserAgent
              FROM {$this->viewsTable} v
+             JOIN {$this->table} a ON a.Id = v.AnnouncementId
              LEFT JOIN Customers c ON c.Id = v.CustomerId
              WHERE v.AnnouncementId = ?
+             {$appJoin}
              ORDER BY v.ViewedAt DESC",
-            [$announcementId]
+            $params
         );
     }
 
-    public function find(string $id): ?array
+    public function find(string $id, ?string $appId = null): ?array
     {
-        $row = $this->db->fetchOne("SELECT * FROM {$this->table} WHERE Id = ? LIMIT 1", [$id]);
+        $where = 'Id = ?';
+        $params = [$id];
+        if ($appId !== null && $this->hasAppField()) {
+            $where .= ' AND AppId = ?';
+            $params[] = $appId;
+        }
+
+        $row = $this->db->fetchOne("SELECT * FROM {$this->table} WHERE {$where} LIMIT 1", $params);
         return $row ? $this->mapAnnouncement($row) : null;
     }
 
-    public function save(array $data, ?string $username = null): array
+    public function save(array $data, ?string $username = null, ?string $appId = null): array
     {
         $id = $this->slug($data['id'] ?? '');
         if ($id === '') {
             $id = $this->slug(($data['title'] ?? 'anuncio') . '-' . ($data['version'] ?? date('YmdHis')));
+        }
+
+        if ($appId !== null && $this->hasAppField()) {
+            $existingAnyApp = $this->find($id);
+            if ($existingAnyApp && ($existingAnyApp['appId'] ?? null) !== $appId) {
+                // Id sigue siendo PK global; agregamos sufijo para permitir el mismo anuncio en otra app.
+                $id = $this->slug($id . '-' . substr(str_replace('-', '', $appId), 0, 8));
+            }
         }
 
         $slides = $this->normalizeSlides($data['slides'] ?? []);
@@ -78,6 +112,11 @@ class AnnouncementModel extends Model
             'UpdatedBy' => $username,
         ];
 
+        if ($appId !== null && $this->hasAppField()) {
+            // Announcement.AppId evita mostrar anuncios de otra aplicacion al cliente.
+            $payload['AppId'] = $appId;
+        }
+
         if ($payload['Version'] === '' || $payload['Title'] === '') {
             throw new \InvalidArgumentException('Version y titulo son obligatorios.');
         }
@@ -92,10 +131,14 @@ class AnnouncementModel extends Model
         $this->db->begin();
         try {
             if ($isActive) {
-                $this->db->execute_query("UPDATE {$this->table} SET IsActive = 0 WHERE Id <> ?", [$id]);
+                if ($appId !== null && $this->hasAppField()) {
+                    $this->db->execute_query("UPDATE {$this->table} SET IsActive = 0 WHERE AppId = ? AND Id <> ?", [$appId, $id]);
+                } else {
+                    $this->db->execute_query("UPDATE {$this->table} SET IsActive = 0 WHERE Id <> ?", [$id]);
+                }
             }
 
-            $existing = $this->find($id);
+            $existing = $this->find($id, $appId);
             if ($existing) {
                 unset($payload['Id']);
                 $this->db->update($this->table, $payload, 'Id = ?', [$id]);
@@ -111,18 +154,22 @@ class AnnouncementModel extends Model
             throw $e;
         }
 
-        return $this->find($id);
+        return $this->find($id, $appId);
     }
 
-    public function activate(string $id, ?string $username = null): ?array
+    public function activate(string $id, ?string $username = null, ?string $appId = null): ?array
     {
-        if (!$this->find($id)) {
+        if (!$this->find($id, $appId)) {
             return null;
         }
 
         $this->db->begin();
         try {
-            $this->db->execute_query("UPDATE {$this->table} SET IsActive = 0 WHERE Id <> ?", [$id]);
+            if ($appId !== null && $this->hasAppField()) {
+                $this->db->execute_query("UPDATE {$this->table} SET IsActive = 0 WHERE AppId = ? AND Id <> ?", [$appId, $id]);
+            } else {
+                $this->db->execute_query("UPDATE {$this->table} SET IsActive = 0 WHERE Id <> ?", [$id]);
+            }
             $this->db->update($this->table, [
                 'IsActive' => 1,
                 'UpdatedAt' => date('Y-m-d H:i:s'),
@@ -134,22 +181,30 @@ class AnnouncementModel extends Model
             throw $e;
         }
 
-        return $this->find($id);
+        return $this->find($id, $appId);
     }
 
-    public function deleteById(string $id): bool
+    public function deleteById(string $id, ?string $appId = null): bool
     {
+        if ($appId !== null && $this->hasAppField()) {
+            return $this->db->delete($this->table, 'Id = ? AND AppId = ?', [$id, $appId], 1);
+        }
+
         return $this->db->delete($this->table, 'Id = ?', [$id], 1);
     }
 
     public function pendingForCustomer(string $customerId, ?string $currentClientVersion = null): ?array
     {
+        $appCondition = $this->hasAppField() && (new ApplicationModel())->columnExists('Customers', 'AppId')
+            ? 'AND (a.AppId IS NULL OR a.AppId = c.AppId)'
+            : '';
         $row = $this->db->fetchOne(
             "SELECT a.*, c.ClientVersion
              FROM {$this->table} a
              JOIN Customers c ON c.Id = ?
              LEFT JOIN {$this->viewsTable} v ON v.AnnouncementId = a.Id AND v.CustomerId = c.Id
              WHERE a.IsActive = 1 AND v.Id IS NULL
+             {$appCondition}
              LIMIT 1",
             [$customerId]
         );
@@ -169,11 +224,15 @@ class AnnouncementModel extends Model
 
     public function activeForCustomer(string $customerId): ?array
     {
+        $appCondition = $this->hasAppField() && (new ApplicationModel())->columnExists('Customers', 'AppId')
+            ? 'AND (a.AppId IS NULL OR a.AppId = c.AppId)'
+            : '';
         $row = $this->db->fetchOne(
             "SELECT a.*, c.ClientVersion
              FROM {$this->table} a
              JOIN Customers c ON c.Id = ?
              WHERE a.IsActive = 1
+             {$appCondition}
              LIMIT 1",
             [$customerId]
         );
@@ -244,6 +303,7 @@ class AnnouncementModel extends Model
 
         return [
             'id' => $row['Id'],
+            'appId' => $row['AppId'] ?? ApplicationModel::DEFAULT_APP_ID,
             'version' => $row['Version'],
             'title' => $row['Title'],
             'subtitle' => $row['Subtitle'] ?? '',

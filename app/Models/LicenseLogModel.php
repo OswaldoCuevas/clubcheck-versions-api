@@ -3,6 +3,7 @@
 namespace Models;
 
 require_once __DIR__ . '/../Core/Model.php';
+require_once __DIR__ . '/ApplicationModel.php';
 
 use Core\Model;
 
@@ -41,6 +42,7 @@ class LicenseLogModel extends Model
     public function createLog(array $data): int
     {
         $row = [
+            'AppId'         => $data['AppId']         ?? ApplicationModel::DEFAULT_APP_ID,
             'CustomerId'    => $data['CustomerId']    ?? null,
             'BillingId'     => $data['BillingId']     ?? null,
             'CustomerName'  => $data['CustomerName']  ?? '',
@@ -58,6 +60,10 @@ class LicenseLogModel extends Model
             'IssuedAt'      => date('Y-m-d H:i:s'),
         ];
 
+        if (!(new ApplicationModel())->columnExists('LicenseLogs', 'AppId')) {
+            unset($row['AppId']);
+        }
+
         return $this->db->insert('LicenseLogs', $row);
     }
 
@@ -69,9 +75,16 @@ class LicenseLogModel extends Model
      * @param int $limit  Máximo de registros (0 = sin límite)
      * @param int $offset Para paginación
      */
-    public function getAll(int $limit = 0, int $offset = 0): array
+    public function getAll(int $limit = 0, int $offset = 0, ?string $appId = null): array
     {
-        $sql = 'SELECT * FROM LicenseLogs ORDER BY IssuedAt DESC';
+        $params = [];
+        $where = '';
+        if ($appId !== null && (new ApplicationModel())->columnExists('LicenseLogs', 'AppId')) {
+            $where = ' WHERE AppId = ?';
+            $params[] = $appId;
+        }
+
+        $sql = 'SELECT * FROM LicenseLogs' . $where . ' ORDER BY IssuedAt DESC';
 
         if ($limit > 0) {
             $sql .= ' LIMIT ' . (int)$limit;
@@ -80,7 +93,7 @@ class LicenseLogModel extends Model
             }
         }
 
-        $rows = $this->db->fetchAll($sql);
+        $rows = $this->db->fetchAll($sql, $params);
         return array_map(fn($r) => $this->hydrate($r), $rows);
     }
 
@@ -135,6 +148,7 @@ class LicenseLogModel extends Model
     {
         return [
             'id'            => (int)$row['Id'],
+            'appId'         => $row['AppId'] ?? ApplicationModel::DEFAULT_APP_ID,
             'customerId'    => $row['CustomerId'],
             'billingId'     => $row['BillingId'],
             'customerName'  => $row['CustomerName'],

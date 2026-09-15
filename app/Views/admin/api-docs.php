@@ -1,19 +1,10 @@
 <?php
-$title = 'API Endpoints - ClubCheck';
+$title = 'API Endpoints';
 
 ob_start();
 ?>
 
 <div class="container mt-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
-        <div>
-            <h3 class="mb-1">Referencia de API</h3>
-            <p class="text-muted mb-0">Consulta rápidamente los endpoints disponibles y ejemplos listos para copiar.</p>
-        </div>
-        <a href="<?= app_url('/admin') ?>" class="btn btn-outline-secondary">
-            <i class="fas fa-arrow-left me-2"></i>Volver al panel
-        </a>
-    </div>
 
     <?php if (!empty($sections)) : ?>
         <div class="accordion" id="apiDocsAccordion">

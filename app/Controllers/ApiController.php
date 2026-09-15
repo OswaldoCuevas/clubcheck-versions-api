@@ -5,15 +5,17 @@ namespace Controllers;
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Models/VersionModel.php';
 require_once __DIR__ . '/../Models/DownloadLogModel.php';
+require_once __DIR__ . '/../Models/ApplicationModel.php';
 
 use Core\Controller;
-use Models\VersionModel;
+use Models\ApplicationModel;
 use Models\DownloadLogModel;
+use Models\VersionModel;
 
 class ApiController extends Controller
 {
-    private $versionModel;
-    private $downloadLogModel;
+    private VersionModel $versionModel;
+    private DownloadLogModel $downloadLogModel;
 
     public function __construct()
     {
@@ -22,58 +24,67 @@ class ApiController extends Controller
         $this->downloadLogModel = new DownloadLogModel();
     }
 
-    public function version()
+    private function requestAppId(?array $payload = null): string
     {
-        // Configurar headers para API
+        $appPayload = array_merge($_GET, $payload ?? []);
+        return (new ApplicationModel())->resolveFromPayload($appPayload);
+    }
+
+    private function withAppQuery(string $url, string $appId): string
+    {
+        $app = (new ApplicationModel())->find($appId);
+        if (!$app || empty($app['slug'])) {
+            return $url;
+        }
+
+        return $url . (str_contains($url, '?') ? '&' : '?') . 'app=' . urlencode($app['slug']);
+    }
+
+    private function latestVersion(string $appId): array
+    {
+        // Las versiones se resuelven por app; si no existe la migracion usa el catalogo global anterior.
+        return $this->versionModel->getLatestVersion($appId);
+    }
+
+    public function version(): void
+    {
         header('Content-Type: application/json');
         header('Access-Control-Allow-Origin: *');
         header('Access-Control-Allow-Methods: GET');
         header('Access-Control-Allow-Headers: Content-Type');
 
-        // Obtener versión desde la base de datos
-        $versionData = $this->versionModel->getLatestVersion();
-
-        // Verificar si hay una versión válida
+        $appId = $this->requestAppId();
+        $versionData = $this->latestVersion($appId);
         $hasValidVersion = !empty($versionData['latestVersion']) && $versionData['latestVersion'] !== '0.0.0.0';
 
-        // Agregar información adicional útil para el cliente
         $versionData['hasUpdate'] = $hasValidVersion;
 
-        // Agregar URLs de descarga y verificación
         if ($hasValidVersion) {
             require_once __DIR__ . '/../Core/UrlHelper.php';
-            $baseUrl = \Core\UrlHelper::absoluteUrl('');
-            
-            $versionData['downloadUrl'] = $baseUrl . '/api/download';
-            $versionData['downloadUrl'] = str_replace('//api', '/api', $versionData['downloadUrl']); // Asegurar formato correcto
-            $versionData['downloadSetupUrl'] = $baseUrl . '/api/download-setup';
-            $versionData['downloadSetupUrl'] = str_replace('//api', '/api', $versionData['downloadSetupUrl']); // Asegurar formato correcto
-            $versionData['downloadZipUrl'] = $baseUrl . '/api/download-zip';
-            $versionData['downloadZipUrl'] = str_replace('//api', '/api', $versionData['downloadZipUrl']); // Asegurar formato correcto
-            $versionData['checkUpdateUrl'] = $baseUrl . '/api/check-update';
-            $versionData['checkUpdateUrl'] = str_replace('//api', '/api', $versionData['checkUpdateUrl']); // Asegurar formato correcto
-            $versionData['directUrl'] = $versionData['url'] ?? ''; // URL directa al archivo
-            $versionData['directSetupUrl'] = $versionData['setupUrl'] ?? ''; // URL directa al Setup
-            $versionData['directZipUrl'] = $versionData['setupUrl'] ?? ''; // Alias para clientes nuevos
-            
-            // Verificar si el archivo EXE existe físicamente
             require_once __DIR__ . '/../Helpers/FileHelper.php';
+
+            $baseUrl = \Core\UrlHelper::absoluteUrl('');
+            $versionData['downloadUrl'] = str_replace('//api', '/api', $this->withAppQuery($baseUrl . '/api/download', $appId));
+            $versionData['downloadSetupUrl'] = str_replace('//api', '/api', $this->withAppQuery($baseUrl . '/api/download-setup', $appId));
+            $versionData['downloadZipUrl'] = str_replace('//api', '/api', $this->withAppQuery($baseUrl . '/api/download-zip', $appId));
+            $versionData['checkUpdateUrl'] = str_replace('//api', '/api', $this->withAppQuery($baseUrl . '/api/check-update', $appId));
+            $versionData['directUrl'] = $versionData['url'] ?? '';
+            $versionData['directSetupUrl'] = $versionData['setupUrl'] ?? '';
+            $versionData['directZipUrl'] = $versionData['setupUrl'] ?? '';
+
             $fileName = getAppFileName($versionData['latestVersion']);
             $filePath = findExistingAppFile($versionData['latestVersion']) ?: (__DIR__ . '/../../uploads/' . $fileName);
             $versionData['fileExists'] = file_exists($filePath);
-            
             if ($versionData['fileExists']) {
                 $versionData['fileSize'] = filesize($filePath);
                 $versionData['fileDate'] = filemtime($filePath);
             }
-            
-            // Verificar si el archivo Setup existe físicamente
+
             if (!empty($versionData['setupUrl'])) {
                 $setupFileName = getSetupFileName($versionData['latestVersion']);
                 $setupFilePath = __DIR__ . '/../../uploads/' . $setupFileName;
                 $versionData['setupFileExists'] = file_exists($setupFilePath);
                 $versionData['zipFileExists'] = $versionData['setupFileExists'];
-                
                 if ($versionData['setupFileExists'] && empty($versionData['setupFileSize'])) {
                     $versionData['setupFileSize'] = filesize($setupFilePath);
                 }
@@ -84,26 +95,24 @@ class ApiController extends Controller
         exit;
     }
 
-    public function checkUpdate()
+    public function checkUpdate(): void
     {
-        // Configurar headers para API
         header('Content-Type: application/json');
         header('Access-Control-Allow-Origin: *');
         header('Access-Control-Allow-Methods: GET, POST');
         header('Access-Control-Allow-Headers: Content-Type');
 
-        // Obtener versión desde la base de datos
-        $versionData = $this->versionModel->getLatestVersion();
-
-        // Obtener la versión actual del cliente
-        $clientVersion = '';
+        $input = [];
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $input = json_decode(file_get_contents('php://input'), true);
-            $clientVersion = $input['currentVersion'] ?? '';
-        } else {
-            $clientVersion = $_GET['version'] ?? $_GET['currentVersion'] ?? '';
+            $input = json_decode(file_get_contents('php://input'), true) ?: [];
         }
 
+        $clientVersion = $_SERVER['REQUEST_METHOD'] === 'POST'
+            ? ($input['currentVersion'] ?? '')
+            : ($_GET['version'] ?? $_GET['currentVersion'] ?? '');
+
+        $appId = $this->requestAppId($input);
+        $versionData = $this->latestVersion($appId);
         $serverVersion = $versionData['latestVersion'] ?? '0.0.0.0';
         $hasValidVersion = !empty($serverVersion) && $serverVersion !== '0.0.0.0';
 
@@ -114,37 +123,35 @@ class ApiController extends Controller
             'mandatory' => $versionData['mandatory'] ?? false,
             'releaseNotes' => $versionData['releaseNotes'] ?? '',
             'timestamp' => $versionData['timestamp'] ?? time(),
-            'lastCheck' => time()
+            'lastCheck' => time(),
         ];
 
-        // Comparar versiones si hay una versión del cliente
         if (!empty($clientVersion) && $hasValidVersion) {
             $response['hasUpdate'] = version_compare($serverVersion, $clientVersion, '>');
-            
+
             if ($response['hasUpdate']) {
                 require_once __DIR__ . '/../Core/UrlHelper.php';
+                require_once __DIR__ . '/../Helpers/FileHelper.php';
+
                 $baseUrl = \Core\UrlHelper::absoluteUrl('');
-                $response['downloadUrl'] = $baseUrl . '/api/download';
-                $response['downloadSetupUrl'] = $baseUrl . '/api/download-setup';
-                $response['downloadZipUrl'] = $baseUrl . '/api/download-zip';
+                $response['downloadUrl'] = $this->withAppQuery($baseUrl . '/api/download', $appId);
+                $response['downloadSetupUrl'] = $this->withAppQuery($baseUrl . '/api/download-setup', $appId);
+                $response['downloadZipUrl'] = $this->withAppQuery($baseUrl . '/api/download-zip', $appId);
                 $response['url'] = $versionData['url'] ?? '';
                 $response['setupUrl'] = $versionData['setupUrl'] ?? '';
                 $response['zipUrl'] = $versionData['setupUrl'] ?? '';
-                
-                // Información adicional del archivo EXE
-                require_once __DIR__ . '/../Helpers/FileHelper.php';
+
                 $fileName = getAppFileName($serverVersion);
                 $filePath = findExistingAppFile($serverVersion) ?: (__DIR__ . '/../../uploads/' . $fileName);
                 if (file_exists($filePath)) {
                     $response['fileSize'] = filesize($filePath);
                     $response['checksum'] = hash_file('sha256', $filePath);
                 }
-                
-                // Información adicional del archivo Setup
+
                 if (!empty($versionData['setupUrl'])) {
                     $response['setupFileSize'] = $versionData['setupFileSize'] ?? null;
                     $response['setupSha256'] = $versionData['setupSha256'] ?? '';
-                    
+
                     $setupFileName = getSetupFileName($serverVersion);
                     $setupFilePath = __DIR__ . '/../../uploads/' . $setupFileName;
                     if (file_exists($setupFilePath)) {
@@ -163,17 +170,15 @@ class ApiController extends Controller
         exit;
     }
 
-    public function download()
+    public function download(): void
     {
-        // Obtener versión desde la base de datos
-        $versionData = $this->versionModel->getLatestVersion();
+        $appId = $this->requestAppId();
+        $versionData = $this->latestVersion($appId);
 
-        // Obtener el nombre y ruta del archivo
         require_once __DIR__ . '/../Helpers/FileHelper.php';
         $fileName = getAppFileName($versionData['latestVersion']);
         $filePath = findExistingAppFile($versionData['latestVersion']) ?: (__DIR__ . '/../../uploads/' . $fileName);
 
-        // Verificar que el archivo existe
         if (!file_exists($filePath)) {
             http_response_code(404);
             header('Content-Type: application/json');
@@ -181,20 +186,16 @@ class ApiController extends Controller
                 'error' => 'Archivo no encontrado',
                 'message' => 'El archivo ejecutable no existe en el servidor',
                 'expectedFile' => $fileName,
-                'version' => $versionData['latestVersion']
+                'version' => $versionData['latestVersion'],
             ]);
             exit;
         }
 
-        // Verificar si se solicita información en JSON (parámetro info=1)
         $returnInfo = $_GET['info'] ?? false;
-
         if ($returnInfo) {
-            // Retornar información del archivo en JSON
             header('Content-Type: application/json');
             header('Access-Control-Allow-Origin: *');
-            
-            $fileInfo = [
+            echo json_encode([
                 'filename' => $fileName,
                 'version' => $versionData['latestVersion'],
                 'size' => filesize($filePath),
@@ -202,79 +203,34 @@ class ApiController extends Controller
                 'lastModified' => filemtime($filePath),
                 'url' => $versionData['url'] ?? '',
                 'releaseNotes' => $versionData['releaseNotes'] ?? '',
-                'mandatory' => $versionData['mandatory'] ?? false
-            ];
-
-            echo json_encode($fileInfo, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-            exit;
-        } else {
-            // Descarga directa del archivo ejecutable (comportamiento por defecto)
-            $fileSize = filesize($filePath);
-
-            // Headers para descarga de archivo
-            header('Content-Type: application/octet-stream');
-            header('Content-Disposition: attachment; filename="' . $fileName . '"');
-            header('Content-Length: ' . $fileSize);
-            header('Cache-Control: must-revalidate');
-            header('Pragma: public');
-            header('Access-Control-Allow-Origin: *');
-
-            // Leer y enviar el archivo en chunks para archivos grandes
-            $chunkSize = 8192;
-            $handle = fopen($filePath, 'rb');
-            
-            if ($handle === false) {
-                http_response_code(500);
-                header('Content-Type: application/json');
-                echo json_encode(['error' => 'No se puede leer el archivo']);
-                exit;
-            }
-
-            $bytesSent = 0;
-            while (!feof($handle) && connection_status() === CONNECTION_NORMAL) {
-                $buffer = fread($handle, $chunkSize);
-                $bytesSent += strlen($buffer);
-                echo $buffer;
-                flush();
-            }
-            
-            fclose($handle);
-
-            if ($bytesSent >= $fileSize && connection_status() === CONNECTION_NORMAL) {
-                $this->downloadLogModel->logDownload(
-                    'exe',
-                    $versionData['latestVersion'],
-                    $fileName,
-                    $fileSize
-                );
-            }
+                'mandatory' => $versionData['mandatory'] ?? false,
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
             exit;
         }
+
+        $this->sendDownloadFile($filePath, $fileName, 'application/octet-stream', 'exe', $versionData['latestVersion'], $appId);
     }
 
-    public function downloadSetup()
+    public function downloadSetup(): void
     {
-        // Obtener versión desde la base de datos
-        $versionData = $this->versionModel->getLatestVersion();
+        $appId = $this->requestAppId();
+        $versionData = $this->latestVersion($appId);
 
-        // Verificar que haya información de Setup en la base de datos
         if (empty($versionData['setupUrl'])) {
             http_response_code(404);
             header('Content-Type: application/json');
             echo json_encode([
                 'error' => 'Archivo Setup no encontrado',
-                'message' => 'No hay archivo Setup disponible para la versión actual',
-                'version' => $versionData['latestVersion']
+                'message' => 'No hay archivo Setup disponible para la version actual',
+                'version' => $versionData['latestVersion'],
             ]);
             exit;
         }
 
-        // Obtener el nombre y ruta del archivo Setup ZIP
         require_once __DIR__ . '/../Helpers/FileHelper.php';
         $setupFileName = getSetupFileName($versionData['latestVersion']);
         $setupFilePath = __DIR__ . '/../../uploads/' . $setupFileName;
 
-        // Verificar que el archivo existe
         if (!file_exists($setupFilePath)) {
             http_response_code(404);
             header('Content-Type: application/json');
@@ -282,20 +238,16 @@ class ApiController extends Controller
                 'error' => 'Archivo no encontrado',
                 'message' => 'El archivo Setup no existe en el servidor',
                 'expectedFile' => $setupFileName,
-                'version' => $versionData['latestVersion']
+                'version' => $versionData['latestVersion'],
             ]);
             exit;
         }
 
-        // Verificar si se solicita información en JSON (parámetro info=1)
         $returnInfo = $_GET['info'] ?? false;
-
         if ($returnInfo) {
-            // Retornar información del archivo en JSON
             header('Content-Type: application/json');
             header('Access-Control-Allow-Origin: *');
-            
-            $fileInfo = [
+            echo json_encode([
                 'filename' => $setupFileName,
                 'version' => $versionData['latestVersion'],
                 'size' => filesize($setupFilePath),
@@ -303,100 +255,73 @@ class ApiController extends Controller
                 'lastModified' => filemtime($setupFilePath),
                 'url' => $versionData['setupUrl'] ?? '',
                 'releaseNotes' => $versionData['releaseNotes'] ?? '',
-                'mandatory' => $versionData['mandatory'] ?? false
-            ];
-
-            echo json_encode($fileInfo, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-            exit;
-        } else {
-            // Descarga directa del archivo Setup ZIP (comportamiento por defecto)
-            $fileSize = filesize($setupFilePath);
-
-            // Headers para descarga de archivo Setup ZIP
-            header('Content-Type: application/zip');
-            header('Content-Disposition: attachment; filename="' . $setupFileName . '"');
-            header('Content-Length: ' . $fileSize);
-            header('Cache-Control: must-revalidate');
-            header('Pragma: public');
-            header('Access-Control-Allow-Origin: *');
-
-            // Leer y enviar el archivo en chunks para archivos grandes
-            $chunkSize = 8192;
-            $handle = fopen($setupFilePath, 'rb');
-            
-            if ($handle === false) {
-                http_response_code(500);
-                header('Content-Type: application/json');
-                echo json_encode(['error' => 'No se puede leer el archivo']);
-                exit;
-            }
-
-            $bytesSent = 0;
-            while (!feof($handle) && connection_status() === CONNECTION_NORMAL) {
-                $buffer = fread($handle, $chunkSize);
-                $bytesSent += strlen($buffer);
-                echo $buffer;
-                flush();
-            }
-            
-            fclose($handle);
-
-            if ($bytesSent >= $fileSize && connection_status() === CONNECTION_NORMAL) {
-                $this->downloadLogModel->logDownload(
-                    'setup',
-                    $versionData['latestVersion'],
-                    $setupFileName,
-                    $fileSize
-                );
-            }
+                'mandatory' => $versionData['mandatory'] ?? false,
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
             exit;
         }
+
+        $this->sendDownloadFile($setupFilePath, $setupFileName, 'application/zip', 'setup', $versionData['latestVersion'], $appId);
     }
 
-    public function downloadZip()
+    public function downloadZip(): void
     {
         $this->downloadSetup();
     }
 
-    /**
-     * Endpoint para obtener el timestamp del servidor
-     * Devuelve timestamp UTC en formato ISO 8601 y ticks de .NET
-     */
-    public function timestamp()
+    private function sendDownloadFile(string $filePath, string $fileName, string $contentType, string $downloadType, string $version, string $appId): void
     {
-        // Configurar headers para API
+        $fileSize = filesize($filePath);
+
+        header('Content-Type: ' . $contentType);
+        header('Content-Disposition: attachment; filename="' . $fileName . '"');
+        header('Content-Length: ' . $fileSize);
+        header('Cache-Control: must-revalidate');
+        header('Pragma: public');
+        header('Access-Control-Allow-Origin: *');
+
+        $handle = fopen($filePath, 'rb');
+        if ($handle === false) {
+            http_response_code(500);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'No se puede leer el archivo']);
+            exit;
+        }
+
+        $bytesSent = 0;
+        while (!feof($handle) && connection_status() === CONNECTION_NORMAL) {
+            $buffer = fread($handle, 8192);
+            $bytesSent += strlen($buffer);
+            echo $buffer;
+            flush();
+        }
+
+        fclose($handle);
+
+        if ($bytesSent >= $fileSize && connection_status() === CONNECTION_NORMAL) {
+            $this->downloadLogModel->logDownload($downloadType, $version, $fileName, $fileSize, $appId);
+        }
+        exit;
+    }
+
+    public function timestamp(): void
+    {
         header('Content-Type: application/json');
         header('Access-Control-Allow-Origin: *');
         header('Access-Control-Allow-Methods: GET');
         header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
-        // Obtener el timestamp UTC actual
         $now = new \DateTime('now', new \DateTimeZone('UTC'));
-        $utcTimestamp = $now->format('Y-m-d\TH:i:s\Z'); // Formato ISO 8601
-
-        // Calcular ticks de .NET
-        // La época de .NET es 0001-01-01 00:00:00
-        // Los ticks son intervalos de 100 nanosegundos
-        // 1 segundo = 10,000,000 ticks
-        // Diferencia entre época .NET (0001-01-01) y época Unix (1970-01-01) = 62135596800 segundos
+        $utcTimestamp = $now->format('Y-m-d\TH:i:s\Z');
         $unixTimestamp = $now->getTimestamp();
-        $microSeconds = (int)$now->format('u'); // Microsegundos
-        
-        // Ticks totales desde la época .NET
+        $microSeconds = (int) $now->format('u');
         $secondsSinceNetEpoch = $unixTimestamp + 62135596800;
         $utcTicks = ($secondsSinceNetEpoch * 10000000) + ($microSeconds * 10);
 
-        // Obtener la zona horaria del servidor
-        $timeZone = date_default_timezone_get();
-
-        // Preparar respuesta
-        $response = [
+        echo json_encode([
             'utcTimestamp' => $utcTimestamp,
             'utcTicks' => $utcTicks,
-            'timeZone' => $timeZone
-        ];
-
-        echo json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+            'timeZone' => date_default_timezone_get(),
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
         exit;
     }
 }

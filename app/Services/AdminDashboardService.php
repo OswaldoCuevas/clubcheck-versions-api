@@ -4,9 +4,11 @@ namespace App\Services;
 
 require_once __DIR__ . '/../Core/Model.php';
 require_once __DIR__ . '/../Models/SystemSettingModel.php';
+require_once __DIR__ . '/../Models/ApplicationModel.php';
 
 use Core\Model;
 use Models\SystemSettingModel;
+use Models\ApplicationModel;
 
 class AdminDashboardService extends Model
 {
@@ -17,16 +19,18 @@ class AdminDashboardService extends Model
         // Nada adicional requerido.
     }
 
-    public function getDashboard(?StripeService $stripeService = null): array
+    public function getDashboard(?StripeService $stripeService = null, ?string $appId = null): array
     {
-        $messageCost = $this->getWhatsappMessageCost();
-        $messages = $this->getWhatsappMessageStats($messageCost);
+        $appId ??= (new ApplicationModel())->getSelectedApp()['id'];
+        $messageCost = $this->getWhatsappMessageCost($appId);
+        $messages = $this->getWhatsappMessageStats($messageCost, $appId);
         $stripe = $stripeService ? $stripeService->getMonthlyBillingSummary() : $this->emptyStripeSummary();
 
         return [
-            'customers' => $this->getCustomerStats(),
+            'customers' => $this->getCustomerStats($appId),
             'whatsapp' => $messages,
             'stripe' => $stripe,
+            // information_schema mide espacio fisico por tabla; no se puede separar por app sin particionar o estimar por filas.
             'storage' => $this->getTableStorageStats(),
             'settings' => [
                 'whatsapp_message_unit_cost_mxn' => $messageCost,
@@ -35,23 +39,34 @@ class AdminDashboardService extends Model
         ];
     }
 
-    public function updateWhatsappMessageCost(float $cost): void
+    public function updateWhatsappMessageCost(float $cost, ?string $appId = null): void
     {
         if ($cost < 0) {
             throw new \InvalidArgumentException('El costo por mensaje no puede ser negativo');
         }
 
-        $settings = new SystemSettingModel();
-        $settings->set(
-            self::WHATSAPP_COST_KEY,
-            number_format($cost, 6, '.', ''),
-            'Costo aproximado por mensaje exitoso de WhatsApp en MXN'
-        );
+        $appModel = new ApplicationModel();
+        $appId ??= $appModel->getSelectedApp()['id'];
+
+        if ($appModel->isReady()) {
+            $appModel->saveSettings($appId, [
+                self::WHATSAPP_COST_KEY => number_format($cost, 6, '.', ''),
+            ]);
+            return;
+        }
+
+        (new SystemSettingModel())->set(self::WHATSAPP_COST_KEY, number_format($cost, 6, '.', ''), 'Costo aproximado por mensaje exitoso de WhatsApp en MXN');
     }
 
-    private function getWhatsappMessageCost(): float
+    private function getWhatsappMessageCost(string $appId): float
     {
         try {
+            $appModel = new ApplicationModel();
+            $appValue = $appModel->settingValue($appId, self::WHATSAPP_COST_KEY);
+            if ($appValue !== null && $appValue !== '') {
+                return (float)$appValue;
+            }
+
             $settings = new SystemSettingModel();
             return (float)$settings->get(self::WHATSAPP_COST_KEY, '0.00');
         } catch (\Throwable $e) {
@@ -59,16 +74,21 @@ class AdminDashboardService extends Model
         }
     }
 
-    private function getCustomerStats(): array
+    private function getCustomerStats(string $appId): array
     {
+        $where = (new ApplicationModel())->columnExists('Customers', 'AppId') ? ' WHERE AppId = ?' : '';
+        $params = $where !== '' ? [$appId] : [];
+        $activeWhere = $where !== '' ? ' WHERE AppId = ? AND IsActive = 1' : ' WHERE IsActive = 1';
+        $billingWhere = $where !== '' ? " WHERE AppId = ? AND BillingId IS NOT NULL AND BillingId <> ''" : " WHERE BillingId IS NOT NULL AND BillingId <> ''";
+
         return [
-            'total' => $this->safeInt('SELECT COUNT(*) AS total FROM Customers'),
-            'active' => $this->safeInt('SELECT COUNT(*) AS total FROM Customers WHERE IsActive = 1'),
-            'withBillingId' => $this->safeInt("SELECT COUNT(*) AS total FROM Customers WHERE BillingId IS NOT NULL AND BillingId <> ''"),
+            'total' => $this->safeInt('SELECT COUNT(*) AS total FROM Customers' . $where, $params),
+            'active' => $this->safeInt('SELECT COUNT(*) AS total FROM Customers' . $activeWhere, $params),
+            'withBillingId' => $this->safeInt('SELECT COUNT(*) AS total FROM Customers' . $billingWhere, $params),
         ];
     }
 
-    private function getWhatsappMessageStats(float $unitCost): array
+    private function getWhatsappMessageStats(float $unitCost, string $appId): array
     {
         $table = $this->resolveMessageTable();
         if ($table === null) {
@@ -81,23 +101,30 @@ class AdminDashboardService extends Model
             ];
         }
 
+        $join = (new ApplicationModel())->columnExists('Customers', 'AppId') ? ' INNER JOIN Customers c ON c.Id = m.CustomerApiId AND c.AppId = ?' : '';
+        $appParams = $join !== '' ? [$appId] : [];
+
         $currentMonthMessages = $this->safeInt(
             "SELECT COUNT(*) AS total
-             FROM {$table}
-             WHERE Successful = 1
-             AND DateSent >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
-             AND DateSent < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)"
+             FROM {$table} m
+             {$join}
+             WHERE m.Successful = 1
+             AND m.DateSent >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+             AND m.DateSent < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)",
+            $appParams
         );
 
         $months = [];
         try {
             $rows = $this->db->fetchAll(
-                "SELECT DATE_FORMAT(DateSent, '%Y-%m') AS month_key, COUNT(*) AS messages
-                 FROM {$table}
-                 WHERE Successful = 1
-                 AND DateSent >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 5 MONTH)
-                 GROUP BY DATE_FORMAT(DateSent, '%Y-%m')
-                 ORDER BY month_key ASC"
+                "SELECT DATE_FORMAT(m.DateSent, '%Y-%m') AS month_key, COUNT(*) AS messages
+                 FROM {$table} m
+                 {$join}
+                 WHERE m.Successful = 1
+                 AND m.DateSent >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 5 MONTH)
+                 GROUP BY DATE_FORMAT(m.DateSent, '%Y-%m')
+                 ORDER BY month_key ASC",
+                $appParams
             );
 
             foreach ($rows as $row) {

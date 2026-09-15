@@ -6,6 +6,7 @@ require_once __DIR__ . '/../Models/MessageSentModel.php';
 require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
 require_once __DIR__ . '/../Models/WhatsAppTemplateModel.php';
 require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
+require_once __DIR__ . '/../Models/ApplicationModel.php';
 require_once __DIR__ . '/../enums/WhatsAppEvent.php';
 require_once __DIR__ . '/WhatsApp/WhatsAppTemplateStrategyInterface.php';
 require_once __DIR__ . '/WhatsApp/WhatsAppTemplateComponentBuilder.php';
@@ -23,6 +24,7 @@ use Models\MessageSentModel;
 use Models\WhatsAppConfigurationModel;
 use Models\WhatsAppTemplateModel;
 use Models\CustomerRegistryModel;
+use Models\ApplicationModel;
 use CustomerPermits;
 use GlobalFunctions;
 
@@ -54,7 +56,13 @@ class WhatsAppService
      */
     public function __construct(?string $customerId = null)
     {
-        $this->config = require __DIR__ . '/../../config/whatsapp.php';
+        $appModel = new ApplicationModel();
+        $appId = !empty($customerId)
+            ? $appModel->getCustomerAppId($customerId)
+            : $appModel->getSelectedApp()['id'];
+
+        // Primero se cargan credenciales por app; si estan vacias, ApplicationModel cae al .env actual.
+        $this->config = $appModel->getWhatsappConfig($appId);
         $this->customerId = $customerId;
 
         $this->apiUrl = $this->config['api_url'];

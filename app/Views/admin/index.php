@@ -1,5 +1,5 @@
 <?php
-$title = 'Panel Administrativo - ClubCheck';
+$title = 'Dashboard';
 
 ob_start();
 ?>
@@ -12,7 +12,7 @@ ob_start();
                     <div>
                         <h4 class="mb-0">
                             <i class="fas fa-cogs me-2"></i>
-                            Panel de Administración
+                            Dashboard
                         </h4>
                         <small class="text-light opacity-75">Bienvenido de nuevo, <?= htmlspecialchars($currentUser['name'] ?? $currentUser['username']) ?></small>
                     </div>
