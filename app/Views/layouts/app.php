@@ -1,4 +1,9 @@
 <?php
+require_once __DIR__ . '/../components/action-menu.php';
+require_once __DIR__ . '/../components/filter-panel.php';
+require_once __DIR__ . '/../components/pagination.php';
+require_once __DIR__ . '/../components/toast.php';
+
 $layoutCurrentPath = function_exists('current_path')
     ? current_path()
     : (parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
@@ -32,6 +37,7 @@ $adminSections = [
         ['label' => 'Dashboard', 'url' => '/admin/dashboard', 'icon' => 'fa-solid fa-chart-line'],
         ['label' => 'Clientes', 'url' => '/admin/customers', 'icon' => 'fa-solid fa-users'],
         ['label' => 'Estadisticas', 'url' => '/admin/customer-stats', 'icon' => 'fa-solid fa-chart-pie'],
+        ['label' => 'Versiones', 'url' => '/admin/versions', 'icon' => 'fa-solid fa-cloud-arrow-up'],
         ['label' => 'Descargas', 'url' => '/admin/downloads', 'icon' => 'fa-solid fa-download'],
     ],
     'Sistema' => [
@@ -94,35 +100,262 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
             border-bottom: 1px solid #2c3e50;
         }
 
-        .form-control, .form-select {
-            border-radius: 4px;
-            border: 1px solid #ced4da;
-            padding: 0.75rem 1rem;
-            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+        .form-control,
+        .form-select {
+            min-height: 48px;
+            border-radius: 12px;
+            border: 1px solid #d7eafd;
+            padding: 1rem 1rem 0.55rem;
             background-color: #ffffff;
+            color: #0f2740;
+            font-weight: 600;
+            box-shadow: 0 8px 22px rgba(47, 128, 237, 0.05);
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out, background 0.15s ease-in-out;
         }
 
-        .form-control:focus, .form-select:focus {
-            border-color: #3498db;
-            box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+        textarea.form-control {
+            min-height: 82px;
+        }
+
+        .form-control::placeholder {
+            color: #7d92a8;
+            font-weight: 500;
+        }
+
+        .form-control:focus,
+        .form-select:focus {
+            border-color: #1299dc;
+            background: #ffffff;
+            box-shadow: 0 0 0 3px rgba(18, 153, 220, 0.12), 0 10px 24px rgba(47, 128, 237, 0.08);
             outline: 0;
         }
 
-        .btn-primary {
-            background-color: #3498db;
-            border-color: #3498db;
-            border-radius: 4px;
-            padding: 0.75rem 2rem;
-            font-weight: 500;
-            transition: all 0.15s ease-in-out;
-            border: 1px solid #3498db;
+        .form-label {
+            margin-bottom: 0.35rem;
+            color: #315574;
+            font-size: 12px;
+            font-weight: 700;
         }
 
-        .btn-primary:hover {
-            background-color: #2980b9;
-            border-color: #2980b9;
-            transform: none;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        .input-shell {
+            position: relative;
+        }
+
+        .input-shell > .form-label,
+        .input-shell > label {
+            position: absolute;
+            z-index: 2;
+            top: 7px;
+            left: 13px;
+            margin: 0;
+            color: #315574;
+            font-size: 11px;
+            line-height: 1;
+            pointer-events: none;
+        }
+
+        .input-shell > .form-control,
+        .input-shell > .form-select {
+            width: 100%;
+        }
+
+        .input-shell > .form-control:not(textarea),
+        .input-shell > .form-select {
+            height: 58px;
+        }
+
+        .btn {
+            border-radius: 11px;
+            font-weight: 700;
+        }
+
+        .btn-primary,
+        .btn-success {
+            min-height: 42px;
+            background-color: #1299dc;
+            border-color: #1299dc;
+            color: #ffffff;
+            box-shadow: 0 12px 24px rgba(18, 153, 220, 0.16);
+            transition: all 0.15s ease-in-out;
+        }
+
+        .btn-primary:hover,
+        .btn-success:hover {
+            background-color: #0b88c5;
+            border-color: #0b88c5;
+            color: #ffffff;
+            box-shadow: 0 14px 28px rgba(18, 153, 220, 0.22);
+        }
+
+        .btn-secondary,
+        .btn-outline-secondary {
+            min-height: 42px;
+            background: #ffffff;
+            border-color: #bde2f8;
+            color: #087cba;
+        }
+
+        .btn-secondary:hover,
+        .btn-outline-secondary:hover {
+            background: #eaf8ff;
+            border-color: #8cd4f4;
+            color: #075f8e;
+        }
+
+        .btn-outline-primary {
+            min-height: 42px;
+            background: #ffffff;
+            border-color: #bde2f8;
+            color: #087cba;
+        }
+
+        .btn-outline-primary:hover {
+            background: #eaf8ff;
+            border-color: #8cd4f4;
+            color: #075f8e;
+        }
+
+        .btn-outline-danger {
+            background: #ffffff;
+            border-color: #ffd0d7;
+            color: #c62840;
+        }
+
+        .btn-outline-danger:hover {
+            background: #fff1f3;
+            border-color: #ff9aaa;
+            color: #9f1f34;
+        }
+
+        .admin-form-panel {
+            padding: 18px;
+            border: 1px solid #d7eafd;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.96);
+            box-shadow: 0 18px 38px rgba(47, 128, 237, 0.09);
+        }
+
+        .admin-form-panel-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .admin-form-panel-title h2,
+        .admin-form-panel-title h3 {
+            margin: 0;
+            color: #15395b;
+            font-size: 18px;
+            font-weight: 800;
+        }
+
+        .admin-search-select {
+            position: relative;
+        }
+
+        .admin-search-select-control {
+            width: 100%;
+            min-height: 58px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 1rem 1rem 0.55rem;
+            border: 1px solid #d7eafd;
+            border-radius: 12px;
+            background: #ffffff;
+            color: #0f2740;
+            font-weight: 700;
+            text-align: left;
+            box-shadow: 0 8px 22px rgba(47, 128, 237, 0.05);
+        }
+
+        .admin-search-select.open .admin-search-select-control {
+            border-color: #1299dc;
+            box-shadow: 0 0 0 3px rgba(18, 153, 220, 0.12), 0 10px 24px rgba(47, 128, 237, 0.08);
+        }
+
+        .admin-search-select-label {
+            position: absolute;
+            top: 7px;
+            left: 13px;
+            z-index: 2;
+            color: #315574;
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .admin-search-select-menu {
+            position: fixed;
+            z-index: 1080;
+            display: none;
+            max-height: min(360px, calc(100vh - 24px));
+            overflow-y: auto;
+            padding: 8px;
+            border: 1px solid #d7eafd;
+            border-radius: 14px;
+            background: #ffffff;
+            box-shadow: 0 18px 40px rgba(47, 128, 237, 0.16);
+            scrollbar-color: #1299dc #eaf8ff;
+        }
+
+        .admin-search-select-menu.open {
+            display: block;
+        }
+
+        .admin-search-select-menu::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .admin-search-select-menu::-webkit-scrollbar-track {
+            background: #eaf8ff;
+            border-radius: 999px;
+        }
+
+        .admin-search-select-menu::-webkit-scrollbar-thumb {
+            background: #1299dc;
+            border-radius: 999px;
+        }
+
+        .admin-search-select-search {
+            width: 100%;
+            height: 44px;
+            margin-bottom: 6px;
+            padding: 0 12px;
+            border: 1px solid #d7eafd;
+            border-radius: 10px;
+            background: #f8fbff;
+        }
+
+        .admin-search-select-option,
+        .admin-search-select-more {
+            width: 100%;
+            min-height: 38px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            border: 0;
+            border-radius: 9px;
+            background: transparent;
+            color: #15395b;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .admin-search-select-option:hover,
+        .admin-search-select-option.active {
+            background: #eaf8ff;
+        }
+
+        .admin-search-select-more {
+            justify-content: center;
+            margin-top: 6px;
+            color: #087cba;
+            background: #f2fbff;
+            font-weight: 800;
         }
 
         .alert {
@@ -568,6 +801,10 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
             }
         }
 
+        <?= function_exists('admin_action_menu_styles') ? admin_action_menu_styles() : '' ?>
+        <?= function_exists('admin_filter_panel_styles') ? admin_filter_panel_styles() : '' ?>
+        <?= function_exists('admin_pagination_styles') ? admin_pagination_styles() : '' ?>
+        <?= function_exists('admin_toast_styles') ? admin_toast_styles() : '' ?>
         <?= isset($customStyles) ? $customStyles : '' ?>
     </style>
 </head>
@@ -689,7 +926,10 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
     <?php endif; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <?= isset($customScripts) ? $customScripts : '' ?>
+    <?= function_exists('admin_action_menu_scripts') ? admin_action_menu_scripts() : '' ?>
+    <?= function_exists('admin_filter_panel_scripts') ? admin_filter_panel_scripts() : '' ?>
+    <?= function_exists('admin_pagination_scripts') ? admin_pagination_scripts() : '' ?>
+    <?= function_exists('admin_toast_scripts') ? admin_toast_scripts() : '' ?>
 
     <script>
         (function() {
@@ -711,6 +951,183 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
             sidebar.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => setOpen(false)));
         })();
 
+        window.AdminUI = window.AdminUI || {};
+
+        window.AdminUI.formatCurrency = function(value, currency = 'MXN') {
+            const amount = Number(value || 0);
+            return amount.toLocaleString('es-MX', { style: 'currency', currency });
+        };
+
+        window.AdminUI.currencyToNumber = function(value) {
+            const normalized = String(value || '').replace(/[^\d.-]/g, '');
+            const amount = Number(normalized);
+            return Number.isFinite(amount) ? amount : 0;
+        };
+
+        window.AdminUI.currencyToCents = function(value) {
+            return Math.round(window.AdminUI.currencyToNumber(value) * 100);
+        };
+
+        window.AdminUI.setCurrencyFromCents = function(input, cents, currency = 'MXN') {
+            if (!input) return;
+            input.value = window.AdminUI.formatCurrency(Number(cents || 0) / 100, currency);
+        };
+
+        window.AdminUI.initCurrencyInputs = function(scope = document) {
+            scope.querySelectorAll('[data-currency-input]').forEach((input) => {
+                if (input.dataset.currencyReady === '1') return;
+                input.dataset.currencyReady = '1';
+                const currency = input.dataset.currency || 'MXN';
+                const format = () => {
+                    input.value = window.AdminUI.formatCurrency(window.AdminUI.currencyToNumber(input.value), currency);
+                };
+
+                input.addEventListener('focus', () => {
+                    const value = window.AdminUI.currencyToNumber(input.value);
+                    input.value = value ? String(value) : '';
+                    input.select();
+                });
+                input.addEventListener('blur', format);
+                if (input.value !== '') format();
+            });
+        };
+
+        window.AdminUI.initSearchSelects = function(scope = document) {
+            scope.querySelectorAll('select[data-search-select]').forEach((select) => {
+                if (select.dataset.searchReady === '1') return;
+                select.dataset.searchReady = '1';
+                const pageSize = Number(select.dataset.pageSize || 10);
+                const label = select.dataset.label || select.getAttribute('aria-label') || 'Seleccionar';
+                const wrapper = document.createElement('div');
+                wrapper.className = 'admin-search-select';
+                const labelEl = document.createElement('span');
+                labelEl.className = 'admin-search-select-label';
+                labelEl.textContent = label;
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'admin-search-select-control';
+                const menu = document.createElement('div');
+                menu.className = 'admin-search-select-menu';
+                const search = document.createElement('input');
+                search.type = 'search';
+                search.className = 'admin-search-select-search';
+                search.placeholder = 'Buscar...';
+                const list = document.createElement('div');
+                const more = document.createElement('button');
+                more.type = 'button';
+                more.className = 'admin-search-select-more';
+                more.textContent = 'Ver mas';
+                let visible = pageSize;
+                let query = '';
+                const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;'
+                }[ch]));
+
+                select.classList.add('d-none');
+                select.parentNode.insertBefore(wrapper, select);
+                wrapper.appendChild(labelEl);
+                wrapper.appendChild(button);
+                document.body.appendChild(menu);
+                menu.appendChild(search);
+                menu.appendChild(list);
+                menu.appendChild(more);
+                wrapper.appendChild(select);
+
+                const options = () => Array.from(select.options).filter((option) => option.value !== '');
+                const selectedText = () => select.options[select.selectedIndex]?.text || label;
+                const syncButton = () => {
+                    button.innerHTML = `<span>${selectedText()}</span><i class="fas fa-chevron-down"></i>`;
+                };
+                const positionMenu = () => {
+                    const rect = button.getBoundingClientRect();
+                    const gap = 8;
+                    const availableBelow = window.innerHeight - rect.bottom - gap;
+                    const availableAbove = rect.top - gap;
+                    const openAbove = availableBelow < 180 && availableAbove > availableBelow;
+                    const available = openAbove ? availableAbove : availableBelow;
+                    const preferredHeight = Math.min(360, Math.max(180, available - gap));
+                    menu.style.left = `${rect.left}px`;
+                    menu.style.width = `${rect.width}px`;
+                    menu.style.maxHeight = `${Math.max(160, preferredHeight)}px`;
+                    menu.style.top = openAbove
+                        ? `${Math.max(gap, rect.top - Math.max(160, preferredHeight) - gap)}px`
+                        : `${rect.bottom + gap}px`;
+                };
+                const openMenu = () => {
+                    document.querySelectorAll('.admin-search-select-menu.open').forEach((openMenu) => {
+                        if (openMenu !== menu) openMenu.classList.remove('open');
+                    });
+                    document.querySelectorAll('.admin-search-select.open').forEach((openWrapper) => {
+                        if (openWrapper !== wrapper) openWrapper.classList.remove('open');
+                    });
+                    wrapper.classList.add('open');
+                    menu.classList.add('open');
+                    positionMenu();
+                    search.focus();
+                };
+                const closeMenu = () => {
+                    wrapper.classList.remove('open');
+                    menu.classList.remove('open');
+                };
+                const render = () => {
+                    const filtered = options().filter((option) => option.text.toLowerCase().includes(query.toLowerCase()));
+                    list.innerHTML = filtered.slice(0, visible).map((option) => `
+                        <button type="button" class="admin-search-select-option ${option.selected ? 'active' : ''}" data-value="${escapeHtml(option.value)}">
+                            ${escapeHtml(option.text)}
+                        </button>
+                    `).join('') || '<div class="px-2 py-2 text-muted">Sin resultados</div>';
+                    more.style.display = filtered.length > visible ? 'flex' : 'none';
+                    syncButton();
+                };
+
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    if (menu.classList.contains('open')) {
+                        closeMenu();
+                        return;
+                    }
+                    openMenu();
+                });
+                search.addEventListener('input', () => {
+                    query = search.value;
+                    visible = pageSize;
+                    render();
+                });
+                more.addEventListener('click', () => {
+                    visible += pageSize;
+                    render();
+                });
+                list.addEventListener('click', (event) => {
+                    const optionButton = event.target.closest('.admin-search-select-option');
+                    if (!optionButton) return;
+                    select.value = optionButton.dataset.value;
+                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                    closeMenu();
+                    render();
+                });
+                document.addEventListener('click', (event) => {
+                    if (!wrapper.contains(event.target) && !menu.contains(event.target)) closeMenu();
+                });
+                window.addEventListener('resize', () => {
+                    if (menu.classList.contains('open')) positionMenu();
+                });
+                window.addEventListener('scroll', () => {
+                    if (menu.classList.contains('open')) positionMenu();
+                }, true);
+                select.addEventListener('change', render);
+                render();
+            });
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            window.AdminUI.initCurrencyInputs();
+            window.AdminUI.initSearchSelects();
+        });
+
         setTimeout(function() {
             const alerts = document.querySelectorAll('.alert');
             alerts.forEach(function(alert) {
@@ -719,5 +1136,6 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
             });
         }, 8000);
     </script>
+    <?= isset($customScripts) ? $customScripts : '' ?>
 </body>
 </html>

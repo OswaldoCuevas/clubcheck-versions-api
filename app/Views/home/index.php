@@ -1,5 +1,5 @@
 <?php
-$title = 'Gestor de Versiones - ClubCheck';
+$title = 'Versiones';
 $customStyles = '
     .file-upload-wrapper {
         position: relative;
@@ -175,7 +175,7 @@ ob_start();
                 <div class="card-header text-center">
                     <h3 class="mb-0">
                         <i class="fas fa-cloud-upload-alt me-2"></i>
-                        Gestor de Versiones ClubCheck
+                        Gestor de Versiones
                     </h3>
                 </div>
                 <div class="card-body p-4">
@@ -334,7 +334,7 @@ ob_start();
             
             <!-- Enlaces adicionales -->
             <div class="text-center mt-3">
-                <?php if (isset($userModel) && $userModel->hasPermission('admin_access')): ?>
+                <?php if (isset($userModel) && $userModel->hasPermission('admin_access') && current_path() !== '/admin/versions'): ?>
                     <a href="<?= app_url('/admin') ?>" class="btn btn-outline-primary me-2">
                         <i class="fas fa-shield-alt me-1"></i>
                         Panel Admin

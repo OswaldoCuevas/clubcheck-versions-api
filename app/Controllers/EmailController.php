@@ -2,11 +2,6 @@
 
 namespace Controllers;
 
-require_once __DIR__ . '/../Core/Controller.php';
-require_once __DIR__ . '/../Services/EmailService.php';
-require_once __DIR__ . '/../Models/EmailTypeModel.php';
-require_once __DIR__ . '/../Models/EmailCodeModel.php';
-require_once __DIR__ . '/../Helpers/ApiHelper.php';
 
 use Core\Controller;
 use App\Services\EmailService;

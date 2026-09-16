@@ -10,6 +10,16 @@ if (file_exists($composerAutoload)) {
 spl_autoload_register(function ($className) {
     // Convertir namespace a ruta de archivo
     $classPath = str_replace('\\', '/', $className);
+
+    // Soporte PSR-4 simple para clases bajo App\*, por ejemplo
+    // App\Modules\Customers\Features\SaveCustomerFeature => app/Modules/Customers/Features/SaveCustomerFeature.php
+    if (str_starts_with($className, 'App\\')) {
+        $appNamespacedPath = __DIR__ . '/../app/' . substr($classPath, 4) . '.php';
+        if (file_exists($appNamespacedPath)) {
+            require_once $appNamespacedPath;
+            return;
+        }
+    }
     
     // Buscar en el directorio app
     $appPath = __DIR__ . '/../app/' . $classPath . '.php';
@@ -25,6 +35,8 @@ spl_autoload_register(function ($className) {
         __DIR__ . '/../app/Core/',
         __DIR__ . '/../app/Services/',
         __DIR__ . '/../app/Exceptions/',
+        __DIR__ . '/../app/Helpers/',
+        __DIR__ . '/../app/enums/',
         __DIR__ . '/../app/Middleware/',
         __DIR__ . '/../utils/',
     ];
@@ -112,3 +124,5 @@ date_default_timezone_set(config('app.timezone', 'UTC'));
 
 // Incluir funciones helper globales
 require_once __DIR__ . '/../app/helpers.php';
+require_once __DIR__ . '/../app/Helpers/FileHelper.php';
+require_once __DIR__ . '/../utils/database.php';

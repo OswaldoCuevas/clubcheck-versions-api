@@ -13,13 +13,68 @@ ob_start();
                     <button type="button" class="btn btn-outline-secondary" id="refreshLicenses">
                         <i class="fas fa-rotate"></i> Actualizar
                     </button>
-                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#generateModal">
+                    <button type="button" class="btn btn-primary" id="openGenerateFormBtn">
                         <i class="fas fa-file-signature me-2"></i>Generar licencia
                     </button>
                 </div>
             </div>
 
             <div id="alertsContainer"></div>
+
+            <section class="admin-form-panel mb-4 d-none" id="generateFormPanel">
+                <form id="generateForm">
+                    <div class="admin-form-panel-title">
+                        <div>
+                            <span>Licencias</span>
+                            <h2>Generar licencia</h2>
+                        </div>
+                        <button type="button" class="btn btn-outline-primary" id="closeGenerateFormBtn">Cerrar</button>
+                    </div>
+
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Selecciona free para emitir Plan Start sin Stripe. Para los demas planes, la vigencia se toma de la suscripcion activa o licencia permanente en Stripe.
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Cliente <span class="text-danger">*</span></label>
+                            <select class="form-select" id="genCustomerId" data-search-select data-label="Cliente" data-page-size="10" required>
+                                <option value="">Selecciona un cliente</option>
+                            </select>
+                            <div class="form-text" id="genCustomerInfo"></div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Plan (opcional)</label>
+                            <select class="form-select" id="genPlanLookupKey" data-search-select data-label="Plan" data-page-size="10">
+                                <option value="">Auto (desde Stripe)</option>
+                                <option value="free">Plan Start (free)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Fecha de caducidad (opcional)</label>
+                            <input type="datetime-local" class="form-control" id="genExpiresAt">
+                            <div class="form-text">Dejalo vacio para usar la fecha de Stripe o la del plan.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Token de maquina (opcional)</label>
+                            <input type="text" class="form-control font-monospace" id="genMachineToken" placeholder="Vacio = usa el token del cliente o sin restriccion">
+                            <div class="form-text">Dejalo vacio para usar el token registrado del cliente.</div>
+                        </div>
+                    </div>
+
+                    <div id="generateAlert" class="alert d-none mt-3"></div>
+
+                    <div class="d-flex flex-wrap justify-content-end gap-2 mt-4">
+                        <button type="button" class="btn btn-outline-primary" id="cancelGenerateFormBtn">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" id="generateSubmitBtn">
+                            <i class="fas fa-file-signature me-1"></i>Generar
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <section id="licensesListPanel">
 
             <!-- Resumen rápido -->
             <div class="row g-3 mb-4" id="statsRow">
@@ -102,6 +157,7 @@ ob_start();
                 </div>
             </div>
 
+            </section>
         </div>
     </div>
 </div>
@@ -125,66 +181,6 @@ ob_start();
                     <i class="fas fa-download me-1"></i>Descargar .lic
                 </button>
             </div>
-        </div>
-    </div>
-</div>
-
-<!-- ==================== MODAL: GENERAR ==================== -->
-<div class="modal fade" id="generateModal" tabindex="-1" aria-labelledby="generateModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <form id="generateForm">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="generateModalLabel">
-                        <i class="fas fa-file-signature me-2"></i>Generar licencia (administrador)
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-info mb-3">
-                        <i class="fas fa-info-circle me-2"></i>
-                        Selecciona free para emitir Plan Start sin Stripe. Para los demas planes, la vigencia se toma de la suscripcion activa o licencia permanente en Stripe.
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Cliente <span class="text-danger">*</span></label>
-                        <select class="form-select" id="genCustomerId" required>
-                            <option value="">— Selecciona un cliente —</option>
-                        </select>
-                        <div class="form-text" id="genCustomerInfo"></div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Plan (opcional)</label>
-                        <select class="form-select" id="genPlanLookupKey">
-                            <option value="">— Auto (desde Stripe) —</option>
-                            <option value="free">Plan Start (free)</option>
-                        </select>
-                    </div>
-
-
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Fecha de caducidad (opcional)</label>
-                        <input type="datetime-local" class="form-control" id="genExpiresAt">
-                        <div class="form-text">Déjalo vacío para usar la fecha de Stripe o la del plan.</div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Token de máquina (opcional)</label>
-                        <input type="text" class="form-control font-monospace" id="genMachineToken"
-                               placeholder="Vacío = usa el token del cliente o sin restricción">
-                        <div class="form-text">Déjalo vacío para usar el token registrado del cliente.</div>
-                    </div>
-
-                    <div id="generateAlert" class="alert d-none"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary" id="generateSubmitBtn">
-                        <i class="fas fa-file-signature me-1"></i>Generar
-                    </button>
-                </div>
-            </form>
         </div>
     </div>
 </div>
@@ -382,6 +378,7 @@ async function loadCustomersForSelect() {
             opt.dataset.billingId = c.billingId ?? '';
             sel.appendChild(opt);
         });
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
     } catch (e) { /* silencioso */ }
 }
 
@@ -397,6 +394,7 @@ async function loadPlansForSelect() {
             opt.textContent = `${p.name} (${p.lookup_key})`;
             sel.appendChild(opt);
         });
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
     } catch (e) { /* silencioso */ }
 }
 
@@ -458,8 +456,7 @@ document.getElementById('generateForm').addEventListener('submit', async functio
 
         if (!data.success) throw new Error(data.error ?? 'Error desconocido');
 
-        // Cerrar modal de generación
-        bootstrap.Modal.getInstance(document.getElementById('generateModal')).hide();
+        hideGenerateForm();
 
         // Mostrar resultado
         showResult(data);
@@ -567,6 +564,11 @@ function downloadFile(content, filename) {
 }
 
 function showAlert(msg, type = 'success', ms = 5000) {
+    if (window.AdminToast && typeof window.AdminToast.show === 'function') {
+        window.AdminToast.show(msg, type, { duration: ms });
+        return;
+    }
+
     const container = document.getElementById('alertsContainer');
     const div = document.createElement('div');
     div.className = `alert alert-${type} alert-dismissible fade show`;
@@ -578,15 +580,26 @@ function showAlert(msg, type = 'success', ms = 5000) {
 // ==================== INIT ====================
 document.getElementById('refreshLicenses').addEventListener('click', loadLicenses);
 
-// Cargar datos al abrir modal de generación
-document.getElementById('generateModal').addEventListener('show.bs.modal', function() {
+function showGenerateForm() {
+    document.getElementById('licensesListPanel').classList.add('d-none');
+    document.getElementById('generateFormPanel').classList.remove('d-none');
     const sel = document.getElementById('genCustomerId');
     if (sel.options.length <= 1) {
         loadCustomersForSelect();
         loadPlansForSelect();
     }
-});
+    window.AdminUI?.initSearchSelects(document.getElementById('generateFormPanel'));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
+function hideGenerateForm() {
+    document.getElementById('generateFormPanel').classList.add('d-none');
+    document.getElementById('licensesListPanel').classList.remove('d-none');
+}
+
+document.getElementById('openGenerateFormBtn').addEventListener('click', showGenerateForm);
+document.getElementById('closeGenerateFormBtn').addEventListener('click', hideGenerateForm);
+document.getElementById('cancelGenerateFormBtn').addEventListener('click', hideGenerateForm);
 loadLicenses();
 </script>
 

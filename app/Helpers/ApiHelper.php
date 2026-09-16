@@ -1,7 +1,5 @@
 <?php
 
-require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
-
 use \Models\CustomerRegistryModel;
 class ApiHelper
 {
@@ -51,6 +49,18 @@ class ApiHelper
             self::respond(['status' => 'ok']);
         }
     }
+
+    public static function allowMethods(array $allowedMethods): void
+{
+    $method = self::getEffectiveMethod();
+
+    if (!in_array($method, $allowedMethods, true)) {
+        self::respond([
+            'error' => 'Método no permitido',
+            'allowedMethods' => $allowedMethods,
+        ], 405);
+    }
+}
 
     public static function allowedMethodsPost()
     {

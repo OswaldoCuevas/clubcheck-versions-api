@@ -18,6 +18,136 @@ ob_start();
 
     <div id="alertsContainer"></div>
 
+    <section class="admin-form-panel mb-3 d-none" id="ruleFormPanel">
+        <form id="ruleForm">
+            <div class="admin-form-panel-title">
+                <h2 id="ruleFormTitle">Nueva regla</h2>
+                <button type="button" class="btn btn-outline-primary" id="closeRuleFormBtn">Cerrar</button>
+            </div>
+            <input type="hidden" id="ruleId">
+            <div class="row g-3">
+                <div class="col-md-5">
+                    <div class="input-shell">
+                        <label class="form-label">Clave</label>
+                        <input type="text" class="form-control font-monospace" id="catalogRuleKey" placeholder="max_messages" required>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <div class="input-shell">
+                        <label class="form-label">Nombre</label>
+                        <input type="text" class="form-control" id="catalogRuleName" placeholder="Mensajes WhatsApp" required>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select" id="catalogRuleType" data-search-select data-label="Tipo" data-page-size="10">
+                        <option value="integer">Numero</option>
+                        <option value="boolean">Si/No</option>
+                        <option value="decimal">Decimal</option>
+                        <option value="string">Texto</option>
+                        <option value="json">JSON</option>
+                    </select>
+                </div>
+                <div class="col-12">
+                    <div class="input-shell">
+                        <label class="form-label">Descripcion</label>
+                        <textarea class="form-control" id="catalogRuleDescription" rows="3"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <button type="button" class="btn btn-outline-primary" id="cancelRuleBtn">Cancelar</button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save me-1"></i>Guardar regla
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <section class="admin-form-panel mb-3 d-none" id="planFormPanel">
+        <form id="planForm">
+            <div class="admin-form-panel-title">
+                <h2 id="planFormTitle">Nuevo precio</h2>
+                <button type="button" class="btn btn-outline-primary" id="closePlanFormBtn">Cerrar</button>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="input-shell">
+                        <label class="form-label">Lookup key</label>
+                        <input type="text" class="form-control font-monospace" id="lookupKey" required>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="input-shell">
+                        <label class="form-label">Nombre</label>
+                        <input type="text" class="form-control" id="planName" required>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select" id="planType" data-search-select data-label="Periodo" data-page-size="10">
+                        <option value="monthly">Mensual</option>
+                        <option value="yearly">Anual</option>
+                        <option value="permanent">Permanente</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select" id="isActive" data-search-select data-label="Activo" data-page-size="10">
+                        <option value="1">Si</option>
+                        <option value="0">No</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <div class="input-shell">
+                        <label class="form-label">Monto</label>
+                        <input type="text" class="form-control" id="unitAmount" data-currency-input data-currency="MXN" placeholder="$0.00">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="input-shell">
+                        <label class="form-label">Moneda</label>
+                        <input type="text" maxlength="3" class="form-control text-lowercase" id="currency" value="mxn">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="input-shell">
+                        <label class="form-label">Stripe product ID</label>
+                        <input type="text" class="form-control font-monospace" id="stripeProductId" placeholder="Vacio = config product_id">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="input-shell">
+                        <label class="form-label">Orden</label>
+                        <input type="number" step="1" class="form-control" id="sortOrder" value="0">
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="input-shell">
+                        <label class="form-label">Billing IDs exclusivos</label>
+                        <textarea class="form-control font-monospace" id="billingIds" rows="2" placeholder="cus_xxx, cus_yyy"></textarea>
+                    </div>
+                    <div class="form-text">Si agregas IDs, el precio queda oculto para los demas clientes.</div>
+                </div>
+            </div>
+
+            <hr>
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="mb-0">Reglas</h6>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="addRuleBtn">
+                    <i class="fas fa-plus me-1"></i>Agregar regla
+                </button>
+            </div>
+            <div id="rulesContainer" class="vstack gap-2 rules-scroll"></div>
+
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <button type="button" class="btn btn-outline-primary" id="cancelPlanBtn">Cancelar</button>
+                <button type="submit" class="btn btn-primary" id="saveBtn">
+                    <i class="fas fa-save me-1"></i>Guardar
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <section id="plansListPanel">
     <div class="card shadow-sm mb-3">
         <div class="card-body">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
@@ -61,129 +191,7 @@ ob_start();
             </div>
         </div>
     </div>
-</div>
-
-<div class="modal fade" id="ruleModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content">
-            <form id="ruleForm">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="ruleModalTitle">Nueva regla</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" id="ruleId">
-                    <div class="row g-3">
-                        <div class="col-md-5">
-                            <label class="form-label fw-semibold">Clave</label>
-                            <input type="text" class="form-control font-monospace" id="catalogRuleKey" placeholder="max_messages" required>
-                        </div>
-                        <div class="col-md-5">
-                            <label class="form-label fw-semibold">Nombre</label>
-                            <input type="text" class="form-control" id="catalogRuleName" placeholder="Mensajes WhatsApp" required>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label fw-semibold">Tipo</label>
-                            <select class="form-select" id="catalogRuleType">
-                                <option value="integer">Numero</option>
-                                <option value="boolean">Si/No</option>
-                                <option value="decimal">Decimal</option>
-                                <option value="string">Texto</option>
-                                <option value="json">JSON</option>
-                            </select>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label fw-semibold">Descripcion</label>
-                            <textarea class="form-control" id="catalogRuleDescription" rows="3"></textarea>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save me-1"></i>Guardar regla
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade" id="planModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-        <div class="modal-content">
-            <form id="planForm">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="planModalTitle">Nuevo precio</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Lookup key</label>
-                            <input type="text" class="form-control font-monospace" id="lookupKey" required>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Nombre</label>
-                            <input type="text" class="form-control" id="planName" required>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label fw-semibold">Periodo</label>
-                            <select class="form-select" id="planType">
-                                <option value="monthly">Mensual</option>
-                                <option value="yearly">Anual</option>
-                                <option value="permanent">Permanente</option>
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label fw-semibold">Activo</label>
-                            <select class="form-select" id="isActive">
-                                <option value="1">Si</option>
-                                <option value="0">No</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">Monto en centavos</label>
-                            <input type="number" min="0" step="1" class="form-control" id="unitAmount" placeholder="99000">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label fw-semibold">Moneda</label>
-                            <input type="text" maxlength="3" class="form-control text-lowercase" id="currency" value="mxn">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Stripe product ID</label>
-                            <input type="text" class="form-control font-monospace" id="stripeProductId" placeholder="Vacio = config product_id">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">Orden</label>
-                            <input type="number" step="1" class="form-control" id="sortOrder" value="0">
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label fw-semibold">Billing IDs exclusivos</label>
-                            <textarea class="form-control font-monospace" id="billingIds" rows="2" placeholder="cus_xxx, cus_yyy"></textarea>
-                            <div class="form-text">Si agregas IDs, el precio queda oculto para los demas clientes.</div>
-                        </div>
-                    </div>
-
-                    <hr>
-
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="mb-0">Reglas</h6>
-                        <button type="button" class="btn btn-sm btn-outline-primary" id="addRuleBtn">
-                            <i class="fas fa-plus me-1"></i>Agregar regla
-                        </button>
-                    </div>
-                    <div id="rulesContainer" class="vstack gap-2 rules-scroll"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary" id="saveBtn">
-                        <i class="fas fa-save me-1"></i>Guardar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+    </section>
 </div>
 
 <script>
@@ -198,21 +206,44 @@ const endpoints = <?= json_encode([
 
 let plans = [];
 let rulesCatalog = [];
-let modal;
-let ruleModal;
 let stripeDashboardBase = 'https://dashboard.stripe.com/test/prices/';
 
 document.addEventListener('DOMContentLoaded', () => {
-    modal = new bootstrap.Modal(document.getElementById('planModal'));
-    ruleModal = new bootstrap.Modal(document.getElementById('ruleModal'));
     document.getElementById('refreshBtn').addEventListener('click', loadPlans);
-    document.getElementById('newPlanBtn').addEventListener('click', () => openPlanModal());
-    document.getElementById('newRuleBtn').addEventListener('click', () => openRuleModal());
+    document.getElementById('newPlanBtn').addEventListener('click', () => openPlanForm());
+    document.getElementById('newRuleBtn').addEventListener('click', () => openRuleForm());
+    document.getElementById('closePlanFormBtn').addEventListener('click', showList);
+    document.getElementById('cancelPlanBtn').addEventListener('click', showList);
+    document.getElementById('closeRuleFormBtn').addEventListener('click', showList);
+    document.getElementById('cancelRuleBtn').addEventListener('click', showList);
     document.getElementById('addRuleBtn').addEventListener('click', () => addRuleRow('', ''));
     document.getElementById('planForm').addEventListener('submit', savePlan);
     document.getElementById('ruleForm').addEventListener('submit', saveRule);
     loadPlans();
 });
+
+function showList() {
+    document.getElementById('planFormPanel').classList.add('d-none');
+    document.getElementById('ruleFormPanel').classList.add('d-none');
+    document.getElementById('plansListPanel').classList.remove('d-none');
+}
+
+function showPlanForm() {
+    document.getElementById('ruleFormPanel').classList.add('d-none');
+    document.getElementById('plansListPanel').classList.add('d-none');
+    document.getElementById('planFormPanel').classList.remove('d-none');
+    window.AdminUI?.initCurrencyInputs(document.getElementById('planFormPanel'));
+    window.AdminUI?.initSearchSelects(document.getElementById('planFormPanel'));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function showRuleForm() {
+    document.getElementById('planFormPanel').classList.add('d-none');
+    document.getElementById('plansListPanel').classList.add('d-none');
+    document.getElementById('ruleFormPanel').classList.remove('d-none');
+    window.AdminUI?.initSearchSelects(document.getElementById('ruleFormPanel'));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
 async function loadPlans() {
     const tbody = document.getElementById('plansBody');
@@ -259,7 +290,7 @@ function renderRuleCatalog() {
             </span>
             <span class="rule-catalog-actions">
                 <em>${ruleTypeLabel(rule.ValueType)}</em>
-                <button type="button" class="btn btn-sm btn-outline-primary" onclick="openRuleModal(${Number(rule.Id) || 0})" title="Editar regla">
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="openRuleForm(${Number(rule.Id) || 0})" title="Editar regla">
                     <i class="fas fa-pen"></i>
                 </button>
                 <button type="button" class="btn btn-sm btn-outline-danger" onclick="unlinkRule(${Number(rule.Id) || 0}, '${js(rule.RuleKey)}')" title="Desvincular de esta app">
@@ -293,7 +324,7 @@ function renderPlans() {
             </td>
             <td class="text-end">
                 <div class="btn-group btn-group-sm">
-                    <button class="btn btn-outline-primary" onclick="openPlanModal('${js(plan.lookup_key)}')" title="Editar">
+                    <button class="btn btn-outline-primary" onclick="openPlanForm('${js(plan.lookup_key)}')" title="Editar">
                         <i class="fas fa-pen"></i>
                     </button>
                     <button class="btn btn-outline-secondary" onclick="verifyPlan('${js(plan.lookup_key)}')" title="Verificar en Stripe">
@@ -309,19 +340,30 @@ function renderPlans() {
     `).join('');
 }
 
-function openPlanModal(lookupKey = null) {
+function syncSelect(id) {
+    document.getElementById(id).dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function openPlanForm(lookupKey = null) {
     const plan = lookupKey ? plans.find(p => p.lookup_key === lookupKey) : null;
-    document.getElementById('planModalTitle').textContent = plan ? 'Editar precio' : 'Nuevo precio';
+    document.getElementById('planFormTitle').textContent = plan ? 'Editar precio' : 'Nuevo precio';
     document.getElementById('lookupKey').value = plan?.lookup_key || '';
     document.getElementById('lookupKey').readOnly = Boolean(plan);
     document.getElementById('planName').value = plan?.name || '';
     document.getElementById('planType').value = plan?.type || 'monthly';
     document.getElementById('isActive').value = plan?.is_active === false ? '0' : '1';
-    document.getElementById('unitAmount').value = plan?.unit_amount ?? '';
+    const amountInput = document.getElementById('unitAmount');
+    if (plan?.unit_amount !== null && plan?.unit_amount !== undefined && plan?.unit_amount !== '') {
+        window.AdminUI?.setCurrencyFromCents(amountInput, plan.unit_amount, (plan?.currency || 'mxn').toUpperCase());
+    } else {
+        amountInput.value = '';
+    }
     document.getElementById('currency').value = plan?.currency || 'mxn';
     document.getElementById('stripeProductId').value = plan?.stripe_product_id || '';
     document.getElementById('sortOrder').value = plan?.sort_order ?? 0;
     document.getElementById('billingIds').value = (plan?.showBillingIds || []).join('\n');
+    syncSelect('planType');
+    syncSelect('isActive');
 
     const container = document.getElementById('rulesContainer');
     container.innerHTML = '';
@@ -329,18 +371,19 @@ function openPlanModal(lookupKey = null) {
     Object.entries(rules).forEach(([key, value]) => addRuleRow(key, value));
     if (!Object.keys(rules).length) addRuleRow('', '');
 
-    modal.show();
+    showPlanForm();
 }
 
-function openRuleModal(ruleId = null) {
+function openRuleForm(ruleId = null) {
     const rule = ruleId ? rulesCatalog.find(item => Number(item.Id) === Number(ruleId)) : null;
-    document.getElementById('ruleModalTitle').textContent = rule ? 'Editar regla' : 'Nueva regla';
+    document.getElementById('ruleFormTitle').textContent = rule ? 'Editar regla' : 'Nueva regla';
     document.getElementById('ruleId').value = rule?.Id || '';
     document.getElementById('catalogRuleKey').value = rule?.RuleKey || '';
     document.getElementById('catalogRuleName').value = rule?.Name || '';
     document.getElementById('catalogRuleType').value = rule?.ValueType || 'integer';
     document.getElementById('catalogRuleDescription').value = rule?.Description || '';
-    ruleModal.show();
+    syncSelect('catalogRuleType');
+    showRuleForm();
 }
 
 function defaultRules() {
@@ -401,7 +444,7 @@ async function saveRule(event) {
         });
         const data = await res.json();
         if (!data.success) throw new Error(data.error || 'No se pudo guardar la regla');
-        ruleModal.hide();
+        showList();
         showAlert('Regla guardada para esta app.', 'success');
         await loadPlans();
     } catch (e) {
@@ -427,6 +470,7 @@ async function unlinkRule(ruleId, ruleKey) {
 async function savePlan(event) {
     event.preventDefault();
     const rules = {};
+    const amountRaw = document.getElementById('unitAmount').value.trim();
     document.querySelectorAll('#rulesContainer .row').forEach(row => {
         const key = row.querySelector('.rule-key').value.trim();
         const value = row.querySelector('.rule-value').value.trim();
@@ -438,7 +482,7 @@ async function savePlan(event) {
         name: document.getElementById('planName').value.trim(),
         type: document.getElementById('planType').value,
         is_active: document.getElementById('isActive').value === '1',
-        unit_amount: document.getElementById('unitAmount').value,
+        unit_amount: amountRaw === '' ? '' : window.AdminUI.currencyToCents(amountRaw),
         currency: document.getElementById('currency').value.trim().toLowerCase(),
         stripe_product_id: document.getElementById('stripeProductId').value.trim(),
         sort_order: document.getElementById('sortOrder').value,
@@ -454,7 +498,7 @@ async function savePlan(event) {
         });
         const data = await res.json();
         if (!data.success) throw new Error(data.error || 'No se pudo guardar');
-        modal.hide();
+        showList();
         showAlert('Plan guardado correctamente.', 'success');
         await loadPlans();
     } catch (e) {
@@ -552,6 +596,11 @@ function stripeEditButton(plan) {
 }
 
 function showAlert(message, type = 'info') {
+    if (window.AdminToast && typeof window.AdminToast.show === 'function') {
+        window.AdminToast.show(message, type, { duration: 5000 });
+        return;
+    }
+
     const container = document.getElementById('alertsContainer');
     container.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
         ${esc(message)}
@@ -574,17 +623,8 @@ function cssId(value) {
 
 <?php
 $customStyles = <<<CSS
-#planModal .modal-dialog {
-    max-height: calc(100vh - 2rem);
-}
-
-#planModal .modal-body {
-    max-height: calc(100vh - 13rem);
-    overflow-y: auto;
-}
-
 .rules-scroll {
-    max-height: 34vh;
+    max-height: min(46vh, 520px);
     overflow-y: auto;
     padding-right: 0.5rem;
 }

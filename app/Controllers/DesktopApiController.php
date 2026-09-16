@@ -2,12 +2,6 @@
 
 namespace Controllers;
 
-require_once __DIR__ . '/../Core/Controller.php';
-require_once __DIR__ . '/../Helpers/ApiHelper.php';
-require_once __DIR__ . '/../Models/CustomerWebLoginAttemptModel.php';
-require_once __DIR__ . '/../Models/ApplicationModel.php';
-require_once __DIR__ . '/../Services/JwtService.php';
-require_once __DIR__ . '/../../utils/database.php';
 
 use ApiHelper;
 use App\Services\JwtService;

@@ -2,9 +2,6 @@
 
 namespace Controllers;
 
-require_once __DIR__ . '/../Core/Controller.php';
-require_once __DIR__ . '/../Helpers/ApiHelper.php';
-require_once __DIR__ . '/../Models/AnnouncementModel.php';
 
 use ApiHelper;
 use Core\Controller;

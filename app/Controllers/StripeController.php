@@ -2,12 +2,6 @@
 
 namespace Controllers;
 
-require_once __DIR__ . '/../Core/Controller.php';
-require_once __DIR__ . '/../Services/StripeService.php';
-require_once __DIR__ . '/../Services/LicenseService.php';
-require_once __DIR__ . '/../Helpers/ApiHelper.php';
-require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
-require_once __DIR__ . '/../Models/ApplicationModel.php';
 
 use Core\Controller;
 use App\Services\StripeService;
@@ -114,7 +108,6 @@ class StripeController extends Controller
             return $currentJwt;
         }
 
-        require_once __DIR__ . '/../Services/JwtService.php';
         $jwtService = new \App\Services\JwtService();
         $newJwt = $jwtService->createToken([
             'cid' => $row['Id'],
@@ -187,7 +180,6 @@ class StripeController extends Controller
 
             // Registrar en el historial de licencias
             try {
-                require_once __DIR__ . '/../Models/LicenseLogModel.php';
                 $logModel = new \Models\LicenseLogModel();
                 $logModel->createLog([
                     'AppId'         => $internalCustomerId ? (new ApplicationModel())->getCustomerAppId($internalCustomerId) : $this->getAppIdFromSession(),

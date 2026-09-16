@@ -12,13 +12,137 @@ ob_start();
                     <button type="button" class="btn btn-outline-secondary" id="refreshConfigs">
                         <i class="fas fa-rotate"></i> Actualizar
                     </button>
-                    <button type="button" class="btn btn-success" id="addConfigBtn" data-bs-toggle="modal" data-bs-target="#configModal">
+                    <button type="button" class="btn btn-primary" id="addConfigBtn">
                         <i class="fab fa-whatsapp me-1"></i> Agregar número
                     </button>
                 </div>
             </div>
 
             <div id="alertsContainer"></div>
+
+            <section class="admin-form-panel mb-3 d-none" id="configFormPanel">
+                <form id="configForm">
+                    <div class="admin-form-panel-title">
+                        <div>
+                            <span>WhatsApp</span>
+                            <h2>Nueva configuracion</h2>
+                        </div>
+                        <button type="button" class="btn btn-outline-primary" id="closeConfigFormBtn">Cerrar</button>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="configCustomerId" class="form-label">Cliente <span class="text-danger">*</span></label>
+                            <select class="form-select" id="configCustomerId" data-search-select data-label="Cliente" data-page-size="10" required>
+                                <option value="">Selecciona un cliente</option>
+                                <?php foreach ($customers ?? [] as $customer): ?>
+                                <option value="<?= htmlspecialchars($customer['customerId'] ?? '') ?>">
+                                    <?= htmlspecialchars($customer['name'] ?? $customer['customerId'] ?? '') ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="form-text">El cliente al que se asociara este numero de WhatsApp.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="configPhoneNumber" class="form-label">Numero de telefono <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="configPhoneNumber" placeholder="+52 1234567890" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="configPhoneNumberId" class="form-label">Phone Number ID <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="configPhoneNumberId" placeholder="123456789012345" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="configAccessToken" class="form-label">Access Token</label>
+                            <input type="text" class="form-control" id="configAccessToken" placeholder="EAABs...">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="configBusinessName" class="form-label">Nombre del negocio <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="configBusinessName" placeholder="Mi Gimnasio" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="configEmail" class="form-label">Email del negocio</label>
+                            <input type="email" class="form-control" id="configEmail" placeholder="contacto@gimnasio.com">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="configAddress" class="form-label">Direccion</label>
+                            <input type="text" class="form-control" id="configAddress" placeholder="Calle 123, Ciudad">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="configDescription" class="form-label">Descripcion</label>
+                            <input type="text" class="form-control" id="configDescription" placeholder="Gimnasio y centro fitness">
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="configRegisterInWhatsApp">
+                                <label class="form-check-label" for="configRegisterInWhatsApp">Registrar numero en WhatsApp</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex flex-wrap justify-content-end gap-2 mt-4">
+                        <button type="button" class="btn btn-outline-primary" id="cancelConfigFormBtn">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>Guardar configuracion
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="admin-form-panel mb-3 d-none" id="templateFormPanel">
+                <form id="templateForm">
+                    <div class="admin-form-panel-title">
+                        <div>
+                            <span>WhatsApp</span>
+                            <h2>Nuevo template personalizado</h2>
+                        </div>
+                        <button type="button" class="btn btn-outline-primary" id="closeTemplateFormBtn">Cerrar</button>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="templateCustomerId" class="form-label">Cliente <span class="text-danger">*</span></label>
+                            <select class="form-select" id="templateCustomerId" data-search-select data-label="Cliente" data-page-size="10" required>
+                                <option value="">Selecciona un cliente</option>
+                                <?php foreach ($customers ?? [] as $customer): ?>
+                                <option value="<?= htmlspecialchars($customer['customerId'] ?? '') ?>">
+                                    <?= htmlspecialchars($customer['name'] ?? $customer['customerId'] ?? '') ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="templateEventKey" class="form-label">Evento <span class="text-danger">*</span></label>
+                            <select class="form-select" id="templateEventKey" data-search-select data-label="Evento" data-page-size="10" required></select>
+                        </div>
+                        <div class="col-md-8">
+                            <label for="templateName" class="form-label">Nombre del template en WhatsApp <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="templateName" placeholder="membership_custom" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="templateLanguageCode" class="form-label">Idioma</label>
+                            <input type="text" class="form-control" id="templateLanguageCode" value="es_MX">
+                        </div>
+                        <div class="col-12">
+                            <label for="templateDescription" class="form-label">Descripcion</label>
+                            <input type="text" class="form-control" id="templateDescription" placeholder="Uso interno">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="templateHeaderVariables" class="form-label">Variables header</label>
+                            <select class="form-select" id="templateHeaderVariables" multiple></select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="templateBodyVariables" class="form-label">Variables body</label>
+                            <select class="form-select" id="templateBodyVariables" multiple></select>
+                        </div>
+                    </div>
+                    <div class="form-text mt-3">El orden seleccionado debe coincidir con el orden de variables aprobado en Meta.</div>
+                    <div class="d-flex flex-wrap justify-content-end gap-2 mt-4">
+                        <button type="button" class="btn btn-outline-primary" id="cancelTemplateFormBtn">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>Guardar template
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <section id="whatsappListPanel">
 
             <div class="card shadow-sm">
                 <div class="card-body p-0">
@@ -60,7 +184,7 @@ ob_start();
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h5 class="mb-0"><i class="fas fa-message me-2"></i>Templates personalizados por evento</h5>
-        <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#templateModal">
+        <button type="button" class="btn btn-outline-primary" id="addTemplateBtn">
             <i class="fas fa-plus me-1"></i> Agregar template
         </button>
     </div>
@@ -87,152 +211,7 @@ ob_start();
     </div>
 </div>
 
-<!-- Modal: Crear configuración -->
-<div class="modal fade" id="configModal" tabindex="-1" aria-labelledby="configModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content">
-            <form id="configForm">
-                <div class="modal-header" style="background-color: #25D366; color: white;">
-                    <h5 class="modal-title" id="configModalLabel">
-                        <i class="fab fa-whatsapp me-2"></i>Nueva configuración WhatsApp
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="configCustomerId" class="form-label">Cliente <span class="text-danger">*</span></label>
-                            <select class="form-select" id="configCustomerId" required>
-                                <option value="">Selecciona un cliente...</option>
-                                <?php foreach ($customers ?? [] as $customer): ?>
-                                <option value="<?= htmlspecialchars($customer['customerId'] ?? '') ?>">
-                                    <?= htmlspecialchars($customer['name'] ?? $customer['customerId'] ?? '') ?>
-                                </option>
-                                <?php endforeach; ?>
-                            </select>
-                            <div class="form-text">El cliente al que se asociará este número de WhatsApp.</div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="configPhoneNumber" class="form-label">Número de teléfono <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="configPhoneNumber" placeholder="+52 1234567890" required>
-                            <div class="form-text">Número completo con código de país.</div>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="configPhoneNumberId" class="form-label">Phone Number ID <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="configPhoneNumberId" placeholder="123456789012345" required>
-                            <div class="form-text">ID del número en Meta Business Manager.</div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="configAccessToken" class="form-label">Access Token</label>
-                            <input type="text" class="form-control" id="configAccessToken" placeholder="EAABs...">
-                            <div class="form-text">Token de acceso para la API de WhatsApp (opcional).</div>
-                        </div>
-                    </div>
-                    <hr>
-                    <h6 class="text-muted mb-3"><i class="fas fa-building me-2"></i>Información del negocio</h6>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="configBusinessName" class="form-label">Nombre del negocio <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="configBusinessName" placeholder="Mi Gimnasio" required>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="configEmail" class="form-label">Email del negocio</label>
-                            <input type="email" class="form-control" id="configEmail" placeholder="contacto@gimnasio.com">
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="configAddress" class="form-label">Dirección</label>
-                            <input type="text" class="form-control" id="configAddress" placeholder="Calle 123, Ciudad">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="configDescription" class="form-label">Descripción</label>
-                            <input type="text" class="form-control" id="configDescription" placeholder="Gimnasio y centro fitness">
-                        </div>
-                    </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" id="configRegisterInWhatsApp">
-                        <label class="form-check-label" for="configRegisterInWhatsApp">
-                            <i class="fas fa-check-circle text-success me-1"></i>
-                            Registrar número en WhatsApp (activarlo en Meta)
-                        </label>
-                        <div class="form-text">Marca esta opción para que el número aparezca como "activo" en Meta Business Manager.</div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success">
-                        <i class="fas fa-save me-1"></i> Guardar configuración
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Modal: Crear template personalizado -->
-<div class="modal fade" id="templateModal" tabindex="-1" aria-labelledby="templateModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content">
-            <form id="templateForm">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="templateModalLabel"><i class="fas fa-message me-2"></i>Nuevo template personalizado</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="templateCustomerId" class="form-label">Cliente <span class="text-danger">*</span></label>
-                            <select class="form-select" id="templateCustomerId" required>
-                                <option value="">Selecciona un cliente...</option>
-                                <?php foreach ($customers ?? [] as $customer): ?>
-                                <option value="<?= htmlspecialchars($customer['customerId'] ?? '') ?>">
-                                    <?= htmlspecialchars($customer['name'] ?? $customer['customerId'] ?? '') ?>
-                                </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="templateEventKey" class="form-label">Evento <span class="text-danger">*</span></label>
-                            <select class="form-select" id="templateEventKey" required></select>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-8 mb-3">
-                            <label for="templateName" class="form-label">Nombre del template en WhatsApp <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="templateName" placeholder="membership_custom" required>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="templateLanguageCode" class="form-label">Idioma</label>
-                            <input type="text" class="form-control" id="templateLanguageCode" value="es_MX">
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="templateDescription" class="form-label">Descripción</label>
-                        <input type="text" class="form-control" id="templateDescription" placeholder="Uso interno">
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="templateHeaderVariables" class="form-label">Variables header</label>
-                            <select class="form-select" id="templateHeaderVariables" multiple></select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="templateBodyVariables" class="form-label">Variables body</label>
-                            <select class="form-select" id="templateBodyVariables" multiple></select>
-                        </div>
-                    </div>
-                    <div class="form-text">El orden seleccionado debe coincidir con el orden de variables aprobado en Meta.</div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success"><i class="fas fa-save me-1"></i> Guardar template</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+</section>
 
 <!-- Modal: Confirmar eliminación -->
 <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
@@ -312,11 +291,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const templatesTableBody = document.querySelector('#templatesTable tbody');
     const refreshButton = document.getElementById('refreshConfigs');
     const alertsContainer = document.getElementById('alertsContainer');
-    const configModalEl = document.getElementById('configModal');
-    const configModal = configModalEl ? new bootstrap.Modal(configModalEl) : null;
+    const whatsappListPanel = document.getElementById('whatsappListPanel');
+    const configFormPanel = document.getElementById('configFormPanel');
+    const templateFormPanel = document.getElementById('templateFormPanel');
     const configForm = document.getElementById('configForm');
-    const templateModalEl = document.getElementById('templateModal');
-    const templateModal = templateModalEl ? new bootstrap.Modal(templateModalEl) : null;
     const templateForm = document.getElementById('templateForm');
     const deleteModalEl = document.getElementById('deleteModal');
     const deleteModal = deleteModalEl ? new bootstrap.Modal(deleteModalEl) : null;
@@ -343,6 +321,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function showAlert(message, type = 'success') {
+        if (window.AdminToast && typeof window.AdminToast.show === 'function') {
+            window.AdminToast.show(message, type, { duration: 5000 });
+            return;
+        }
+
         const alertId = 'alert-' + Date.now();
         const alertHtml = `
             <div class="alert alert-${type} alert-dismissible fade show" role="alert" id="${alertId}">
@@ -356,6 +339,33 @@ document.addEventListener('DOMContentLoaded', function() {
             const alert = document.getElementById(alertId);
             if (alert) alert.remove();
         }, 5000);
+    }
+
+    function showListPanel() {
+        configFormPanel.classList.add('d-none');
+        templateFormPanel.classList.add('d-none');
+        whatsappListPanel.classList.remove('d-none');
+    }
+
+    function showConfigForm() {
+        configForm.reset();
+        templateFormPanel.classList.add('d-none');
+        whatsappListPanel.classList.add('d-none');
+        configFormPanel.classList.remove('d-none');
+        window.AdminUI?.initSearchSelects(configFormPanel);
+        document.getElementById('configCustomerId').dispatchEvent(new Event('change', { bubbles: true }));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function showTemplateForm() {
+        templateForm.reset();
+        configFormPanel.classList.add('d-none');
+        whatsappListPanel.classList.add('d-none');
+        templateFormPanel.classList.remove('d-none');
+        window.AdminUI?.initSearchSelects(templateFormPanel);
+        document.getElementById('templateCustomerId').dispatchEvent(new Event('change', { bubbles: true }));
+        document.getElementById('templateEventKey').dispatchEvent(new Event('change', { bubbles: true }));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function renderTable() {
@@ -429,6 +439,7 @@ document.addEventListener('DOMContentLoaded', function() {
             eventSelect.innerHTML = '<option value="">Selecciona un evento...</option>' + templateEvents.map(event =>
                 `<option value="${escapeHtml(event.value)}">${escapeHtml(event.label)}</option>`
             ).join('');
+            eventSelect.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
         const variableOptions = templateVariables.map(variable =>
@@ -594,7 +605,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const data = await response.json();
 
                 if (data.success) {
-                    if (configModal) configModal.hide();
+                    showListPanel();
                     configForm.reset();
                     
                     let message = 'Configuración creada correctamente';
@@ -732,7 +743,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const data = await response.json();
 
                 if (data.success) {
-                    if (templateModal) templateModal.hide();
+                    showListPanel();
                     templateForm.reset();
                     document.getElementById('templateLanguageCode').value = 'es_MX';
                     showAlert('Template personalizado guardado correctamente', 'success');
@@ -771,6 +782,13 @@ document.addEventListener('DOMContentLoaded', function() {
             loadTemplates();
         });
     }
+
+    document.getElementById('addConfigBtn')?.addEventListener('click', showConfigForm);
+    document.getElementById('addTemplateBtn')?.addEventListener('click', showTemplateForm);
+    document.getElementById('closeConfigFormBtn')?.addEventListener('click', showListPanel);
+    document.getElementById('cancelConfigFormBtn')?.addEventListener('click', showListPanel);
+    document.getElementById('closeTemplateFormBtn')?.addEventListener('click', showListPanel);
+    document.getElementById('cancelTemplateFormBtn')?.addEventListener('click', showListPanel);
 
     // Cargar al iniciar
     loadConfigs();

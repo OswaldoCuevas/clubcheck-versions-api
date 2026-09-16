@@ -410,7 +410,7 @@ body {
 .action-btn.primary {
     background: #2f80ed;
     color: #ffffff;
-    box-shadow: 0 10px 22px rgba(47, 128, 237, 0.20);
+    box-shadow: 0 6px 14px rgba(47, 128, 237, 0.14);
 }
 
 .action-btn.secondary {
@@ -423,7 +423,7 @@ body {
     background: #e8f4ff;
     color: #1769aa;
     border-color: #c1ddf7;
-    box-shadow: 0 10px 22px rgba(47, 128, 237, 0.10);
+    box-shadow: 0 6px 14px rgba(47, 128, 237, 0.08);
 }
 
 .dashboard-grid {
@@ -436,10 +436,10 @@ body {
 .metric-tile,
 .finance-band,
 .insight-panel {
-    background: rgba(255,255,255,0.94);
+    background: #ffffff;
     border: 1px solid #d7eafd;
     border-radius: 10px;
-    box-shadow: 0 14px 34px rgba(47, 128, 237, 0.08);
+    box-shadow: 0 8px 18px rgba(47, 128, 237, 0.06);
 }
 
 .metric-link {
@@ -453,7 +453,7 @@ body {
     text-decoration: none;
     transform: translateY(-2px);
     border-color: #9fcdfa;
-    box-shadow: 0 18px 40px rgba(47, 128, 237, 0.12);
+    box-shadow: 0 8px 18px rgba(47, 128, 237, 0.07);
 }
 
 .hero-revenue {
@@ -463,7 +463,7 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: clamp(20px, 4vw, 34px);
-    background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(235,247,255,0.95)), #ffffff;
+    background: #f7fbff;
 }
 
 .hero-revenue span,
@@ -501,57 +501,79 @@ body {
     display: grid;
     place-items: center;
     border-radius: 24px;
-    background: linear-gradient(145deg, #dff0ff, #f7fbff);
+    background: #e1f4ff;
     color: #2f80ed;
     font-size: clamp(28px, 5vw, 42px);
-    box-shadow: inset 0 0 0 1px #c7e2fb, 0 16px 34px rgba(47, 128, 237, 0.14);
+    box-shadow: inset 0 0 0 1px #c7e2fb, 0 8px 18px rgba(47, 128, 237, 0.08);
 }
 
 .metric-tile {
     grid-column: span 3;
-    min-height: 168px;
-    padding: 18px;
+    min-height: 126px;
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    align-content: center;
+    column-gap: 16px;
+    row-gap: 4px;
+    padding: 22px;
 }
 
 .tile-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    display: contents;
 }
 
 .tile-top i {
-    width: 38px;
-    height: 38px;
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: center;
+    width: 52px;
+    height: 52px;
     display: grid;
     place-items: center;
-    border-radius: 7px;
-    background: #eaf5ff;
-    color: #2f80ed;
+    border-radius: 16px;
+    background: #e1f4ff;
+    color: #087cba;
+    font-size: 19px;
+}
+
+.tile-top span {
+    grid-column: 2;
+    grid-row: 2;
+    min-width: 0;
 }
 
 .whatsapp-tile .tile-top i {
-    background: #ecfdf5;
-    color: #16a34a;
+    background: #e6f8ff;
+    color: #087cba;
 }
 
 .settings-tile .tile-top i {
-    background: #fffbeb;
-    color: #d97706;
+    background: #e6f8ff;
+    color: #087cba;
 }
 
 .metric-tile strong {
     display: block;
-    margin: 18px 0 7px;
+    grid-column: 2;
+    grid-row: 1;
+    margin: 0;
     color: #15395b;
-    font-size: clamp(24px, 3vw, 32px);
+    font-size: clamp(26px, 3vw, 34px);
     line-height: 1;
     font-weight: 700;
 }
 
+.metric-tile small {
+    grid-column: 2;
+    grid-row: 3;
+    min-width: 0;
+}
+
 .progress-line {
+    grid-column: 1 / -1;
     height: 8px;
-    margin-top: 20px;
+    margin-top: 14px;
     overflow: hidden;
     border-radius: 999px;
     background: #e2f1ff;
@@ -562,14 +584,19 @@ body {
     width: 0;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, #2f80ed, #56ccf2);
+    background: #2f80ed;
 }
 
 .cost-control {
+    grid-column: 1 / -1;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 44px;
     gap: 10px;
-    margin: 18px 0 8px;
+    margin: 14px 0 6px;
+}
+
+.settings-tile > small {
+    grid-column: 1 / -1;
 }
 
 .cost-control input {
@@ -588,7 +615,7 @@ body {
     border-radius: 7px;
     background: #21b26f;
     color: #ffffff;
-    box-shadow: 0 10px 20px rgba(33, 178, 111, 0.18);
+    box-shadow: 0 6px 14px rgba(33, 178, 111, 0.12);
 }
 
 .finance-band {
@@ -598,7 +625,7 @@ body {
     align-items: center;
     gap: 18px;
     padding: 20px;
-    background: linear-gradient(135deg, #eaf5ff, #f7fbff);
+    background: #f7fbff;
     color: #17324d;
 }
 
@@ -628,7 +655,7 @@ body {
     color: #ffffff;
     text-decoration: none;
     font-weight: 700;
-    box-shadow: 0 10px 22px rgba(47, 128, 237, 0.16);
+    box-shadow: 0 6px 14px rgba(47, 128, 237, 0.12);
 }
 
 .band-action:hover {
@@ -786,7 +813,8 @@ body {
 
     .metric-tile {
         grid-column: span 12;
-        min-height: 144px;
+        min-height: 118px;
+        padding: 18px;
     }
 
     .finance-band {

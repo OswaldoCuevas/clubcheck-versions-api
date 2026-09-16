@@ -7,7 +7,6 @@
  */
 function app_url($path = '/')
 {
-    require_once __DIR__ . '/Core/UrlHelper.php';
     return \Core\UrlHelper::url($path);
 }
 
@@ -16,7 +15,6 @@ function app_url($path = '/')
  */
 function is_current_url($pattern)
 {
-    require_once __DIR__ . '/Core/UrlHelper.php';
     return \Core\UrlHelper::isCurrentUrl($pattern);
 }
 
@@ -25,7 +23,6 @@ function is_current_url($pattern)
  */
 function current_path()
 {
-    require_once __DIR__ . '/Core/UrlHelper.php';
     return \Core\UrlHelper::getCurrentPath();
 }
 

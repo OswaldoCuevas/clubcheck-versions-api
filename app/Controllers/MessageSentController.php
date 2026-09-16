@@ -2,9 +2,6 @@
 
 namespace Controllers;
 
-require_once __DIR__ . '/../Core/Controller.php';
-require_once __DIR__ . '/../Models/MessageSentModel.php';
-require_once __DIR__ . '/../Helpers/ApiHelper.php';
 
 use Core\Controller;
 use Models\MessageSentModel;

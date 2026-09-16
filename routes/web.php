@@ -171,6 +171,7 @@ $router->get('/admin/desktop-tables/view', 'DesktopTablesController', 'viewTable
 $router->get('/admin/desktop-tables/api/data', 'DesktopTablesController', 'getData');// NO, Administrativo
 
 // Downloads History Admin
+$router->any('/admin/versions', 'HomeController', 'index');// NO, Administrativo
 $router->get('/admin/downloads', 'AdminController', 'downloads');// NO, Administrativo
 $router->get('/admin/api/downloads', 'AdminController', 'downloadsJson');// NO, Administrativo
 $router->get('/admin/api/downloads/ip/:ipAddress', 'AdminController', 'downloadsByIpJson');// NO, Administrativo

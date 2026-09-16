@@ -2,10 +2,6 @@
 
 namespace Controllers;
 
-require_once __DIR__ . '/../Core/Controller.php';
-require_once __DIR__ . '/../Models/VersionModel.php';
-require_once __DIR__ . '/../Models/DownloadLogModel.php';
-require_once __DIR__ . '/../Models/ApplicationModel.php';
 
 use Core\Controller;
 use Models\ApplicationModel;
@@ -60,8 +56,6 @@ class ApiController extends Controller
         $versionData['hasUpdate'] = $hasValidVersion;
 
         if ($hasValidVersion) {
-            require_once __DIR__ . '/../Core/UrlHelper.php';
-            require_once __DIR__ . '/../Helpers/FileHelper.php';
 
             $baseUrl = \Core\UrlHelper::absoluteUrl('');
             $versionData['downloadUrl'] = str_replace('//api', '/api', $this->withAppQuery($baseUrl . '/api/download', $appId));
@@ -130,8 +124,6 @@ class ApiController extends Controller
             $response['hasUpdate'] = version_compare($serverVersion, $clientVersion, '>');
 
             if ($response['hasUpdate']) {
-                require_once __DIR__ . '/../Core/UrlHelper.php';
-                require_once __DIR__ . '/../Helpers/FileHelper.php';
 
                 $baseUrl = \Core\UrlHelper::absoluteUrl('');
                 $response['downloadUrl'] = $this->withAppQuery($baseUrl . '/api/download', $appId);
@@ -175,7 +167,6 @@ class ApiController extends Controller
         $appId = $this->requestAppId();
         $versionData = $this->latestVersion($appId);
 
-        require_once __DIR__ . '/../Helpers/FileHelper.php';
         $fileName = getAppFileName($versionData['latestVersion']);
         $filePath = findExistingAppFile($versionData['latestVersion']) ?: (__DIR__ . '/../../uploads/' . $fileName);
 
@@ -227,7 +218,6 @@ class ApiController extends Controller
             exit;
         }
 
-        require_once __DIR__ . '/../Helpers/FileHelper.php';
         $setupFileName = getSetupFileName($versionData['latestVersion']);
         $setupFilePath = __DIR__ . '/../../uploads/' . $setupFileName;
 

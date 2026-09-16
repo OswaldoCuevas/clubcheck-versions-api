@@ -2,12 +2,6 @@
 
 namespace Controllers;
 
-require_once __DIR__ . '/../Core/Controller.php';
-require_once __DIR__ . '/../Services/WhatsAppService.php';
-require_once __DIR__ . '/../Models/MessageSentModel.php';
-require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
-require_once __DIR__ . '/../Helpers/ApiHelper.php';
-require_once __DIR__ . '/../../utils/CustomerPermits.php';
 
 use Core\Controller;
 use App\Services\WhatsAppService;

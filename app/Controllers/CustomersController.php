@@ -2,50 +2,6 @@
 
 namespace Controllers;
 
-require_once __DIR__ . '/../Core/Controller.php';
-require_once __DIR__ . '/../Models/CustomerSessionModel.php';
-require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
-require_once __DIR__ . '/../Models/ApplicationModel.php';
-require_once __DIR__ . '/../Models/UsersDesktopModel.php';
-require_once __DIR__ . '/../Models/SubscriptionsDesktopModel.php';
-require_once __DIR__ . '/../Models/AttendancesDesktopModel.php';
-require_once __DIR__ . '/../Models/AdministratorsDesktopModel.php';
-require_once __DIR__ . '/../Models/SendEmailsAdminDesktopModel.php';
-require_once __DIR__ . '/../Models/HistoryOperationsDesktopModel.php';
-require_once __DIR__ . '/../Models/InfoMySubscriptionDesktopModel.php';
-require_once __DIR__ . '/../Models/WhatsAppDesktopModel.php';
-require_once __DIR__ . '/../Models/AppSettingsDesktopModel.php';
-require_once __DIR__ . '/../Models/SentMessagesDesktopModel.php';
-require_once __DIR__ . '/../Models/MessageSentModel.php';
-require_once __DIR__ . '/../Models/ProductDesktopModel.php';
-require_once __DIR__ . '/../Models/ProductPriceDesktopModel.php';
-require_once __DIR__ . '/../Models/ProductStockDesktopModel.php';
-require_once __DIR__ . '/../Models/CashRegisterDesktopModel.php';
-require_once __DIR__ . '/../Models/SaleTicketDesktopModel.php';
-require_once __DIR__ . '/../Models/SaleTicketItemDesktopModel.php';
-require_once __DIR__ . '/../Models/SubscriptionPeriodDesktopModel.php';
-require_once __DIR__ . '/../Models/SyncStatusDesktopModel.php';
-require_once __DIR__ . '/../Models/MigrationsDesktopModel.php';
-require_once __DIR__ . '/../Models/BarcodeLookupCacheDesktopModel.php';
-require_once __DIR__ . '/../Models/AccessDevicesDesktopModel.php';
-require_once __DIR__ . '/../Models/OperationsAccessDevicesDesktopModel.php';
-require_once __DIR__ . '/../Models/UserAccessDevicesDesktopModel.php';
-require_once __DIR__ . '/../Models/AccessUsersDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassCatalogDesktopModel.php';
-require_once __DIR__ . '/../Models/InstructorsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassInstructorsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassScheduleGroupsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassSchedulesDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassEnrollmentsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassReservationsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassScheduleInstructorsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassScheduleReschedulesDesktopModel.php';
-require_once __DIR__ . '/../Models/SaleClassesDesktopModel.php';
-require_once __DIR__ . '/../Models/SaleClassSchedulesDesktopModel.php';
-require_once __DIR__ . '/../Helpers/ApiHelper.php';
-require_once __DIR__ . '/../Services/StripeService.php';
-require_once __DIR__ . '/../Services/JwtService.php';
-require_once __DIR__ . '/../Services/LicenseService.php';
 
 use Core\Controller;
 use Models\CustomerRegistryModel;
@@ -1172,7 +1128,6 @@ class CustomersController extends Controller
             
             // Registrar en el historial de licencias
             try {
-                require_once __DIR__ . '/../Models/LicenseLogModel.php';
                 $logModel = new \Models\LicenseLogModel();
                 $logModel->createLog([
                     'AppId' => $internalCustomerId ? $this->applicationModel()->getCustomerAppId($internalCustomerId) : $this->applicationModel()->getDefaultApp()['id'],
@@ -1699,7 +1654,6 @@ class CustomersController extends Controller
         }
 
         // Validar el token usando CustomerJwtService
-        require_once __DIR__ . '/../Services/CustomerJwtService.php';
         $customerJwtService = new \App\Services\CustomerJwtService();
         
         // Obtener IP y user agent para logging

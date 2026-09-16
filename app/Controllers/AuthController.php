@@ -2,7 +2,6 @@
 
 namespace Controllers;
 
-require_once __DIR__ . '/../Core/Controller.php';
 
 use Core\Controller;
 

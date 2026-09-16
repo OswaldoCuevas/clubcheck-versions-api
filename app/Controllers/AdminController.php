@@ -2,6 +2,7 @@
 
 namespace Controllers;
 
+use ApiHelper;
 use Core\Controller;
 use Models\CustomerRegistryModel;
 use Models\CustomerWebLoginAttemptModel;
@@ -18,23 +19,11 @@ use App\Services\CustomerStatsService;
 use App\Services\AdminDashboardService;
 use App\Services\StripeService;
 use App\Services\LicenseService;
+use App\Helpers\ApplicationContext;
+use App\Modules\Customers\Features\SaveCustomerFeature;
+use App\Modules\Customers\Requests\SaveCustomerRequest;
 
-require_once __DIR__ . '/../Core/Controller.php';
-require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
-require_once __DIR__ . '/../Models/CustomerWebLoginAttemptModel.php';
-require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
-require_once __DIR__ . '/../Models/WhatsAppTemplateModel.php';
-require_once __DIR__ . '/../Models/DownloadLogModel.php';
-require_once __DIR__ . '/../Models/LicenseLogModel.php';
-require_once __DIR__ . '/../Models/AnnouncementModel.php';
-require_once __DIR__ . '/../Models/StripePlanModel.php';
-require_once __DIR__ . '/../Models/ApplicationModel.php';
-require_once __DIR__ . '/../Services/WhatsAppService.php';
-require_once __DIR__ . '/../enums/WhatsAppEvent.php';
-require_once __DIR__ . '/../Services/CustomerStatsService.php';
-require_once __DIR__ . '/../Services/AdminDashboardService.php';
-require_once __DIR__ . '/../Services/StripeService.php';
-require_once __DIR__ . '/../Services/LicenseService.php';
+
 
 class AdminController extends Controller
 {
@@ -46,7 +35,7 @@ class AdminController extends Controller
     private function selectedAppId(): string
     {
         // El contexto en sesion separa la informacion administrativa por aplicacion.
-        return $this->applicationModel()->getSelectedApp()['id'];
+        return (new ApplicationContext($this->applicationModel()))->selectedAppId();
     }
 
     private function selectedStripeService(): StripeService
@@ -333,179 +322,16 @@ class AdminController extends Controller
         ]);
     }
 
-    public function saveCustomerJson()
+    public function saveCustomerJson(): void
     {
         $this->requirePermission('admin_access');
 
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
+        $result = (new SaveCustomerFeature())->handle(new SaveCustomerRequest());
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $payload = json_decode(file_get_contents('php://input'), true);
-        $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
-
-        $registry = new CustomerRegistryModel();
-
-        // Validar si el cliente existe
-        $existing = $customerId !== '' ? $registry->getCustomer($customerId) : null;
-
-        // Construir atributos a guardar
-        $attributes = [];
-
-        if (array_key_exists('name', $payload)) {
-            $attributes['name'] = $payload['name'] !== null ? trim((string) $payload['name']) : null;
-        }
-
-        if (array_key_exists('email', $payload)) {
-            $email = $payload['email'];
-            if ($email !== null && $email !== '') {
-                $email = trim((string) $email);
-                if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                    $this->json(['error' => 'Formato de correo inválido'], 422);
-                }
-            } else {
-                $email = null;
-            }
-            $attributes['email'] = $email;
-        }
-
-        if (array_key_exists('codeAccess', $payload) || array_key_exists('accessCode', $payload)) {
-            $codeAccess = $payload['codeAccess'] ?? $payload['accessCode'] ?? null;
-            $codeAccess = $codeAccess !== null ? trim((string) $codeAccess) : null;
-
-            if ($codeAccess === null || $codeAccess === '') {
-                $this->json(['error' => 'El AccessCode es obligatorio'], 422);
-            }
-
-            if (mb_strlen($codeAccess) > 100) {
-                $this->json(['error' => 'El AccessCode debe tener máximo 100 caracteres'], 422);
-            }
-
-            $attributes['codeAccess'] = $codeAccess;
-        }
-
-        if (array_key_exists('phone', $payload)) {
-            $phone = $payload['phone'];
-            $attributes['phone'] = $phone !== null ? trim((string) $phone) : null;
-        }
-
-        if (array_key_exists('deviceName', $payload)) {
-            $deviceName = $payload['deviceName'];
-            $attributes['deviceName'] = $deviceName !== null ? trim((string) $deviceName) : null;
-        }
-
-        if (array_key_exists('billingId', $payload)) {
-            $billingId = $payload['billingId'];
-            if ($billingId !== null) {
-                $billingId = trim((string) $billingId);
-            }
-            $attributes['billingId'] = $billingId === '' ? null : $billingId;
-        }
-
-        if (array_key_exists('planCode', $payload)) {
-            $planCode = $payload['planCode'];
-            if ($planCode !== null && $planCode !== '') {
-                $planCode = trim((string) $planCode);
-                if (mb_strlen($planCode) > 50) {
-                    $this->json(['error' => 'El PlanCode debe tener máximo 50 caracteres'], 422);
-                }
-            } else {
-                $planCode = null;
-            }
-            $attributes['planCode'] = $planCode;
-        }
-
-        if (array_key_exists('token', $payload)) {
-            $token = $payload['token'];
-            $attributes['token'] = $token !== null ? trim((string) $token) : null;
-        }
-
-        if (array_key_exists('isActive', $payload)) {
-            $attributes['isActive'] = (bool) $payload['isActive'];
-        }
-
-        // Validar que se enviaron atributos
-        if (empty($attributes)) {
-            $this->json(['error' => 'No se enviaron atributos'], 422);
-        }
-
-        // Si es un nuevo cliente, validar campos obligatorios
-        if ($existing === null) {
-            if (!array_key_exists('name', $attributes) || $attributes['name'] === null || $attributes['name'] === '') {
-                $this->json(['error' => 'El nombre es obligatorio al crear un cliente'], 422);
-            }
-
-            // Generar ID automático si no se proporcionó
-            if (!array_key_exists('codeAccess', $attributes) || $attributes['codeAccess'] === null || $attributes['codeAccess'] === '') {
-                $this->json(['error' => 'El AccessCode es obligatorio al crear un cliente'], 422);
-            }
-
-            if ($customerId === '') {
-                $customerId = $this->generateCustomerId();
-            }
-
-            // Los clientes creados desde admin pertenecen a la app seleccionada en el layout.
-            $attributes['appId'] = $this->selectedAppId();
-        }
-
-        try {
-            if ($existing === null) {
-                // Crear nuevo cliente usando upsertCustomer
-                $customer = $registry->upsertCustomer($customerId, $attributes);
-                
-                $response = [
-                    'status' => 'created',
-                    'customer' => $customer,
-                ];
-
-                // El accessKey se genera en upsertCustomer cuando es un cliente nuevo
-                // Pero no se devuelve en el resultado del método, así que no podemos mostrarlo aquí
-                // El admin deberá usar regenerateAccessKey si lo necesita
-
-                $this->json($response, 201);
-            } else {
-                // Actualizar cliente existente
-                $customer = $registry->upsertCustomer($customerId, $attributes);
-
-                $this->json([
-                    'status' => 'updated',
-                    'customer' => $customer,
-                ]);
-            }
-        } catch (\RuntimeException $e) {
-            if ($e->getMessage() === 'email_already_registered') {
-                $this->json([
-                    'error' => 'El correo ya está registrado para otro cliente',
-                    'code' => 'email_conflict',
-                ], 409);
-            }
-
-            if ($e->getMessage() === 'code_access_already_registered') {
-                $this->json([
-                    'error' => 'El AccessCode ya está registrado para otro cliente',
-                    'code' => 'code_access_conflict',
-                ], 409);
-            }
-
-            $this->json([
-                'error' => 'Error al guardar el cliente: ' . $e->getMessage(),
-            ], 500);
-        }
-    }
-
-    private function generateCustomerId(): string
-    {
-        try {
-            $random = bin2hex(random_bytes(16));
-        } catch (\Throwable $e) {
-            $random = hash('sha256', uniqid('', true));
-        }
-
-        return 'cus_' . substr($random, 0, 32);
+        ApiHelper::respond([
+            'status' => $result['status'],
+            'customer' => $result['customer'],
+        ], $result['httpStatus']);
     }
 
     public function announcements(): void
@@ -1519,7 +1345,6 @@ class AdminController extends Controller
             $this->json(['error' => 'Method not allowed'], 405);
         }
 
-        require_once __DIR__ . '/../Models/CustomerIpLogModel.php';
         
         $registry = new CustomerRegistryModel();
         $ipLogModel = new \Models\CustomerIpLogModel();
@@ -1566,7 +1391,6 @@ class AdminController extends Controller
             $this->json(['error' => 'Cliente no pertenece a la app seleccionada'], 403);
         }
 
-        require_once __DIR__ . '/../Services/CustomerJwtService.php';
         $customerJwtService = new \App\Services\CustomerJwtService();
 
         try {
@@ -1668,7 +1492,6 @@ class AdminController extends Controller
             $this->json(['error' => 'Cliente no pertenece a la app seleccionada'], 403);
         }
 
-        require_once __DIR__ . '/../Models/CustomerIpLogModel.php';
         $ipLogModel = new \Models\CustomerIpLogModel();
 
         $ips = $ipLogModel->getCustomerIps($customerId);
@@ -1702,7 +1525,6 @@ class AdminController extends Controller
         $flagged = isset($payload['flagged']) ? (bool) $payload['flagged'] : true;
         $reason = isset($payload['reason']) ? trim((string) $payload['reason']) : null;
 
-        require_once __DIR__ . '/../Models/CustomerIpLogModel.php';
         $ipLogModel = new \Models\CustomerIpLogModel();
         $appModel = $this->applicationModel();
         if ($appModel->columnExists('Customers', 'AppId')) {
@@ -2473,7 +2295,6 @@ class AdminController extends Controller
 
         $customerJwt = trim((string)($dbRow['TokenJwt'] ?? ''));
         if ($customerJwt === '' && $dbRow) {
-            require_once __DIR__ . '/../Services/JwtService.php';
             $jwtService  = new \App\Services\JwtService();
             $customerJwt = $jwtService->createToken([
                 'cid' => $dbRow['Id'],

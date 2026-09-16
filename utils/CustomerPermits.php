@@ -1,8 +1,4 @@
 <?php
-include_once __DIR__ . '/../utils/database.php';
-require_once __DIR__ . '/../app/Services/StripeService.php';
-require_once __DIR__ . '/../app/Exceptions/ApiException.php';
-require_once __DIR__ . '/../app/Exceptions/NotFoundException.php';  
 
 use App\Services\StripeService;
 use App\Exceptions\ApiException;

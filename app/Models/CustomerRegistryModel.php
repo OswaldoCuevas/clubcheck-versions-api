@@ -82,7 +82,7 @@ class CustomerRegistryModel extends Model
         return $suffix;
     }
 
-    private function codeAccessExists(string $codeAccess, ?string $ignoreCustomerId = null, ?string $appId = null): bool
+    public function codeAccessExists(string $codeAccess, ?string $ignoreCustomerId = null, ?string $appId = null): bool
     {
         $params = [$codeAccess];
         $sql = 'SELECT Id FROM Customers WHERE CodeAccess = ?';
@@ -135,7 +135,7 @@ class CustomerRegistryModel extends Model
         return hash_hmac('sha512', $accessKey, $secret);
     }
 
-    private function accessKeyHashExists(string $accessKeyHash): bool
+    public function accessKeyHashExists(string $accessKeyHash): bool
     {
         $row = $this->db->fetchOne(
             'SELECT Id FROM Customers WHERE AccessKeyHash = ?',
@@ -434,7 +434,7 @@ class CustomerRegistryModel extends Model
             return;
         }
 
-        throw new \RuntimeException('email_already_registered');
+        throw new \App\Exceptions\ValidationException('El correo ya está registrado para otro cliente');
     }
 
     public function isEmailAvailable(?string $email, ?string $ignoreCustomerId = null, ?string $appId = null): bool
@@ -523,7 +523,7 @@ class CustomerRegistryModel extends Model
             if ($codeAccess !== null) {
                 $codeAccess = $this->slugifyCodeAccess((string) $codeAccess);
                 if ($this->codeAccessExists($codeAccess, $customerId, $existing['AppId'] ?? null)) {
-                    throw new \RuntimeException('code_access_already_registered');
+                    throw new \App\Exceptions\ValidationException('El correo ya está registrado para otro cliente');
                 }
             }
             $update['CodeAccess'] = ($codeAccess === null || $codeAccess === '') ? null : $codeAccess;
@@ -592,6 +592,127 @@ class CustomerRegistryModel extends Model
         return $this->getCustomer($customerId);
     }
 
+    public function createCustomerRecord(string $customerId, array $attributes): array
+    {
+        return $this->insertCustomerRecord($customerId, $attributes);
+    }
+
+    public function updateCustomerRecord(string $customerId, array $attributes): ?array
+    {
+        $customerId = $this->normaliseCustomerId($customerId);
+
+        if ($customerId === '') {
+            return null;
+        }
+
+        if ($this->findRawCustomer($customerId) === null) {
+            return null;
+        }
+
+        $update = $this->mapCustomerAttributesToColumns($attributes);
+
+        if (!empty($update)) {
+            $update['UpdatedAt'] = $this->now();
+            $this->db->update('Customers', $update, 'Id = ?', [$customerId]);
+        }
+
+        return $this->getCustomer($customerId);
+    }
+
+    private function insertCustomerRecord(string $customerId, array $attributes): array
+    {
+        $customerId = $this->normaliseCustomerId($customerId);
+
+        if ($customerId === '') {
+            throw new \InvalidArgumentException('customerId is required');
+        }
+
+        $now = $this->now();
+        $data = $this->mapCustomerAttributesToColumns($attributes);
+        $appId = $attributes['appId'] ?? $this->appModel()->getDefaultApp()['id'];
+
+        $data = array_merge([
+            'Id' => $customerId,
+            'BillingId' => null,
+            'PlanCode' => null,
+            'Name' => null,
+            'CodeAccess' => null,
+            'Email' => null,
+            'Phone' => null,
+            'DeviceName' => null,
+            'Token' => null,
+            'AccessKeyHash' => null,
+            'IsActive' => 1,
+            'WaitingForToken' => 0,
+            'WaitingSince' => null,
+            'TokenUpdatedAt' => null,
+            'LastSeen' => null,
+            'Metadata' => null,
+            'CreatedAt' => $now,
+            'UpdatedAt' => $now,
+        ], $data);
+
+        if ($this->appModel()->columnExists('Customers', 'AppId')) {
+            $data['AppId'] = $appId;
+        }
+
+        $this->db->insert('Customers', $data);
+
+        return $this->getCustomer($customerId);
+    }
+
+    private function mapCustomerAttributesToColumns(array $attributes): array
+    {
+        $mapped = [];
+
+        $fieldMap = [
+            'billingId' => 'BillingId',
+            'planCode' => 'PlanCode',
+            'name' => 'Name',
+            'codeAccess' => 'CodeAccess',
+            'email' => 'Email',
+            'phone' => 'Phone',
+            'deviceName' => 'DeviceName',
+            'token' => 'Token',
+            'accessKeyHash' => 'AccessKeyHash',
+        ];
+
+        foreach ($fieldMap as $attribute => $column) {
+            if (!array_key_exists($attribute, $attributes)) {
+                continue;
+            }
+
+            $value = $attributes[$attribute];
+            $mapped[$column] = ($value === '') ? null : $value;
+        }
+
+        if (array_key_exists('isActive', $attributes)) {
+            $mapped['IsActive'] = $attributes['isActive'] ? 1 : 0;
+        }
+
+        if (array_key_exists('waitingForToken', $attributes)) {
+            $mapped['WaitingForToken'] = $attributes['waitingForToken'] ? 1 : 0;
+        }
+
+        if (array_key_exists('waitingSince', $attributes)) {
+            $mapped['WaitingSince'] = $this->toDateTime($attributes['waitingSince']);
+        }
+
+        if (array_key_exists('tokenUpdatedAt', $attributes)) {
+            $mapped['TokenUpdatedAt'] = $this->toDateTime($attributes['tokenUpdatedAt']);
+        }
+
+        if (array_key_exists('lastSeen', $attributes)) {
+            $mapped['LastSeen'] = $this->toDateTime($attributes['lastSeen']);
+        }
+
+        if (array_key_exists('metadata', $attributes)) {
+            $mapped['Metadata'] = $this->encodeMetadata($attributes['metadata']);
+        }
+
+        return $mapped;
+    }
+
     private function insertCustomer(string $customerId, array $attributes): array
     {
         $now = $this->now();
@@ -637,7 +758,7 @@ class CustomerRegistryModel extends Model
         }
 
         if ($data['CodeAccess'] !== null && $this->codeAccessExists($data['CodeAccess'], $customerId, $appId)) {
-            throw new \RuntimeException('code_access_already_registered');
+           throw new \App\Exceptions\ValidationException('CodeAccess no existe');
         }
 
         $this->db->insert('Customers', $data);

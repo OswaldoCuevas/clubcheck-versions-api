@@ -2,9 +2,6 @@
 
 namespace Controllers;
 
-require_once __DIR__ . '/../Core/Controller.php';
-require_once __DIR__ . '/../Models/VersionModel.php';
-require_once __DIR__ . '/../Models/ApplicationModel.php';
 
 use Core\Controller;
 use Models\ApplicationModel;
@@ -134,7 +131,6 @@ class HomeController extends Controller
         }
         
         // Generar nombres de archivos
-        require_once __DIR__ . '/../Helpers/FileHelper.php';
         $exeFileName = getAppFileName($version);
         $setupFileName = getSetupFileName($version);
         

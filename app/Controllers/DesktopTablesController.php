@@ -6,46 +6,8 @@ use Core\Controller;
 use Models\CustomerRegistryModel;
 use Models\ApplicationModel;
 
-require_once __DIR__ . '/../Core/Controller.php';
-require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
-require_once __DIR__ . '/../Models/ApplicationModel.php';
 
 // Modelos Desktop
-require_once __DIR__ . '/../Models/AdministratorsDesktopModel.php';
-require_once __DIR__ . '/../Models/AppSettingsDesktopModel.php';
-require_once __DIR__ . '/../Models/AttendancesDesktopModel.php';
-require_once __DIR__ . '/../Models/BarcodeLookupCacheDesktopModel.php';
-require_once __DIR__ . '/../Models/CashRegisterDesktopModel.php';
-require_once __DIR__ . '/../Models/HistoryOperationsDesktopModel.php';
-require_once __DIR__ . '/../Models/InfoMySubscriptionDesktopModel.php';
-require_once __DIR__ . '/../Models/MigrationsDesktopModel.php';
-require_once __DIR__ . '/../Models/ProductDesktopModel.php';
-require_once __DIR__ . '/../Models/ProductPriceDesktopModel.php';
-require_once __DIR__ . '/../Models/ProductStockDesktopModel.php';
-require_once __DIR__ . '/../Models/SaleTicketDesktopModel.php';
-require_once __DIR__ . '/../Models/SaleTicketItemDesktopModel.php';
-require_once __DIR__ . '/../Models/SendEmailsAdminDesktopModel.php';
-require_once __DIR__ . '/../Models/SentMessagesDesktopModel.php';
-require_once __DIR__ . '/../Models/SubscriptionPeriodDesktopModel.php';
-require_once __DIR__ . '/../Models/SubscriptionsDesktopModel.php';
-require_once __DIR__ . '/../Models/SyncStatusDesktopModel.php';
-require_once __DIR__ . '/../Models/UsersDesktopModel.php';
-require_once __DIR__ . '/../Models/WhatsAppDesktopModel.php';
-require_once __DIR__ . '/../Models/AccessDevicesDesktopModel.php';
-require_once __DIR__ . '/../Models/OperationsAccessDevicesDesktopModel.php';
-require_once __DIR__ . '/../Models/UserAccessDevicesDesktopModel.php';
-require_once __DIR__ . '/../Models/AccessUsersDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassCatalogDesktopModel.php';
-require_once __DIR__ . '/../Models/InstructorsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassInstructorsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassScheduleGroupsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassSchedulesDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassEnrollmentsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassReservationsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassScheduleInstructorsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassScheduleReschedulesDesktopModel.php';
-require_once __DIR__ . '/../Models/SaleClassesDesktopModel.php';
-require_once __DIR__ . '/../Models/SaleClassSchedulesDesktopModel.php';
 
 use Models\AdministratorsDesktopModel;
 use Models\AppSettingsDesktopModel;
