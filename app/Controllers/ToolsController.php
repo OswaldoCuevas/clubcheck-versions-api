@@ -10,7 +10,6 @@ class ToolsController extends Controller
     public function passwordGenerator()
     {
         // Requerir permisos de administrador
-        $this->requirePermission('admin_access');
         
         $currentUser = $this->userModel->getCurrentUser();
         $message = '';
@@ -101,7 +100,6 @@ class ToolsController extends Controller
     public function quickHash()
     {
         // Esta función podría manejar quick-hash.php si existe
-        $this->requirePermission('admin_access');
         
         $data = [
             'title' => 'Hash Rápido - ClubCheck'
@@ -113,7 +111,6 @@ class ToolsController extends Controller
     public function generatePassword()
     {
         // Esta función podría manejar generate-password.php CLI si existe
-        $this->requirePermission('admin_access');
         
         $data = [
             'title' => 'Generador CLI - ClubCheck'

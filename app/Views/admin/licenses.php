@@ -113,7 +113,8 @@ ob_start();
             </div>
 
             <!-- Filtros rápidos -->
-            <div class="d-flex gap-2 mb-3 flex-wrap">
+            <div id="licensesFilter"></div>
+            <div class="d-none" aria-hidden="true">
                 <input type="text" class="form-control form-control-sm" style="max-width:260px"
                        id="filterSearch" placeholder="Buscar cliente, plan, email…">
                 <select class="form-select form-select-sm" style="max-width:160px" id="filterCreatedBy">
@@ -156,6 +157,7 @@ ob_start();
                     </div>
                 </div>
             </div>
+            <div id="licensesPagination"></div>
 
             </section>
         </div>
@@ -212,6 +214,8 @@ ob_start();
 // ==================== ESTADO GLOBAL ====================
 let allLicenses = [];
 let currentLicenseFile = null;
+let licensesPage = 1;
+const licensesPageSize = 10;
 
 const endpoints = <?= json_encode([
     'licenses' => app_url('/admin/api/licenses'),
@@ -227,7 +231,7 @@ async function loadLicenses() {
         const data = await res.json();
         allLicenses = data.licenses ?? [];
         renderStats(allLicenses);
-        renderTable(allLicenses);
+        applyFilters();
     } catch (e) {
         showAlert('Error al cargar licencias: ' + e.message, 'danger');
     }
@@ -242,11 +246,20 @@ function renderStats(licenses) {
 
 function renderTable(licenses) {
     const tbody = document.getElementById('licensesBody');
+    const page = window.AdminPagination
+        ? window.AdminPagination.range(licenses, licensesPage, licensesPageSize)
+        : { items: licenses, page: 1, totalItems: licenses.length };
+    licensesPage = page.page;
     if (!licenses.length) {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center py-5 text-muted">No hay licencias registradas.</td></tr>';
+        if (window.AdminPagination) {
+            window.AdminPagination.render({ container: '#licensesPagination', page: 1, pageSize: licensesPageSize, totalItems: 0 });
+        }
         return;
     }
-    tbody.innerHTML = licenses.map((l, i) => `
+    tbody.innerHTML = page.items.map((l) => {
+        const originalIndex = allLicenses.indexOf(l);
+        return `
         <tr>
             <td class="text-muted small">${l.id}</td>
             <td>
@@ -275,12 +288,27 @@ function renderTable(licenses) {
             </td>
             <td class="small text-muted">${formatDate(l.issuedAt)}</td>
             <td class="text-end">
-                <button class="btn btn-sm btn-outline-primary" onclick="openDetail(${i})">
+                <button class="btn btn-sm btn-outline-primary" onclick="openDetail(${originalIndex})">
                     <i class="fas fa-eye"></i>
                 </button>
             </td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
+
+    if (window.AdminPagination) {
+        window.AdminPagination.render({
+            container: '#licensesPagination',
+            page: licensesPage,
+            pageSize: licensesPageSize,
+            totalItems: licenses.length,
+            label: 'Paginacion de licencias',
+            onChange: function(pageNumber) {
+                licensesPage = pageNumber;
+                renderTable(licenses);
+            }
+        });
+    }
 }
 
 // ==================== DETALLE ====================
@@ -513,7 +541,7 @@ function showResult(data) {
 }
 
 // ==================== FILTROS ====================
-function applyFilters() {
+function applyFilters(resetPage = false) {
     const search    = document.getElementById('filterSearch').value.toLowerCase();
     const createdBy = document.getElementById('filterCreatedBy').value;
     const type      = document.getElementById('filterType').value;
@@ -533,12 +561,42 @@ function applyFilters() {
         return matchSearch && matchCreatedBy && matchType;
     });
 
+    if (resetPage) licensesPage = 1;
     renderTable(filtered);
 }
 
 ['filterSearch', 'filterCreatedBy', 'filterType'].forEach(id => {
-    document.getElementById(id).addEventListener('input', applyFilters);
-    document.getElementById(id).addEventListener('change', applyFilters);
+    document.getElementById(id).addEventListener('input', () => applyFilters(true));
+    document.getElementById(id).addEventListener('change', () => applyFilters(true));
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    if (!window.AdminFilters) return;
+    window.AdminFilters.mount({
+        container: '#licensesFilter',
+        id: 'licenses-filter-drawer',
+        title: 'Filtrar licencias',
+        defaults: { search: '', createdBy: '', type: '' },
+        fields: [
+            { name: 'search', label: 'Buscar', type: 'search', placeholder: 'Cliente, plan o email' },
+            { name: 'createdBy', label: 'Emisor', type: 'select', options: [
+                { value: '', label: 'Todos los emisores' },
+                { value: 'customer', label: 'Por cliente' },
+                { value: 'admin', label: 'Por administrador' }
+            ] },
+            { name: 'type', label: 'Tipo', type: 'select', options: [
+                { value: '', label: 'Todos los tipos' },
+                { value: 'permanent', label: 'Permanente' },
+                { value: 'recurring', label: 'Recurrente' }
+            ] }
+        ],
+        onApply: function(values) {
+            document.getElementById('filterSearch').value = values.search || '';
+            document.getElementById('filterCreatedBy').value = values.createdBy || '';
+            document.getElementById('filterType').value = values.type || '';
+            applyFilters(true);
+        }
+    });
 });
 
 // ==================== UTILIDADES ====================
@@ -600,7 +658,7 @@ function hideGenerateForm() {
 document.getElementById('openGenerateFormBtn').addEventListener('click', showGenerateForm);
 document.getElementById('closeGenerateFormBtn').addEventListener('click', hideGenerateForm);
 document.getElementById('cancelGenerateFormBtn').addEventListener('click', hideGenerateForm);
-loadLicenses();
+document.addEventListener('DOMContentLoaded', loadLicenses);
 </script>
 
 <?php

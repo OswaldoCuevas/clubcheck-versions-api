@@ -165,6 +165,7 @@ ob_start();
         </div>
     </div>
 
+    <div id="stripePlansFilter"></div>
     <div class="card shadow-sm">
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -191,6 +192,7 @@ ob_start();
             </div>
         </div>
     </div>
+    <div id="stripePlansPagination"></div>
     </section>
 </div>
 
@@ -207,6 +209,9 @@ const endpoints = <?= json_encode([
 let plans = [];
 let rulesCatalog = [];
 let stripeDashboardBase = 'https://dashboard.stripe.com/test/prices/';
+let plansPage = 1;
+const plansPageSize = 10;
+let planFilters = { search: '', type: 'all', active: 'all' };
 
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('refreshBtn').addEventListener('click', loadPlans);
@@ -219,6 +224,29 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('addRuleBtn').addEventListener('click', () => addRuleRow('', ''));
     document.getElementById('planForm').addEventListener('submit', savePlan);
     document.getElementById('ruleForm').addEventListener('submit', saveRule);
+    if (window.AdminFilters) {
+        window.AdminFilters.mount({
+            container: '#stripePlansFilter',
+            id: 'stripe-plans-filter-drawer',
+            title: 'Filtrar planes',
+            defaults: { search: '', type: 'all', active: 'all' },
+            fields: [
+                { name: 'search', label: 'Buscar', type: 'search', placeholder: 'Plan, lookup key o Stripe ID' },
+                { name: 'type', label: 'Periodo', type: 'select', hideChipValues: ['all'], options: [
+                    { value: 'all', label: 'Todos' }, { value: 'monthly', label: 'Mensual' },
+                    { value: 'yearly', label: 'Anual' }, { value: 'permanent', label: 'Permanente' }
+                ] },
+                { name: 'active', label: 'Estado', type: 'select', hideChipValues: ['all'], options: [
+                    { value: 'all', label: 'Todos' }, { value: '1', label: 'Activos' }, { value: '0', label: 'Inactivos' }
+                ] }
+            ],
+            onApply: function(values) {
+                planFilters = values;
+                plansPage = 1;
+                renderPlans();
+            }
+        });
+    }
     loadPlans();
 });
 
@@ -303,12 +331,31 @@ function renderRuleCatalog() {
 
 function renderPlans() {
     const tbody = document.getElementById('plansBody');
-    if (!plans.length) {
+    const search = String(planFilters.search || '').toLowerCase().trim();
+    const filtered = plans.filter(plan => {
+        const matchesSearch = !search || [plan.name, plan.lookup_key, plan.stripe_price_id, plan.stripe_price?.id]
+            .some(value => String(value || '').toLowerCase().includes(search));
+        const matchesType = planFilters.type === 'all' || !planFilters.type || plan.type === planFilters.type;
+        const activeValue = plan.is_active ?? plan.isActive ?? true;
+        const isActivePlan = ![false, 0, '0', null].includes(activeValue);
+        const matchesActive = planFilters.active === 'all' || !planFilters.active
+            || String(Number(isActivePlan)) === String(planFilters.active);
+        return matchesSearch && matchesType && matchesActive;
+    });
+    const page = window.AdminPagination
+        ? window.AdminPagination.range(filtered, plansPage, plansPageSize)
+        : { items: filtered, page: 1 };
+    plansPage = page.page;
+
+    if (!filtered.length) {
         tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted">No hay planes registrados.</td></tr>';
+        if (window.AdminPagination) {
+            window.AdminPagination.render({ container: '#stripePlansPagination', page: 1, pageSize: plansPageSize, totalItems: 0 });
+        }
         return;
     }
 
-    tbody.innerHTML = plans.map(plan => `
+    tbody.innerHTML = page.items.map(plan => `
         <tr>
             <td>
                 <div class="fw-semibold">${esc(plan.name || '')}</div>
@@ -338,6 +385,20 @@ function renderPlans() {
             </td>
         </tr>
     `).join('');
+
+    if (window.AdminPagination) {
+        window.AdminPagination.render({
+            container: '#stripePlansPagination',
+            page: plansPage,
+            pageSize: plansPageSize,
+            totalItems: filtered.length,
+            label: 'Paginacion de planes',
+            onChange: function(pageNumber) {
+                plansPage = pageNumber;
+                renderPlans();
+            }
+        });
+    }
 }
 
 function syncSelect(id) {

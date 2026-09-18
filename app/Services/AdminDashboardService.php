@@ -5,10 +5,12 @@ namespace App\Services;
 require_once __DIR__ . '/../Core/Model.php';
 require_once __DIR__ . '/../Models/SystemSettingModel.php';
 require_once __DIR__ . '/../Models/ApplicationModel.php';
+require_once __DIR__ . '/../Models/CustomerErrorReportModel.php';
 
 use Core\Model;
 use Models\SystemSettingModel;
 use Models\ApplicationModel;
+use Models\CustomerErrorReportModel;
 
 class AdminDashboardService extends Model
 {
@@ -30,6 +32,7 @@ class AdminDashboardService extends Model
             'customers' => $this->getCustomerStats($appId),
             'whatsapp' => $messages,
             'stripe' => $stripe,
+            'errors' => $this->getCustomerErrorStats($appId),
             // information_schema mide espacio fisico por tabla; no se puede separar por app sin particionar o estimar por filas.
             'storage' => $this->getTableStorageStats(),
             'settings' => [
@@ -190,6 +193,16 @@ class AdminDashboardService extends Model
                 'totalMb' => 0,
                 'tables' => [],
             ];
+        }
+    }
+
+    private function getCustomerErrorStats(string $appId): array
+    {
+        try {
+            return (new CustomerErrorReportModel())->getUnreadSummary($appId);
+        } catch (\Throwable $e) {
+            error_log('AdminDashboardService customer errors error: ' . $e->getMessage());
+            return ['total' => 0, 'client' => 0, 'server' => 0, 'internal' => 0, 'other' => 0];
         }
     }
 

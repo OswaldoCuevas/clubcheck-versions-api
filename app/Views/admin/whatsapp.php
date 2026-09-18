@@ -144,6 +144,7 @@ ob_start();
 
             <section id="whatsappListPanel">
 
+            <div id="whatsappConfigsFilter"></div>
             <div class="card shadow-sm">
                 <div class="card-body p-0">
                     <div class="table-responsive">
@@ -171,6 +172,7 @@ ob_start();
                     </div>
                 </div>
             </div>
+            <div id="whatsappConfigsPagination"></div>
 
             <div class="alert alert-info mt-3">
                 <i class="fas fa-info-circle me-2"></i>
@@ -188,6 +190,7 @@ ob_start();
             <i class="fas fa-plus me-1"></i> Agregar template
         </button>
     </div>
+    <div id="whatsappTemplatesFilter"></div>
     <div class="card shadow-sm">
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -209,6 +212,7 @@ ob_start();
             </div>
         </div>
     </div>
+    <div id="whatsappTemplatesPagination"></div>
 </div>
 
 </section>
@@ -286,6 +290,11 @@ document.addEventListener('DOMContentLoaded', function() {
     let templateVariables = [];
     let templateEvents = [];
     let deleteId = null;
+    let configsPage = 1;
+    let templatesPage = 1;
+    const listPageSize = 10;
+    let configFilters = { search: '', status: 'all' };
+    let templateFilters = { search: '', event: 'all' };
 
     const tableBody = document.querySelector('#configsTable tbody');
     const templatesTableBody = document.querySelector('#templatesTable tbody');
@@ -369,7 +378,22 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function renderTable() {
-        if (!configs || configs.length === 0) {
+        const search = String(configFilters.search || '').toLowerCase().trim();
+        const filtered = (configs || []).filter(config => {
+            const matchesSearch = !search || [config.CustomerName, config.CustomerId, config.PhoneNumber, config.PhoneNumberId, config.BusinessName]
+                .some(value => String(value || '').toLowerCase().includes(search));
+            const isActive = ![false, 0, '0', null].includes(config.IsActive);
+            const matchesStatus = configFilters.status === 'all' || !configFilters.status
+                || (configFilters.status === 'active' && isActive)
+                || (configFilters.status === 'inactive' && !isActive);
+            return matchesSearch && matchesStatus;
+        });
+        const page = window.AdminPagination
+            ? window.AdminPagination.range(filtered, configsPage, listPageSize)
+            : { items: filtered, page: 1 };
+        configsPage = page.page;
+
+        if (filtered.length === 0) {
             tableBody.innerHTML = `
                 <tr>
                     <td colspan="7" class="text-center py-5 text-muted">
@@ -379,10 +403,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     </td>
                 </tr>
             `;
+            window.AdminPagination?.render({ container: '#whatsappConfigsPagination', page: 1, pageSize: listPageSize, totalItems: 0 });
             return;
         }
 
-        tableBody.innerHTML = configs.map(config => `
+        tableBody.innerHTML = page.items.map(config => `
             <tr data-id="${escapeHtml(config.Id)}">
                 <td>
                     <strong>${escapeHtml(config.CustomerName || 'Sin nombre')}</strong>
@@ -424,6 +449,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 </td>
             </tr>
         `).join('');
+        window.AdminPagination?.render({
+            container: '#whatsappConfigsPagination', page: configsPage, pageSize: listPageSize,
+            totalItems: filtered.length, label: 'Paginacion de configuraciones WhatsApp',
+            onChange: pageNumber => { configsPage = pageNumber; renderTable(); }
+        });
     }
 
     function selectedValues(select) {
@@ -477,12 +507,25 @@ document.addEventListener('DOMContentLoaded', function() {
     function renderTemplatesTable() {
         if (!templatesTableBody) return;
 
-        if (!templates || templates.length === 0) {
+        const search = String(templateFilters.search || '').toLowerCase().trim();
+        const filtered = (templates || []).filter(template => {
+            const matchesSearch = !search || [findCustomerName(template.CustomerId), template.CustomerId, template.TemplateName, template.LanguageCode]
+                .some(value => String(value || '').toLowerCase().includes(search));
+            const matchesEvent = templateFilters.event === 'all' || !templateFilters.event || template.EventKey === templateFilters.event;
+            return matchesSearch && matchesEvent;
+        });
+        const page = window.AdminPagination
+            ? window.AdminPagination.range(filtered, templatesPage, listPageSize)
+            : { items: filtered, page: 1 };
+        templatesPage = page.page;
+
+        if (filtered.length === 0) {
             templatesTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No hay templates personalizados.</td></tr>';
+            window.AdminPagination?.render({ container: '#whatsappTemplatesPagination', page: 1, pageSize: listPageSize, totalItems: 0 });
             return;
         }
 
-        templatesTableBody.innerHTML = templates.map(template => `
+        templatesTableBody.innerHTML = page.items.map(template => `
             <tr>
                 <td>
                     <strong>${escapeHtml(findCustomerName(template.CustomerId))}</strong>
@@ -499,6 +542,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 </td>
             </tr>
         `).join('');
+        window.AdminPagination?.render({
+            container: '#whatsappTemplatesPagination', page: templatesPage, pageSize: listPageSize,
+            totalItems: filtered.length, label: 'Paginacion de templates WhatsApp',
+            onChange: pageNumber => { templatesPage = pageNumber; renderTemplatesTable(); }
+        });
     }
 
     async function loadTemplates() {
@@ -789,6 +837,40 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('cancelConfigFormBtn')?.addEventListener('click', showListPanel);
     document.getElementById('closeTemplateFormBtn')?.addEventListener('click', showListPanel);
     document.getElementById('cancelTemplateFormBtn')?.addEventListener('click', showListPanel);
+
+    if (window.AdminFilters) {
+        window.AdminFilters.mount({
+            container: '#whatsappConfigsFilter',
+            id: 'whatsapp-configs-filter-drawer',
+            title: 'Filtrar configuraciones',
+            defaults: { search: '', status: 'all' },
+            fields: [
+                { name: 'search', label: 'Buscar', type: 'search', placeholder: 'Cliente, numero o negocio' },
+                { name: 'status', label: 'Estado', type: 'select', hideChipValues: ['all'], options: [
+                    { value: 'all', label: 'Todos' }, { value: 'active', label: 'Activos' }, { value: 'inactive', label: 'Inactivos' }
+                ] }
+            ],
+            onApply: function(values) {
+                configFilters = values;
+                configsPage = 1;
+                renderTable();
+            }
+        });
+        window.AdminFilters.mount({
+            container: '#whatsappTemplatesFilter',
+            id: 'whatsapp-templates-filter-drawer',
+            title: 'Filtrar templates',
+            defaults: { search: '' },
+            fields: [
+                { name: 'search', label: 'Buscar', type: 'search', placeholder: 'Cliente, template o idioma' }
+            ],
+            onApply: function(values) {
+                templateFilters.search = values.search || '';
+                templatesPage = 1;
+                renderTemplatesTable();
+            }
+        });
+    }
 
     // Cargar al iniciar
     loadConfigs();

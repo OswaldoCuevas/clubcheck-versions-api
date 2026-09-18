@@ -400,6 +400,24 @@ class CustomerIpLogModel extends Model
         );
     }
 
+    public function belongsToApp(string $logId, string $appId): bool
+    {
+        if (!(new ApplicationModel())->columnExists('Customers', 'AppId')) {
+            return true;
+        }
+
+        $row = $this->db->fetchOne(
+            'SELECT ipl.Id
+             FROM CustomerIpLogs ipl
+             INNER JOIN Customers c ON c.Id = ipl.CustomerId
+             WHERE ipl.Id = ? AND c.AppId = ?
+             LIMIT 1',
+            [$logId, $appId]
+        );
+
+        return $row !== null;
+    }
+
     /**
      * Obtiene todos los clientes con IPs marcadas (flagged)
      */

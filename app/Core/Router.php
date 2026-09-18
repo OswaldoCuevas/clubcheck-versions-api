@@ -3,6 +3,7 @@
 namespace Core;
 
 use App\Exceptions\ApiException;
+use App\Modules\Customers\Features\ReportServerExceptionFeature;
 
 class Router
 {
@@ -17,6 +18,7 @@ class Router
     private array $middlewareRegistry = [
         'jwt' => \App\Middleware\JwtMiddleware::class,
         'auth' => \Middleware\AuthMiddleware::class,
+        'permission' => \Middleware\PermissionMiddleware::class,
         'customer_jwt' => \App\Middleware\CustomerJwtMiddleware::class,
         'desktop_jwt' => \App\Middleware\DesktopJwtMiddleware::class,
     ];
@@ -250,11 +252,15 @@ class Router
             return call_user_func_array([$controller, $method], $this->routeParams);
         } catch (ApiException $e) {
             // Excepción controlada - responder con JSON formateado
+            if ($e->getStatusCode() >= 500) {
+                $this->recordServerException($e, $route);
+            }
             $e->respond();
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             // Excepción no controlada - loguear y responder error genérico
             error_log("Unhandled Exception in {$controllerClass}@{$method}: " . $e->getMessage());
             error_log($e->getTraceAsString());
+            $this->recordServerException($e, $route);
 
             // En producción no mostrar detalles del error
             $isProduction = ($_ENV['APP_MODE'] ?? 'DEV') === 'PROD';
@@ -268,6 +274,18 @@ class Router
                     'line' => $e->getLine(),
                 ]
             ], 500);
+        }
+    }
+
+    private function recordServerException(\Throwable $exception, array $route): void
+    {
+        try {
+            (new ReportServerExceptionFeature())->handle($exception, [
+                'route' => ($route['method'] ?? '') . ' ' . ($route['uri'] ?? ''),
+                'routeParams' => $this->routeParams,
+            ]);
+        } catch (\Throwable $loggingError) {
+            error_log('Could not store server error report: ' . $loggingError->getMessage());
         }
     }
 

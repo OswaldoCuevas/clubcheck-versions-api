@@ -4,7 +4,7 @@ $title = 'Tokens JWT';
 ob_start();
 ?>
 
-<div class="container mt-4">
+<div class="container mt-4" id="jwtTokensListPanel">
     <div class="row justify-content-center">
         <div class="col-12">
             <div class="d-flex flex-wrap justify-content-end align-items-center mb-3 gap-2">
@@ -59,7 +59,8 @@ ob_start();
             </div>
 
             <!-- Filtros -->
-            <div class="card mb-4">
+            <div id="jwtTokensFilter"></div>
+            <div class="card mb-4 d-none" aria-hidden="true">
                 <div class="card-body py-2">
                     <div class="row align-items-center">
                         <div class="col-md-4">
@@ -118,19 +119,20 @@ ob_start();
                     </div>
                 </div>
             </div>
+            <div id="jwtTokensPagination"></div>
         </div>
     </div>
 </div>
 
-<!-- Modal: Crear nuevo token JWT -->
-<div class="modal fade" id="createTokenModal" tabindex="-1" aria-labelledby="createTokenModalLabel" aria-hidden="true">
+<!-- Formulario en pagina: Crear nuevo token JWT -->
+<div class="container mt-4 admin-form-panel d-none" id="createTokenFormPanel" aria-labelledby="createTokenModalLabel">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title" id="createTokenModalLabel">
                     <i class="fas fa-key me-2"></i>Crear nuevo Token JWT
                 </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                <button type="button" class="btn-close btn-close-white" id="closeCreateTokenFormBtn" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body">
                 <div class="alert alert-warning mb-3">
@@ -145,7 +147,7 @@ ob_start();
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Duración del token:</label>
-                    <select class="form-select" id="tokenDuration">
+                    <select class="form-select" id="tokenDuration" data-search-select data-label="Duracion del token" data-page-size="10">
                         <option value="604800">7 días</option>
                         <option value="2592000" selected>30 días (recomendado)</option>
                         <option value="7776000">90 días</option>
@@ -158,7 +160,7 @@ ob_start();
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-outline-secondary" id="cancelCreateTokenFormBtn">Cancelar</button>
                 <button type="button" class="btn btn-primary" id="confirmCreateToken">
                     <i class="fas fa-key me-2"></i>Crear Token
                 </button>
@@ -298,6 +300,8 @@ ob_start();
     const endpoints = <?= $endpointsJson ?>;
     let customers = [];
     let stats = {};
+    let currentPage = 1;
+    const pageSize = 10;
 
     // DOM Elements
     const tableBody = document.querySelector('#customersTable tbody');
@@ -315,8 +319,20 @@ ob_start();
     const statMultipleIps = document.getElementById('statMultipleIps');
 
     // Modal elements
-    const createTokenModalEl = document.getElementById('createTokenModal');
-    const createTokenModal = createTokenModalEl ? new bootstrap.Modal(createTokenModalEl) : null;
+    const jwtTokensListPanel = document.getElementById('jwtTokensListPanel');
+    const createTokenFormPanel = document.getElementById('createTokenFormPanel');
+    const createTokenModal = createTokenFormPanel ? {
+        show: function() {
+            jwtTokensListPanel?.classList.add('d-none');
+            createTokenFormPanel.classList.remove('d-none');
+            window.AdminUI?.initSearchSelects(createTokenFormPanel);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        },
+        hide: function() {
+            createTokenFormPanel.classList.add('d-none');
+            jwtTokensListPanel?.classList.remove('d-none');
+        }
+    } : null;
     const createTokenCustomerName = document.getElementById('createTokenCustomerName');
     const createTokenCustomerId = document.getElementById('createTokenCustomerId');
     const tokenDuration = document.getElementById('tokenDuration');
@@ -463,10 +479,15 @@ ob_start();
         return filtered;
     }
 
-    function renderCustomers() {
+    function renderCustomers(resetPage = false) {
         if (!tableBody) return;
 
         const filtered = getFilteredCustomers();
+        if (resetPage) currentPage = 1;
+        const page = window.AdminPagination
+            ? window.AdminPagination.range(filtered, currentPage, pageSize)
+            : { items: filtered, page: 1 };
+        currentPage = page.page;
 
         if (!filtered.length) {
             tableBody.innerHTML = `
@@ -477,10 +498,13 @@ ob_start();
                     </td>
                 </tr>
             `;
+            if (window.AdminPagination) {
+                window.AdminPagination.render({ container: '#jwtTokensPagination', page: 1, pageSize, totalItems: 0 });
+            }
             return;
         }
 
-        const rows = filtered.map((customer) => {
+        const rows = page.items.map((customer) => {
             // Customer info
             const name = escapeHtml(customer.name || 'Sin nombre');
             const email = customer.email ? escapeHtml(customer.email) : '<span class="text-muted">Sin email</span>';
@@ -596,6 +620,19 @@ ob_start();
         });
 
         tableBody.innerHTML = rows.join('');
+        if (window.AdminPagination) {
+            window.AdminPagination.render({
+                container: '#jwtTokensPagination',
+                page: currentPage,
+                pageSize,
+                totalItems: filtered.length,
+                label: 'Paginacion de tokens JWT',
+                onChange: function(pageNumber) {
+                    currentPage = pageNumber;
+                    renderCustomers();
+                }
+            });
+        }
     }
 
     async function fetchData(showAlert = false) {
@@ -842,21 +879,24 @@ ob_start();
         confirmCreateToken.addEventListener('click', createToken);
     }
 
+    document.getElementById('closeCreateTokenFormBtn')?.addEventListener('click', () => createTokenModal?.hide());
+    document.getElementById('cancelCreateTokenFormBtn')?.addEventListener('click', () => createTokenModal?.hide());
+
     if (confirmRevokeToken) {
         confirmRevokeToken.addEventListener('click', revokeToken);
     }
 
     // Filter listeners
     if (searchInput) {
-        searchInput.addEventListener('input', renderCustomers);
+        searchInput.addEventListener('input', () => renderCustomers(true));
     }
 
     if (filterStatus) {
-        filterStatus.addEventListener('change', renderCustomers);
+        filterStatus.addEventListener('change', () => renderCustomers(true));
     }
 
     if (filterIps) {
-        filterIps.addEventListener('change', renderCustomers);
+        filterIps.addEventListener('change', () => renderCustomers(true));
     }
 
     if (clearFiltersBtn) {
@@ -864,7 +904,36 @@ ob_start();
             if (searchInput) searchInput.value = '';
             if (filterStatus) filterStatus.value = 'all';
             if (filterIps) filterIps.value = 'all';
-            renderCustomers();
+            renderCustomers(true);
+        });
+    }
+
+    if (window.AdminFilters) {
+        window.AdminFilters.mount({
+            container: '#jwtTokensFilter',
+            id: 'jwt-tokens-filter-drawer',
+            title: 'Filtrar tokens JWT',
+            defaults: { search: '', status: 'all', ips: 'all' },
+            fields: [
+                { name: 'search', label: 'Buscar', type: 'search', placeholder: 'Nombre, email o ID' },
+                { name: 'status', label: 'Estado', type: 'select', hideChipValues: ['all'], options: [
+                    { value: 'all', label: 'Todos los estados' },
+                    { value: 'active', label: 'Token activo' },
+                    { value: 'expired', label: 'Token expirado' },
+                    { value: 'none', label: 'Sin token JWT' }
+                ] },
+                { name: 'ips', label: 'IPs', type: 'select', hideChipValues: ['all'], options: [
+                    { value: 'all', label: 'Todas las IPs' },
+                    { value: 'multiple', label: 'Multiples IPs (24h)' },
+                    { value: 'flagged', label: 'IPs marcadas' }
+                ] }
+            ],
+            onApply: function(values) {
+                if (searchInput) searchInput.value = values.search || '';
+                if (filterStatus) filterStatus.value = values.status || 'all';
+                if (filterIps) filterIps.value = values.ips || 'all';
+                renderCustomers(true);
+            }
         });
     }
 

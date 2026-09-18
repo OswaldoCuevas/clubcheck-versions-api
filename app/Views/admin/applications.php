@@ -21,13 +21,20 @@ ob_start();
         </div>
     <?php endif; ?>
 
+    <div class="d-flex justify-content-end mb-3">
+        <button type="button" class="btn btn-primary" id="openAppFormBtn">
+            <i class="fa-solid fa-plus me-2"></i>Nueva app
+        </button>
+    </div>
+
     <section class="apps-grid">
-        <div class="apps-panel">
+        <div class="apps-panel" id="applicationsListPanel">
             <div class="panel-title">
                 <span>Apps</span>
                 <strong><?= count($apps ?? []) ?></strong>
             </div>
 
+            <div id="applicationsFilter"></div>
             <div class="app-list">
                 <?php foreach (($apps ?? []) as $app): ?>
                     <a class="app-row <?= ($selectedApp['id'] ?? null) === $app['id'] ? 'active' : '' ?>" href="<?= app_url('/admin/app/select?appId=' . urlencode($app['id']) . '&redirect=/admin/applications') ?>">
@@ -41,12 +48,13 @@ ob_start();
                     </a>
                 <?php endforeach; ?>
             </div>
+            <div id="applicationsPagination"></div>
         </div>
 
-        <div class="apps-panel">
+        <div class="apps-panel d-none" id="applicationFormPanel">
             <div class="panel-title">
                 <span>Nueva app</span>
-                <strong><i class="fa-solid fa-plus"></i></strong>
+                <button type="button" class="btn btn-outline-primary btn-sm" id="closeAppFormBtn">Cerrar</button>
             </div>
 
             <form method="post" action="<?= app_url('/admin/applications/save') ?>" class="app-form">
@@ -162,6 +170,11 @@ $customStyles = <<<CSS
     border-radius: 10px;
     background: rgba(255,255,255,0.94);
     box-shadow: 0 14px 34px rgba(47, 128, 237, 0.08);
+}
+
+#applicationsListPanel,
+#applicationFormPanel {
+    grid-column: 1 / -1;
 }
 
 .wide-panel {
@@ -325,6 +338,53 @@ $customStyles = <<<CSS
     }
 }
 CSS;
+
+$customScripts = <<<'JS'
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const list = document.getElementById('applicationsListPanel');
+    const form = document.getElementById('applicationFormPanel');
+    const openButton = document.getElementById('openAppFormBtn');
+    const closeButton = document.getElementById('closeAppFormBtn');
+    const setFormOpen = function (isOpen) {
+        list?.classList.toggle('d-none', isOpen);
+        form?.classList.toggle('d-none', !isOpen);
+        openButton?.classList.toggle('d-none', isOpen);
+        if (isOpen) window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+    openButton?.addEventListener('click', () => setFormOpen(true));
+    closeButton?.addEventListener('click', () => setFormOpen(false));
+
+    let page = 1;
+    let search = '';
+    const pageSize = 10;
+    const renderApps = function () {
+        const rows = Array.from(document.querySelectorAll('#applicationsListPanel .app-row'));
+        const filtered = rows.filter(row => row.textContent.toLowerCase().includes(search.toLowerCase().trim()));
+        const range = window.AdminPagination
+            ? window.AdminPagination.range(filtered, page, pageSize)
+            : { items: filtered, page: 1 };
+        page = range.page;
+        rows.forEach(row => row.classList.add('d-none'));
+        range.items.forEach(row => row.classList.remove('d-none'));
+        window.AdminPagination?.render({
+            container: '#applicationsPagination', page, pageSize, totalItems: filtered.length,
+            label: 'Paginacion de aplicaciones',
+            onChange: pageNumber => { page = pageNumber; renderApps(); }
+        });
+    };
+    window.AdminFilters?.mount({
+        container: '#applicationsFilter',
+        id: 'applications-filter-drawer',
+        title: 'Filtrar aplicaciones',
+        defaults: { search: '' },
+        fields: [{ name: 'search', label: 'Buscar', type: 'search', placeholder: 'Nombre o slug' }],
+        onApply: values => { search = values.search || ''; page = 1; renderApps(); }
+    });
+    renderApps();
+});
+</script>
+JS;
 
 $content = ob_get_clean();
 include __DIR__ . '/../layouts/app.php';

@@ -67,7 +67,8 @@ ob_start();
             <div id="alertsContainer"></div>
 
             <!-- Filtro de búsqueda -->
-            <div class="card shadow-sm mb-3">
+            <div id="downloadsFilter"></div>
+            <div class="card shadow-sm mb-3 d-none" aria-hidden="true">
                 <div class="card-body py-2">
                     <form id="searchForm" class="row g-2 align-items-center">
                         <div class="col-md-4">
@@ -288,6 +289,34 @@ document.addEventListener('DOMContentLoaded', function() {
     if (perPageSelect) {
         perPageSelect.addEventListener('change', function() {
             searchForm.submit();
+        });
+    }
+
+    if (window.AdminFilters) {
+        window.AdminFilters.mount({
+            container: '#downloadsFilter',
+            id: 'downloads-filter-drawer',
+            title: 'Filtrar descargas',
+            defaults: { ip: '', perPage: '20' },
+            values: {
+                ip: <?= json_encode((string) ($searchIp ?? ''), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
+                perPage: <?= json_encode((string) ($downloads['perPage'] ?? 20)) ?>
+            },
+            fields: [
+                { name: 'ip', label: 'Direccion IP', type: 'search', placeholder: 'Buscar por IP...' },
+                { name: 'perPage', label: 'Registros por pagina', type: 'select', showChipWhenDefault: true, options: [
+                    { value: '10', label: '10 registros' },
+                    { value: '20', label: '20 registros' },
+                    { value: '50', label: '50 registros' },
+                    { value: '100', label: '100 registros' }
+                ] }
+            ],
+            onApply: function(values) {
+                const url = new URL(<?= json_encode(app_url('/admin/downloads'), JSON_UNESCAPED_SLASHES) ?>, window.location.origin);
+                if (values.ip) url.searchParams.set('ip', values.ip);
+                url.searchParams.set('perPage', values.perPage || '20');
+                window.location.assign(url.toString());
+            }
         });
     }
 

@@ -1227,6 +1227,40 @@ class CustomerRegistryModel extends Model
         return $this->db->affected_rows > 0;
     }
 
+    public function getCustomerMachineTokenJwtRow(string $customerId): ?array
+    {
+        $customerId = $this->normaliseCustomerId($customerId);
+
+        if ($customerId === '') {
+            return null;
+        }
+
+        return $this->db->fetchOne(
+            'SELECT Id, Token, TokenJwt FROM Customers WHERE Id = ? LIMIT 1',
+            [$customerId]
+        );
+    }
+
+    public function storeCustomerJwtToken(string $customerId, string $jwt): bool
+    {
+        $customerId = $this->normaliseCustomerId($customerId);
+
+        if ($customerId === '') {
+            return false;
+        }
+
+        return $this->db->update(
+            'Customers',
+            [
+                'TokenJwt' => $jwt,
+                'TokenJwtCreatedAt' => $this->now(),
+                'TokenJwtExpiresAt' => null,
+            ],
+            'Id = ?',
+            [$customerId]
+        );
+    }
+
     /**
      * Lista todos los clientes con tokens JWT (activos o expirados)
      * 

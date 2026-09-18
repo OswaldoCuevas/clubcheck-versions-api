@@ -47,6 +47,8 @@ use App\Services\StripeService;
 use ApiHelper;
 use App\Services\JwtService;
 use App\Services\LicenseService;
+use App\Modules\Customers\Features\ReportCustomerErrorFeature;
+use App\Modules\Customers\Requests\ReportCustomerErrorRequest;
 
 class CustomersController extends Controller
 {
@@ -125,6 +127,13 @@ class CustomersController extends Controller
             'migrations' => new MigrationsDesktopModel(),
             'barcodeLookupCache' => new BarcodeLookupCacheDesktopModel(),
         ];
+    }
+
+    public function reportError(): void
+    {
+        ApiHelper::respond((new ReportCustomerErrorFeature())->handle(
+            new ReportCustomerErrorRequest()
+        ), 201);
     }
 
     private function applicationModel(): ApplicationModel

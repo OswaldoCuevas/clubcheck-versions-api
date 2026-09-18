@@ -59,45 +59,8 @@ ob_start();
         </div>
     </div>
 
-    <div class="card mb-4">
-        <div class="card-body">
-            <form class="row g-3 align-items-end" method="get" action="<?= app_url('/admin/customer-login-attempts') ?>">
-                <div class="col-lg-4">
-                    <label class="form-label" for="search">Buscar</label>
-                    <input type="search" class="form-control" id="search" name="search" value="<?= web_login_attempt_filter($filters, 'search') ?>" placeholder="Usuario, codeAccess, IP o cliente">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label" for="status">Estado</label>
-                    <?php $status = (string) ($filters['status'] ?? 'all'); ?>
-                    <select class="form-select" id="status" name="status">
-                        <option value="all" <?= $status === 'all' ? 'selected' : '' ?>>Todos</option>
-                        <option value="failed" <?= $status === 'failed' ? 'selected' : '' ?>>Fallidos</option>
-                        <option value="success" <?= $status === 'success' ? 'selected' : '' ?>>Exitosos</option>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label" for="codeAccess">CodeAccess</label>
-                    <input type="text" class="form-control" id="codeAccess" name="codeAccess" value="<?= web_login_attempt_filter($filters, 'codeAccess') ?>">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label" for="from">Desde</label>
-                    <input type="date" class="form-control" id="from" name="from" value="<?= web_login_attempt_filter($filters, 'from') ?>">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label" for="to">Hasta</label>
-                    <input type="date" class="form-control" id="to" name="to" value="<?= web_login_attempt_filter($filters, 'to') ?>">
-                </div>
-                <div class="col-12 d-flex gap-2 justify-content-end">
-                    <a href="<?= app_url('/admin/customer-login-attempts') ?>" class="btn btn-outline-secondary">
-                        <i class="fas fa-rotate-left me-2"></i>Limpiar
-                    </a>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-filter me-2"></i>Filtrar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <?php $status = (string) ($filters['status'] ?? 'all'); ?>
+    <div id="loginAttemptsFilter"></div>
 
     <div class="card">
         <div class="card-header d-flex flex-wrap gap-2 justify-content-between align-items-center">
@@ -155,27 +118,32 @@ ob_start();
                 </tbody>
             </table>
         </div>
-        <div class="card-footer d-flex flex-wrap gap-2 justify-content-between align-items-center">
-            <span class="text-muted">
-                Pagina <?= (int) ($pagination['page'] ?? 1) ?> de <?= max(1, (int) ($pagination['totalPages'] ?? 1)) ?>
-            </span>
+        <div class="card-footer">
             <?php
                 $query = $_GET;
                 $currentPage = (int) ($pagination['page'] ?? 1);
                 $totalPages = max(1, (int) ($pagination['totalPages'] ?? 1));
-                $query['page'] = max(1, $currentPage - 1);
-                $previousUrl = app_url('/admin/customer-login-attempts?' . http_build_query($query));
-                $query['page'] = min($totalPages, $currentPage + 1);
-                $nextUrl = app_url('/admin/customer-login-attempts?' . http_build_query($query));
+                $pageUrl = static function (int $page) use ($query): string {
+                    $query['page'] = $page;
+                    return app_url('/admin/customer-login-attempts?' . http_build_query($query));
+                };
+                $startPage = max(1, $currentPage - 2);
+                $endPage = min($totalPages, $currentPage + 2);
             ?>
-            <div class="btn-group">
-                <a class="btn btn-outline-secondary <?= $currentPage <= 1 ? 'disabled' : '' ?>" href="<?= $previousUrl ?>">
+            <nav class="admin-pagination" aria-label="Paginacion de intentos de login">
+                <span class="admin-pagination-summary">Mostrando <?= count($attemptRows) ?> de <?= (int) ($pagination['total'] ?? 0) ?> registros</span>
+                <div class="admin-pagination-controls">
+                <a class="admin-pagination-button <?= $currentPage <= 1 ? 'disabled' : '' ?>" href="<?= $pageUrl(max(1, $currentPage - 1)) ?>" aria-label="Pagina anterior">
                     <i class="fas fa-chevron-left"></i>
                 </a>
-                <a class="btn btn-outline-secondary <?= $currentPage >= $totalPages ? 'disabled' : '' ?>" href="<?= $nextUrl ?>">
+                <?php for ($pageNumber = $startPage; $pageNumber <= $endPage; $pageNumber++): ?>
+                    <a class="admin-pagination-button <?= $pageNumber === $currentPage ? 'active' : '' ?>" href="<?= $pageUrl($pageNumber) ?>"><?= $pageNumber ?></a>
+                <?php endfor; ?>
+                <a class="admin-pagination-button <?= $currentPage >= $totalPages ? 'disabled' : '' ?>" href="<?= $pageUrl(min($totalPages, $currentPage + 1)) ?>" aria-label="Pagina siguiente">
                     <i class="fas fa-chevron-right"></i>
                 </a>
-            </div>
+                </div>
+            </nav>
         </div>
     </div>
 </div>
@@ -184,10 +152,11 @@ ob_start();
 $customStyles = <<<CSS
 .metric-card {
     background: #ffffff;
-    border: 1px solid #dee2e6;
-    border-radius: 4px;
-    padding: 1rem;
+    border: 1px solid #d7eafd;
+    border-radius: 16px;
+    padding: 1.25rem;
     min-height: 92px;
+    box-shadow: 0 8px 18px rgba(47, 128, 237, 0.06);
 }
 
 .metric-card span {
@@ -211,6 +180,45 @@ $customStyles = <<<CSS
     overflow-wrap: anywhere;
 }
 CSS;
+
+$loginAttemptFiltersJson = json_encode([
+    'search' => (string) ($filters['search'] ?? ''),
+    'status' => $status,
+    'codeAccess' => (string) ($filters['codeAccess'] ?? ''),
+    'from' => (string) ($filters['from'] ?? ''),
+    'to' => (string) ($filters['to'] ?? ''),
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+$loginAttemptsUrlJson = json_encode(app_url('/admin/customer-login-attempts'), JSON_UNESCAPED_SLASHES);
+$customScripts = <<<JS
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (!window.AdminFilters) return;
+    window.AdminFilters.mount({
+        container: '#loginAttemptsFilter',
+        id: 'login-attempts-filter-drawer',
+        title: 'Filtrar intentos de login',
+        defaults: { search: '', status: 'all', codeAccess: '', from: '', to: '' },
+        values: {$loginAttemptFiltersJson},
+        fields: [
+            { name: 'search', label: 'Buscar', type: 'search', placeholder: 'Usuario, codeAccess, IP o cliente' },
+            { name: 'status', label: 'Estado', type: 'select', options: [
+                { value: 'all', label: 'Todos' }, { value: 'failed', label: 'Fallidos' }, { value: 'success', label: 'Exitosos' }
+            ], hideChipValues: ['all'] },
+            { name: 'codeAccess', label: 'CodeAccess', type: 'text' },
+            { name: 'from', label: 'Desde', type: 'date' },
+            { name: 'to', label: 'Hasta', type: 'date' }
+        ],
+        onApply: function (values) {
+            const url = new URL({$loginAttemptsUrlJson}, window.location.origin);
+            Object.entries(values).forEach(([key, value]) => {
+                if (value !== '' && value !== 'all') url.searchParams.set(key, value);
+            });
+            window.location.assign(url.toString());
+        }
+    });
+});
+</script>
+JS;
 ?>
 
 <?php

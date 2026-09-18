@@ -135,7 +135,7 @@ $customScripts = '
         }
         
         // Validación del formulario antes de enviar
-        const uploadForm = document.querySelector("form[method=\'POST\']");
+        const uploadForm = document.getElementById("versionUploadForm");
         if (uploadForm) {
             uploadForm.addEventListener("submit", function(e) {
                 const versionInput = document.getElementById("version");
@@ -165,20 +165,247 @@ $customScripts = '
     </script>
 ';
 
+$customStyles .= <<<'CSS'
+    .version-manager-wrap { max-width: 1050px; }
+    .version-manager-card {
+        border: 1px solid #d7eafd;
+        border-radius: 18px;
+        box-shadow: 0 18px 44px rgba(47, 128, 237, 0.1);
+    }
+    .version-manager-card .card-header {
+        padding: 1rem 1.25rem;
+        background: linear-gradient(135deg, #f7fbff, #eaf6ff);
+        color: #15395b;
+        border-bottom: 1px solid #d7eafd;
+    }
+    .version-manager-card .card-header h3 { font-size: 1.2rem; font-weight: 800; }
+    .version-info {
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border: 1px solid #d7eafd;
+        border-radius: 14px;
+        background: #f3f9ff;
+    }
+    .version-badge {
+        border-radius: 999px;
+        background: #1299dc;
+        font-weight: 800;
+    }
+    .replacement-notice {
+        padding: 0.75rem 0.9rem;
+        border: 1px solid #c8e8fb;
+        border-radius: 12px;
+        background: #edf8ff;
+        color: #315574;
+        font-size: 0.85rem;
+    }
+    .upload-files-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    .upload-file-field { min-width: 0; display: flex; flex-direction: column; }
+    .upload-file-field .file-upload-wrapper { height: auto; }
+    .file-upload-label {
+        min-height: 0;
+        height: 185px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 1.1rem;
+        border: 2px dashed #a9d4f2;
+        border-radius: 14px;
+        background: linear-gradient(145deg, #fbfdff, #f1f8ff);
+        color: #315574;
+        transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+    }
+    .file-upload-label:hover,
+    .file-upload-label.is-dragover {
+        border-color: #1299dc !important;
+        background: #eaf8ff !important;
+        transform: translateY(-2px);
+    }
+    .file-upload-label.has-file {
+        border-style: solid;
+        border-color: #54b9ea !important;
+        background: #eefaff !important;
+    }
+    .file-upload-icon { color: #1299dc !important; font-size: 1.65rem; }
+    .file-upload-name {
+        max-width: 100%;
+        color: #087cba !important;
+        font-size: 0.8rem;
+        font-weight: 800;
+        overflow-wrap: anywhere;
+    }
+    .upload-progress-panel {
+        padding: 1rem;
+        border: 1px solid #c8e8fb;
+        border-radius: 14px;
+        background: #f5fbff;
+    }
+    .upload-progress-track {
+        height: 12px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #dceefa;
+    }
+    .upload-progress-bar {
+        width: 0;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #1299dc, #2f80ed);
+        transition: width 0.2s ease;
+    }
+    .upload-progress-bar.processing {
+        width: 100% !important;
+        background-size: 200% 100%;
+        animation: upload-processing 1.15s linear infinite;
+    }
+    @keyframes upload-processing {
+        from { background-position: 100% 0; }
+        to { background-position: -100% 0; }
+    }
+    @media (max-width: 767px) {
+        .upload-files-grid { grid-template-columns: 1fr; }
+        .file-upload-label { height: 165px; }
+    }
+CSS;
+
+$customScripts .= <<<'JS'
+    <script>
+        function formatUploadBytes(bytes) {
+            const size = Number(bytes || 0);
+            if (size < 1024) return `${size} B`;
+            const units = ['KB', 'MB', 'GB'];
+            let value = size / 1024;
+            let index = 0;
+            while (value >= 1024 && index < units.length - 1) {
+                value /= 1024;
+                index += 1;
+            }
+            return `${value.toFixed(value >= 100 ? 0 : 1)} ${units[index]}`;
+        }
+
+        updateFileName = function(input, displayElementId) {
+            const fileName = document.getElementById(displayElementId);
+            const label = input.nextElementSibling;
+            if (input.files && input.files.length > 0) {
+                const file = input.files[0];
+                fileName.textContent = `${file.name} · ${formatUploadBytes(file.size)}`;
+                fileName.style.display = 'block';
+                label.classList.add('has-file');
+            } else {
+                fileName.style.display = 'none';
+                label.classList.remove('has-file');
+            }
+        };
+
+        ['exeFile', 'setupFile'].forEach(inputId => {
+            const input = document.getElementById(inputId);
+            const label = document.querySelector(`label[for="${inputId}"]`);
+            if (!input || !label) return;
+            label.addEventListener('dragover', event => {
+                event.preventDefault();
+                label.classList.add('is-dragover');
+            });
+            label.addEventListener('dragleave', () => label.classList.remove('is-dragover'));
+            label.addEventListener('drop', () => label.classList.remove('is-dragover'));
+        });
+
+        const versionUploadForm = document.getElementById('versionUploadForm');
+        versionUploadForm?.addEventListener('submit', function(event) {
+            event.preventDefault();
+            if (!versionUploadForm.checkValidity()) {
+                versionUploadForm.reportValidity();
+                return;
+            }
+
+            const button = document.getElementById('uploadSubmitBtn');
+            const panel = document.getElementById('uploadProgressPanel');
+            const bar = document.getElementById('uploadProgressBar');
+            const track = document.getElementById('uploadProgressTrack');
+            const percent = document.getElementById('uploadProgressPercent');
+            const detail = document.getElementById('uploadProgressDetail');
+            const status = document.getElementById('uploadProgressStatus');
+            const startedAt = Date.now();
+            const request = new XMLHttpRequest();
+
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-circle-notch fa-spin me-2"></i>Subiendo archivos...';
+            panel.classList.remove('d-none');
+            bar.classList.remove('processing');
+            bar.style.width = '0%';
+            track.setAttribute('aria-valuenow', '0');
+            percent.textContent = '0%';
+            status.textContent = 'Subiendo al servidor';
+            detail.textContent = 'Preparando archivos...';
+
+            request.open('POST', versionUploadForm.action || window.location.href, true);
+            request.upload.addEventListener('progress', uploadEvent => {
+                if (!uploadEvent.lengthComputable) {
+                    detail.textContent = `${formatUploadBytes(uploadEvent.loaded)} transferidos`;
+                    return;
+                }
+                const value = Math.min(100, Math.round((uploadEvent.loaded / uploadEvent.total) * 100));
+                const elapsed = Math.max(0.1, (Date.now() - startedAt) / 1000);
+                const rate = uploadEvent.loaded / elapsed;
+                const remaining = rate > 0 ? Math.ceil((uploadEvent.total - uploadEvent.loaded) / rate) : 0;
+                bar.style.width = `${value}%`;
+                track.setAttribute('aria-valuenow', String(value));
+                percent.textContent = `${value}%`;
+                detail.textContent = `${formatUploadBytes(uploadEvent.loaded)} de ${formatUploadBytes(uploadEvent.total)}${remaining > 0 ? ` · aprox. ${remaining}s restantes` : ''}`;
+            });
+            request.upload.addEventListener('load', () => {
+                bar.style.width = '100%';
+                track.setAttribute('aria-valuenow', '100');
+                bar.classList.add('processing');
+                percent.textContent = '100%';
+                status.textContent = 'Procesando archivos';
+                detail.textContent = 'La transferencia termino. El servidor esta verificando y guardando la version...';
+                button.innerHTML = '<i class="fas fa-circle-notch fa-spin me-2"></i>Procesando...';
+            });
+            request.addEventListener('load', () => {
+                if (request.responseText) {
+                    document.open();
+                    document.write(request.responseText);
+                    document.close();
+                    return;
+                }
+                restoreUploadButton('No se recibio respuesta del servidor.');
+            });
+            request.addEventListener('error', () => restoreUploadButton('No se pudo completar la subida. Revisa tu conexion.'));
+            request.addEventListener('timeout', () => restoreUploadButton('La subida excedio el tiempo de espera. Puedes reintentar.'));
+            request.send(new FormData(versionUploadForm));
+
+            function restoreUploadButton(message) {
+                bar.classList.remove('processing');
+                status.textContent = 'Subida no completada';
+                detail.textContent = message;
+                button.disabled = false;
+                button.innerHTML = '<i class="fas fa-upload me-2"></i>Reintentar subida';
+            }
+        });
+    </script>
+JS;
+
 ob_start();
 ?>
 
 <div class="container">
     <div class="row justify-content-center">
-        <div class="col-md-8 col-lg-6">
-            <div class="card">
+        <div class="col-12 version-manager-wrap">
+            <div class="card version-manager-card">
                 <div class="card-header text-center">
                     <h3 class="mb-0">
                         <i class="fas fa-cloud-upload-alt me-2"></i>
                         Gestor de Versiones
                     </h3>
                 </div>
-                <div class="card-body p-4">
+                <div class="card-body p-3 p-lg-4">
                     <?php if ($message): ?>
                         <div class="alert alert-<?= $messageType === 'success' ? 'success' : 'danger' ?> alert-dismissible fade show" role="alert">
                             <i class="fas fa-<?= $messageType === 'success' ? 'check-circle' : 'exclamation-triangle' ?> me-2"></i>
@@ -241,8 +468,8 @@ ob_start();
                         </div>
                         
                         <!-- Formulario -->
-                        <form method="POST" enctype="multipart/form-data">
-                        <div class="mb-4">
+                        <form method="POST" enctype="multipart/form-data" id="versionUploadForm">
+                        <div class="mb-3">
                             <label for="version" class="form-label" style="color: #2c3e50; font-weight: 500;">
                                 <i class="fas fa-tag me-2"></i>
                                 Versión <span style="color: #e74c3c;">*</span>
@@ -252,7 +479,8 @@ ob_start();
                             <div class="form-text" style="color: #6c757d;">Formato: X.X.X.X (ejemplo: 1.2.3.0)</div>
                         </div>
                         
-                        <div class="mb-4">
+                        <div class="upload-files-grid">
+                        <div class="upload-file-field">
                             <label class="form-label" style="color: #2c3e50; font-weight: 500;">
                                 <i class="fas fa-file-alt me-2"></i>
                                 Archivo Ejecutable <span style="color: #e74c3c;">*</span>
@@ -261,17 +489,17 @@ ob_start();
                                 <input type="file" id="exeFile" name="exeFile" accept=".exe" 
                                        class="file-upload-input" required onchange="updateFileName(this, 'exeFileName')">
                                 <label for="exeFile" class="file-upload-label">
-                                    <i class="fas fa-cloud-upload-alt fa-2x mb-2" style="color: #95a5a6;"></i>
+                                    <i class="fas fa-file-code file-upload-icon mb-2"></i>
                                     <div>
                                         <strong style="color: #2c3e50;">Haz clic para seleccionar el archivo .exe</strong>
                                         <div style="color: #6c757d;" class="mt-1">o arrastra y suelta aquí</div>
                                     </div>
-                                    <div id="exeFileName" class="mt-2" style="color: #3498db; display: none;"></div>
+                                    <div id="exeFileName" class="file-upload-name mt-2" style="display: none;"></div>
                                 </label>
                             </div>
                         </div>
                         
-                        <div class="mb-4">
+                        <div class="upload-file-field">
                             <label class="form-label" style="color: #2c3e50; font-weight: 500;">
                                 <i class="fas fa-download me-2"></i>
                                 Archivo Setup ZIP (Instalador) <span style="color: #e74c3c;">*</span>
@@ -280,18 +508,19 @@ ob_start();
                                 <input type="file" id="setupFile" name="setupFile" accept=".zip" 
                                        class="file-upload-input" required onchange="updateFileName(this, 'setupFileName')">
                                 <label for="setupFile" class="file-upload-label">
-                                    <i class="fas fa-cloud-upload-alt fa-2x mb-2" style="color: #95a5a6;"></i>
+                                    <i class="fas fa-file-zipper file-upload-icon mb-2"></i>
                                     <div>
                                         <strong style="color: #2c3e50;">Haz clic para seleccionar el archivo Setup.zip</strong>
                                         <div style="color: #6c757d;" class="mt-1">o arrastra y suelta aquí</div>
                                     </div>
-                                    <div id="setupFileName" class="mt-2" style="color: #27ae60; display: none;"></div>
+                                    <div id="setupFileName" class="file-upload-name mt-2" style="display: none;"></div>
                                 </label>
                             </div>
                             <div class="form-text" style="color: #6c757d;">El archivo Setup ZIP será descargable públicamente por todos los usuarios</div>
                         </div>
-                        
-                        <div class="mb-4">
+                        </div>
+
+                        <div class="mb-3">
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" id="mandatory" name="mandatory">
                                 <label class="form-check-label" for="mandatory" style="color: #2c3e50;">
@@ -301,7 +530,7 @@ ob_start();
                             </div>
                         </div>
                         
-                        <div class="mb-4">
+                        <div class="mb-3">
                             <label for="releaseNotes" class="form-label" style="color: #2c3e50; font-weight: 500;">
                                 <i class="fas fa-sticky-note me-2"></i>
                                 Notas de la versión
@@ -310,8 +539,19 @@ ob_start();
                                      rows="3" placeholder="Describe los cambios, correcciones y mejoras..."></textarea>
                         </div>
                         
+                        <div class="upload-progress-panel d-none mb-3" id="uploadProgressPanel" aria-live="polite">
+                            <div class="d-flex justify-content-between align-items-center gap-3 mb-2">
+                                <strong id="uploadProgressStatus">Subiendo al servidor</strong>
+                                <strong class="text-primary" id="uploadProgressPercent">0%</strong>
+                            </div>
+                            <div class="upload-progress-track" id="uploadProgressTrack" role="progressbar" aria-label="Progreso de subida" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                                <div class="upload-progress-bar" id="uploadProgressBar"></div>
+                            </div>
+                            <div class="small text-muted mt-2" id="uploadProgressDetail">Preparando archivos...</div>
+                        </div>
+
                         <div class="d-grid">
-                            <button type="submit" class="btn btn-primary btn-lg">
+                            <button type="submit" class="btn btn-primary" id="uploadSubmitBtn">
                                 <i class="fas fa-upload me-2"></i>
                                 Subir Nueva Versión (EXE + Setup ZIP)
                             </button>

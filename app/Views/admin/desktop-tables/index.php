@@ -42,7 +42,8 @@ ob_start();
             </div>
 
             <!-- Grid de tablas -->
-            <div class="row g-3">
+            <div id="desktopTablesFilter"></div>
+            <div class="row g-3" id="desktopTablesGrid">
                 <?php foreach ($desktopTables as $tableKey => $tableInfo): ?>
                     <div class="col-12 col-md-6 col-lg-4 col-xl-3">
                         <div class="card h-100 shadow-sm desktop-table-card" data-table="<?= htmlspecialchars($tableKey) ?>">
@@ -66,6 +67,7 @@ ob_start();
                     </div>
                 <?php endforeach; ?>
             </div>
+            <div id="desktopTablesPagination"></div>
         </div>
     </div>
 </div>
@@ -95,6 +97,25 @@ document.addEventListener('DOMContentLoaded', function() {
     const viewTableBtns = document.querySelectorAll('.view-table-btn');
 
     let currentCustomerId = '';
+    let tablesPage = 1;
+    let tablesSearch = '';
+    const tablesPageSize = 12;
+
+    const renderTableCards = function() {
+        const cards = Array.from(document.querySelectorAll('#desktopTablesGrid > div'));
+        const filtered = cards.filter(card => card.textContent.toLowerCase().includes(tablesSearch.toLowerCase().trim()));
+        const page = window.AdminPagination
+            ? window.AdminPagination.range(filtered, tablesPage, tablesPageSize)
+            : { items: filtered, page: 1 };
+        tablesPage = page.page;
+        cards.forEach(card => card.classList.add('d-none'));
+        page.items.forEach(card => card.classList.remove('d-none'));
+        window.AdminPagination?.render({
+            container: '#desktopTablesPagination', page: tablesPage, pageSize: tablesPageSize,
+            totalItems: filtered.length, label: 'Paginacion de tablas',
+            onChange: pageNumber => { tablesPage = pageNumber; renderTableCards(); }
+        });
+    };
 
     // Manejar cambio de filtro de cliente
     customerFilter.addEventListener('change', function() {
@@ -156,6 +177,16 @@ document.addEventListener('DOMContentLoaded', function() {
             option.hidden = searchTerm !== '' && !option.textContent.toLowerCase().includes(searchTerm);
         });
     });
+
+    window.AdminFilters?.mount({
+        container: '#desktopTablesFilter',
+        id: 'desktop-tables-filter-drawer',
+        title: 'Filtrar tablas',
+        defaults: { search: '' },
+        fields: [{ name: 'search', label: 'Buscar', type: 'search', placeholder: 'Nombre, tabla o descripcion' }],
+        onApply: values => { tablesSearch = values.search || ''; tablesPage = 1; renderTableCards(); }
+    });
+    renderTableCards();
 });
 </script>
 

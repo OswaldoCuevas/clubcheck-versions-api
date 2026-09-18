@@ -50,6 +50,7 @@ $adminSections = [
     ],
     'Soporte' => [
         ['label' => 'Anuncios', 'url' => '/admin/announcements', 'icon' => 'fa-solid fa-bullhorn'],
+        ['label' => 'Errores clientes', 'url' => '/admin/customer-error-reports', 'icon' => 'fa-solid fa-triangle-exclamation'],
         ['label' => 'Intentos login', 'url' => '/admin/customer-login-attempts', 'icon' => 'fa-solid fa-user-lock'],
         ['label' => 'API Docs', 'url' => '/admin/api-docs', 'icon' => 'fa-solid fa-book'],
     ],
@@ -86,18 +87,26 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
         }
 
         .card {
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border: 1px solid #d7eafd;
+            border-radius: 16px;
+            box-shadow: 0 12px 30px rgba(47, 128, 237, 0.08);
             background: #ffffff;
+            overflow: hidden;
         }
 
         .card-header {
-            background: #34495e;
-            color: white;
-            border-radius: 4px 4px 0 0 !important;
-            padding: 1.5rem;
-            border-bottom: 1px solid #2c3e50;
+            background: #ffffff;
+            color: #15395b;
+            border-radius: 16px 16px 0 0 !important;
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid #e2effa;
+            font-weight: 800;
+        }
+
+        .card-footer {
+            padding: 0.85rem 1.25rem;
+            border-top: 1px solid #e2effa;
+            background: #fbfdff;
         }
 
         .form-control,
@@ -111,6 +120,31 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
             font-weight: 600;
             box-shadow: 0 8px 22px rgba(47, 128, 237, 0.05);
             transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out, background 0.15s ease-in-out;
+        }
+
+        .form-control:disabled,
+        .form-select:disabled,
+        .form-control[readonly] {
+            border-color: #e1ebf4;
+            background-color: #f3f7fb;
+            color: #6b8299;
+            box-shadow: none;
+        }
+
+        .input-group {
+            border-radius: 12px;
+            box-shadow: 0 8px 22px rgba(47, 128, 237, 0.05);
+        }
+
+        .input-group > .input-group-text {
+            border-color: #d7eafd;
+            background: #f1f8ff;
+            color: #087cba;
+        }
+
+        .input-group > .form-control,
+        .input-group > .form-select {
+            box-shadow: none;
         }
 
         textarea.form-control {
@@ -135,6 +169,28 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
             color: #315574;
             font-size: 12px;
             font-weight: 700;
+        }
+
+        .form-check-input {
+            width: 1.15rem;
+            height: 1.15rem;
+            border-color: #b9d8ef;
+            box-shadow: none;
+        }
+
+        .form-check-input:checked {
+            border-color: #1299dc;
+            background-color: #1299dc;
+        }
+
+        .form-check-input:focus {
+            border-color: #1299dc;
+            box-shadow: 0 0 0 3px rgba(18, 153, 220, 0.12);
+        }
+
+        .form-text {
+            color: #6b8299;
+            font-size: 0.78rem;
         }
 
         .input-shell {
@@ -233,6 +289,87 @@ $isAdminNavActive = static function (array $item) use ($layoutCurrentPath): bool
             border-radius: 14px;
             background: rgba(255,255,255,0.96);
             box-shadow: 0 18px 38px rgba(47, 128, 237, 0.09);
+        }
+
+        /* Base visual comun para todos los listados administrativos. */
+        .admin-content .card:has(.table),
+        .admin-list-panel {
+            border: 1px solid #d7eafd;
+            border-radius: 16px;
+            background: #ffffff;
+            box-shadow: 0 12px 30px rgba(47, 128, 237, 0.08);
+            overflow: hidden;
+        }
+
+        .admin-content .table-responsive {
+            scrollbar-color: #7dbcf7 #edf7ff;
+        }
+
+        .admin-content .table {
+            --bs-table-bg: transparent;
+            --bs-table-hover-bg: #f3f9ff;
+            margin-bottom: 0;
+            color: #294b69;
+        }
+
+        .admin-content .table > :not(caption) > * > * {
+            padding: 0.9rem 1rem;
+            border-bottom-color: #e5f0fa;
+            vertical-align: middle;
+        }
+
+        .admin-content .table thead th,
+        .admin-content .table .table-light th {
+            border-bottom-width: 1px;
+            background: #f2f8fe;
+            color: #315574;
+            font-size: 0.75rem;
+            font-weight: 800;
+            letter-spacing: 0.035em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .admin-content .table tbody tr:last-child > * {
+            border-bottom: 0;
+        }
+
+        .admin-content .pagination {
+            gap: 6px;
+        }
+
+        .admin-content .page-link {
+            min-width: 38px;
+            height: 38px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #cfe8f8;
+            border-radius: 12px !important;
+            background: #ffffff;
+            color: #087cba;
+            font-size: 13px;
+            font-weight: 800;
+            box-shadow: 0 10px 22px rgba(47, 128, 237, 0.08);
+        }
+
+        .admin-content .page-item.active .page-link,
+        .admin-content .page-link:hover {
+            border-color: #1299dc;
+            background: #1299dc;
+            color: #ffffff;
+        }
+
+        .admin-content .page-item.disabled .page-link {
+            opacity: 0.48;
+            box-shadow: none;
+        }
+
+        .admin-content .modal-content {
+            border: 1px solid #d7eafd;
+            border-radius: 16px;
+            box-shadow: 0 24px 64px rgba(15, 39, 64, 0.2);
+            overflow: hidden;
         }
 
         .admin-form-panel-title {

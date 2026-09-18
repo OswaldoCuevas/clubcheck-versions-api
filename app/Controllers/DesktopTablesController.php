@@ -319,8 +319,6 @@ class DesktopTablesController extends Controller
      */
     public function index()
     {
-        $this->requirePermission('admin_access');
-
         $currentUser = $this->userModel->getCurrentUser();
         $registry = new CustomerRegistryModel();
         $customers = $registry->getCustomers($this->selectedAppId());
@@ -341,8 +339,6 @@ class DesktopTablesController extends Controller
      */
     public function viewTable()
     {
-        $this->requirePermission('admin_access');
-
         // Obtener parámetros de la URL
         $tableKey = $_GET['table'] ?? '';
         $customerApiId = $_GET['customer'] ?? '';
@@ -399,8 +395,6 @@ class DesktopTablesController extends Controller
      */
     public function getData()
     {
-        $this->requirePermission('admin_access');
-
         if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
             $this->json(['error' => 'Method not allowed'], 405);
         }

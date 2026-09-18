@@ -6,20 +6,78 @@ use ApiHelper;
 use Core\Controller;
 use Models\CustomerRegistryModel;
 use Models\CustomerWebLoginAttemptModel;
-use Models\WhatsAppConfigurationModel;
-use Models\WhatsAppTemplateModel;
 use Models\DownloadLogModel;
-use Models\LicenseLogModel;
-use Models\AnnouncementModel;
-use Models\StripePlanModel;
 use Models\ApplicationModel;
-use App\Services\WhatsAppService;
-use App\Enums\WhatsAppEvent;
 use App\Services\CustomerStatsService;
-use App\Services\AdminDashboardService;
 use App\Services\StripeService;
-use App\Services\LicenseService;
 use App\Helpers\ApplicationContext;
+use App\Modules\Admin\Features\CreateWhatsAppConfigurationFeature;
+use App\Modules\Admin\Features\CreateWhatsAppTemplateFeature;
+use App\Modules\Admin\Features\CreateJwtTokenFeature;
+use App\Modules\Admin\Features\CreateStripePriceFeature;
+use App\Modules\Admin\Features\DeleteWhatsAppConfigurationFeature;
+use App\Modules\Admin\Features\DeleteWhatsAppTemplateFeature;
+use App\Modules\Admin\Features\FlagIpFeature;
+use App\Modules\Admin\Features\GetCustomerIpsFeature;
+use App\Modules\Admin\Features\GetCustomerStatsDetailFeature;
+use App\Modules\Admin\Features\GetCustomerStatsFeature;
+use App\Modules\Admin\Features\GetDashboardFeature;
+use App\Modules\Admin\Features\GetDownloadsByIpFeature;
+use App\Modules\Admin\Features\GetDownloadsFeature;
+use App\Modules\Admin\Features\GenerateLicenseFeature;
+use App\Modules\Admin\Features\GetWhatsAppNumberStatusFeature;
+use App\Modules\Admin\Features\ListJwtTokensFeature;
+use App\Modules\Admin\Features\ListCustomerErrorReportsFeature;
+use App\Modules\Admin\Features\ListLicensesFeature;
+use App\Modules\Admin\Features\ListStripePlansFeature;
+use App\Modules\Admin\Features\ListWhatsAppConfigurationsFeature;
+use App\Modules\Admin\Features\ListWhatsAppTemplatesFeature;
+use App\Modules\Admin\Features\RegisterWhatsAppNumberFeature;
+use App\Modules\Admin\Features\MarkCustomerErrorReportReadFeature;
+use App\Modules\Admin\Features\RevokeJwtTokenFeature;
+use App\Modules\Admin\Features\SaveApplicationFeature;
+use App\Modules\Admin\Features\SaveApplicationSettingsFeature;
+use App\Modules\Admin\Features\SaveApplicationSyncTablesFeature;
+use App\Modules\Admin\Features\SaveDashboardSettingsFeature;
+use App\Modules\Admin\Features\SaveStripePlanFeature;
+use App\Modules\Admin\Features\SaveStripePlanRuleFeature;
+use App\Modules\Admin\Features\SelectApplicationFeature;
+use App\Modules\Admin\Features\UnlinkStripePlanRuleFeature;
+use App\Modules\Admin\Features\VerifyStripePlanFeature;
+use App\Modules\Admin\Requests\CreateWhatsAppConfigurationRequest;
+use App\Modules\Admin\Requests\CreateWhatsAppTemplateRequest;
+use App\Modules\Admin\Requests\DashboardSettingsRequest;
+use App\Modules\Admin\Requests\DownloadIpRequest;
+use App\Modules\Admin\Requests\DownloadsRequest;
+use App\Modules\Admin\Requests\FlagIpRequest;
+use App\Modules\Admin\Requests\GenerateLicenseRequest;
+use App\Modules\Admin\Requests\JwtTokenRequest;
+use App\Modules\Admin\Requests\SaveApplicationRequest;
+use App\Modules\Admin\Requests\SaveApplicationSettingsRequest;
+use App\Modules\Admin\Requests\SaveApplicationSyncTablesRequest;
+use App\Modules\Admin\Requests\SelectApplicationRequest;
+use App\Modules\Admin\Requests\StripeLookupKeyRequest;
+use App\Modules\Admin\Requests\StripePlanRequest;
+use App\Modules\Admin\Requests\StripeRuleIdRequest;
+use App\Modules\Admin\Requests\WhatsAppConfigurationIdRequest;
+use App\Modules\Admin\Requests\WhatsAppTemplateIdRequest;
+use App\Modules\Admin\Features\ActivateAnnouncementFeature;
+use App\Modules\Admin\Features\DeleteAnnouncementFeature;
+use App\Modules\Admin\Features\DeleteCustomerFeature;
+use App\Modules\Admin\Features\GetAnnouncementViewsFeature;
+use App\Modules\Admin\Features\GetCustomerLoginAttemptsFeature;
+use App\Modules\Admin\Features\ListAnnouncementsFeature;
+use App\Modules\Admin\Features\ListCustomersFeature;
+use App\Modules\Admin\Features\RegenerateCustomerAccessKeyFeature;
+use App\Modules\Admin\Features\SaveAnnouncementFeature;
+use App\Modules\Admin\Features\UploadAnnouncementImageFeature;
+use App\Modules\Admin\Requests\AnnouncementIdRequest;
+use App\Modules\Admin\Requests\CustomerIdRequest;
+use App\Modules\Admin\Requests\CustomerErrorReportIdRequest;
+use App\Modules\Admin\Requests\CustomerErrorReportsRequest;
+use App\Modules\Admin\Requests\CustomerLoginAttemptsRequest;
+use App\Modules\Admin\Requests\SaveAnnouncementRequest;
+use App\Modules\Admin\Requests\UploadAnnouncementImageRequest;
 use App\Modules\Customers\Features\SaveCustomerFeature;
 use App\Modules\Customers\Requests\SaveCustomerRequest;
 
@@ -46,27 +104,17 @@ class AdminController extends Controller
     public function index()
     {
         // Requerir permisos de administrador
-        $this->requirePermission('admin_access');
-
         $this->redirect('/admin/dashboard');
     }
 
     public function selectApplication(): void
     {
-        $this->requirePermission('admin_access');
-
-        $appId = trim((string)($_POST['appId'] ?? $_GET['appId'] ?? ''));
-        $redirect = trim((string)($_POST['redirect'] ?? $_GET['redirect'] ?? '/admin/dashboard'));
-        $redirect = str_starts_with($redirect, '/admin') ? $redirect : '/admin/dashboard';
-
-        $this->applicationModel()->setSelectedApp($appId);
-        $this->redirect($redirect);
+        $result = (new SelectApplicationFeature())->handle(new SelectApplicationRequest());
+        $this->redirect($result['redirect']);
     }
 
     public function applications(): void
     {
-        $this->requirePermission('admin_access');
-
         $model = $this->applicationModel();
         $selectedApp = $model->getSelectedApp();
 
@@ -87,24 +135,9 @@ class AdminController extends Controller
 
     public function saveApplication(): void
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
         try {
-            $app = $this->applicationModel()->save([
-                'id' => $_POST['id'] ?? '',
-                'name' => $_POST['name'] ?? '',
-                'slug' => $_POST['slug'] ?? '',
-                'iconClass' => $_POST['iconClass'] ?? '',
-                'color' => $_POST['color'] ?? '',
-                'description' => $_POST['description'] ?? '',
-                'isActive' => isset($_POST['isActive']),
-            ]);
-            $this->applicationModel()->setSelectedApp($app['id']);
-            $this->redirect('/admin/applications');
+            $result = (new SaveApplicationFeature())->handle(new SaveApplicationRequest());
+            $this->redirect($result['redirect']);
         } catch (\Throwable $e) {
             $_SESSION['admin_flash_error'] = $e->getMessage();
             $this->redirect('/admin/applications');
@@ -113,18 +146,11 @@ class AdminController extends Controller
 
     public function saveApplicationSettings(): void
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $appId = trim((string)($_POST['appId'] ?? $this->selectedAppId()));
-
         try {
-            // Las credenciales quedan por app; valores vacios mantienen fallback al .env actual.
-            $this->applicationModel()->saveSettings($appId, $_POST['settings'] ?? []);
-            $_SESSION['admin_flash_success'] = 'Configuracion guardada.';
+            $result = (new SaveApplicationSettingsFeature())->handle(
+                new SaveApplicationSettingsRequest($this->selectedAppId())
+            );
+            $_SESSION['admin_flash_success'] = $result['success'];
         } catch (\Throwable $e) {
             $_SESSION['admin_flash_error'] = $e->getMessage();
         }
@@ -134,18 +160,11 @@ class AdminController extends Controller
 
     public function saveApplicationSyncTables(): void
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $appId = trim((string)($_POST['appId'] ?? $this->selectedAppId()));
-
         try {
-            // Este catalogo decide que bulks participan en pull/push para clientes de la app.
-            $this->applicationModel()->saveSyncTables($appId, $_POST['sync'] ?? []);
-            $_SESSION['admin_flash_success'] = 'Tablas de sincronizacion actualizadas.';
+            $result = (new SaveApplicationSyncTablesFeature())->handle(
+                new SaveApplicationSyncTablesRequest($this->selectedAppId())
+            );
+            $_SESSION['admin_flash_success'] = $result['success'];
         } catch (\Throwable $e) {
             $_SESSION['admin_flash_error'] = $e->getMessage();
         }
@@ -155,8 +174,6 @@ class AdminController extends Controller
 
     public function customers()
     {
-        $this->requirePermission('admin_access');
-
         $currentUser = $this->userModel->getCurrentUser();
         $registry = new CustomerRegistryModel();
         $customers = $registry->getCustomers($this->selectedAppId());
@@ -173,8 +190,6 @@ class AdminController extends Controller
 
     public function customerLoginAttempts()
     {
-        $this->requirePermission('admin_access');
-
         $currentUser = $this->userModel->getCurrentUser();
         $attemptModel = new CustomerWebLoginAttemptModel();
 
@@ -203,88 +218,23 @@ class AdminController extends Controller
 
     public function customerLoginAttemptsJson()
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $attemptModel = new CustomerWebLoginAttemptModel();
-        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
-        $perPage = isset($_GET['perPage']) ? max(10, min(200, (int) $_GET['perPage'])) : 50;
-        $filters = [
-            'search' => $_GET['search'] ?? '',
-            'status' => $_GET['status'] ?? 'all',
-            'codeAccess' => $_GET['codeAccess'] ?? '',
-            'from' => $_GET['from'] ?? '',
-            'to' => $_GET['to'] ?? '',
-            'appId' => $this->selectedAppId(),
-        ];
-
-        $this->json([
-            'attempts' => $attemptModel->getAttempts($filters, $page, $perPage),
-            'summary' => $attemptModel->getSummary($this->selectedAppId()),
-            'generatedAt' => date('Y-m-d H:i:s'),
-        ]);
+        $appId = $this->selectedAppId();
+        $this->json((new GetCustomerLoginAttemptsFeature())->handle(
+            new CustomerLoginAttemptsRequest($appId),
+            $appId
+        ));
     }
 
     public function customersJson()
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $registry = new CustomerRegistryModel();
-        $customers = $registry->getCustomers($this->selectedAppId());
-
-        $this->json([
-            'count' => count($customers),
-            'customers' => $customers,
-        ]);
+        $this->json((new ListCustomersFeature())->handle($this->selectedAppId()));
     }
 
     public function regenerateAccessKey()
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $payload = json_decode(file_get_contents('php://input'), true);
-        $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
-
-        if ($customerId === '') {
-            $this->json(['error' => 'customerId es obligatorio'], 422);
-        }
-
-        $registry = new CustomerRegistryModel();
-        $result = $registry->regenerateAccessKey($customerId);
-
-        if (!$result) {
-            $this->json(['error' => 'Cliente no encontrado'], 404);
-        }
-
-        $this->json([
-            'status' => 'regenerated',
-            'customerId' => $result['customerId'],
-            'accessKey' => $result['accessKey'],
-            'customer' => $result['customer'],
-        ]);
+        $this->json((new RegenerateCustomerAccessKeyFeature())->handle(
+            new CustomerIdRequest(['POST'])
+        ));
     }
 
     /**
@@ -293,39 +243,13 @@ class AdminController extends Controller
      */
     public function deleteCustomerJson(string $customerId)
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'DELETE' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $customerId = trim((string) $customerId);
-
-        if ($customerId === '') {
-            $this->json(['error' => 'customerId es obligatorio'], 422);
-        }
-
-        $registry = new CustomerRegistryModel();
-        $deleted = $registry->deleteCustomer($customerId);
-
-        if (!$deleted) {
-            $this->json(['error' => 'Cliente no encontrado'], 404);
-        }
-
-        $this->json([
-            'success' => true,
-            'message' => 'Cliente eliminado correctamente'
-        ]);
+        $this->json((new DeleteCustomerFeature())->handle(
+            new CustomerIdRequest(['DELETE', 'POST'], ['customerId' => $customerId])
+        ));
     }
 
     public function saveCustomerJson(): void
     {
-        $this->requirePermission('admin_access');
-
         $result = (new SaveCustomerFeature())->handle(new SaveCustomerRequest());
 
         ApiHelper::respond([
@@ -336,8 +260,6 @@ class AdminController extends Controller
 
     public function announcements(): void
     {
-        $this->requirePermission('admin_access');
-
         $data = [
             'currentUser' => $this->userModel->getCurrentUser(),
             'title' => 'Anuncios',
@@ -349,146 +271,56 @@ class AdminController extends Controller
 
     public function announcementsJson(): void
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $model = new AnnouncementModel();
-        $this->json(['announcements' => $model->getAll($this->selectedAppId())]);
+        $this->json((new ListAnnouncementsFeature())->handle($this->selectedAppId()));
     }
 
     public function announcementSaveJson(): void
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $payload = json_decode(file_get_contents('php://input'), true) ?? [];
         $currentUser = $this->userModel->getCurrentUser();
 
-        try {
-            $model = new AnnouncementModel();
-            $announcement = $model->save($payload, $currentUser['username'] ?? null, $this->selectedAppId());
-            $this->json(['success' => true, 'announcement' => $announcement]);
-        } catch (\InvalidArgumentException $e) {
-            $this->json(['error' => $e->getMessage()], 422);
-        } catch (\Throwable $e) {
-            error_log('Announcement save error: ' . $e->getMessage());
-            $this->json(['error' => 'Error al guardar el anuncio'], 500);
-        }
+        $this->json((new SaveAnnouncementFeature())->handle(
+            new SaveAnnouncementRequest(),
+            $currentUser['username'] ?? null,
+            $this->selectedAppId()
+        ));
     }
 
     public function announcementViewsJson(string $id): void
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $model = new AnnouncementModel();
-        $announcement = $model->find($id, $this->selectedAppId());
-        if (!$announcement) {
-            $this->json(['error' => 'Anuncio no encontrado'], 404);
-        }
-
-        $views = $model->viewsForAnnouncement($id, $this->selectedAppId());
-        $this->json([
-            'announcement' => $announcement,
-            'count' => count($views),
-            'views' => $views,
-        ]);
+        $this->json((new GetAnnouncementViewsFeature())->handle(
+            new AnnouncementIdRequest(['GET'], $id),
+            $this->selectedAppId()
+        ));
     }
 
     public function announcementActivateJson(string $id): void
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $model = new AnnouncementModel();
         $currentUser = $this->userModel->getCurrentUser();
-        $announcement = $model->activate($id, $currentUser['username'] ?? null, $this->selectedAppId());
-        if (!$announcement) {
-            $this->json(['error' => 'Anuncio no encontrado'], 404);
-        }
 
-        $this->json(['success' => true, 'announcement' => $announcement]);
+        $this->json((new ActivateAnnouncementFeature())->handle(
+            new AnnouncementIdRequest(['POST'], $id),
+            $currentUser['username'] ?? null,
+            $this->selectedAppId()
+        ));
     }
 
     public function announcementDeleteJson(string $id): void
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $_SERVER['REQUEST_METHOD'] !== 'DELETE') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $model = new AnnouncementModel();
-        if (!$model->deleteById($id, $this->selectedAppId())) {
-            $this->json(['error' => 'Anuncio no encontrado'], 404);
-        }
-
-        $this->json(['success' => true]);
+        $this->json((new DeleteAnnouncementFeature())->handle(
+            new AnnouncementIdRequest(['POST', 'DELETE'], $id),
+            $this->selectedAppId()
+        ));
     }
 
     public function announcementUploadImageJson(): void
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-        if (empty($_FILES['image']) || !is_uploaded_file($_FILES['image']['tmp_name'])) {
-            $this->json(['error' => 'Imagen no proporcionada'], 422);
-        }
-
-        $file = $_FILES['image'];
-        $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
-        $mime = mime_content_type($file['tmp_name']) ?: '';
-        if (!isset($allowed[$mime])) {
-            $this->json(['error' => 'Formato de imagen no soportado'], 422);
-        }
-        if (($file['size'] ?? 0) > 5 * 1024 * 1024) {
-            $this->json(['error' => 'La imagen no puede superar 5 MB'], 422);
-        }
-
-        $dir = __DIR__ . '/../../uploads/announcements';
-        if (!is_dir($dir) && !mkdir($dir, 0775, true)) {
-            $this->json(['error' => 'No se pudo crear el directorio de imagenes'], 500);
-        }
-
-        $filename = date('YmdHis') . '-' . bin2hex(random_bytes(6)) . '.' . $allowed[$mime];
-        $target = $dir . '/' . $filename;
-        if (!move_uploaded_file($file['tmp_name'], $target)) {
-            $this->json(['error' => 'No se pudo guardar la imagen'], 500);
-        }
-
-        $this->json([
-            'success' => true,
-            'imageUrl' => app_url('/uploads/announcements/' . $filename),
-        ]);
+        $this->json((new UploadAnnouncementImageFeature())->handle(
+            new UploadAnnouncementImageRequest()
+        ));
     }
 
     public function apiDocs()
     {
-        $this->requirePermission('admin_access');
-
         $currentUser = $this->userModel->getCurrentUser();
 
         $sections = [
@@ -995,8 +827,6 @@ class AdminController extends Controller
      */
     public function whatsapp()
     {
-        $this->requirePermission('admin_access');
-
         $currentUser = $this->userModel->getCurrentUser();
         $registry = new CustomerRegistryModel();
         $customers = $registry->getCustomers($this->selectedAppId());
@@ -1017,24 +847,7 @@ class AdminController extends Controller
      */
     public function whatsappListJson()
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $configModel = new WhatsAppConfigurationModel();
-        $configs = $configModel->getAllWithCustomerInfo($this->selectedAppId());
-
-        $this->json([
-            'success' => true,
-            'count' => count($configs),
-            'configurations' => $configs,
-        ]);
+        $this->json((new ListWhatsAppConfigurationsFeature())->handle($this->selectedAppId()));
     }
 
     /**
@@ -1043,73 +856,9 @@ class AdminController extends Controller
      */
     public function whatsappCreateJson()
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $payload = json_decode(file_get_contents('php://input'), true);
-
-        // Validar campos requeridos
-        $required = ['customerId', 'phoneNumber', 'phoneNumberId', 'businessName'];
-        foreach ($required as $field) {
-            if (empty($payload[$field])) {
-                $this->json(['error' => "Campo requerido: {$field}"], 422);
-            }
-        }
-
-        $configModel = new WhatsAppConfigurationModel();
-
-        // Verificar si el customer ya tiene configuración
-        if ($configModel->customerHasConfiguration($payload['customerId'])) {
-            $this->json(['error' => 'Este cliente ya tiene una configuración de WhatsApp'], 422);
-        }
-
-        // Crear configuración
-        $result = $configModel->create([
-            'CustomerId' => $payload['customerId'],
-            'PhoneNumber' => $payload['phoneNumber'],
-            'PhoneNumberId' => $payload['phoneNumberId'],
-            'AccessToken' => $payload['accessToken'] ?? null,
-            'BusinessName' => $payload['businessName'],
-            'BusinessAddress' => $payload['address'] ?? null,
-            'BusinessDescription' => $payload['description'] ?? null,
-            'BusinessEmail' => $payload['email'] ?? null,
-            'CreatedBy' => 'admin'
-        ]);
-
-        if (!$result['success']) {
-            $this->json(['error' => $result['error']], 422);
-        }
-
-        // Si se proporcionó accessToken, intentar registrar el número en WhatsApp
-        $whatsappRegistered = false;
-        $whatsappError = null;
-
-        if (!empty($payload['accessToken']) && !empty($payload['registerInWhatsApp'])) {
-            $whatsappService = new WhatsAppService();
-            $registerResult = $whatsappService->registerPhoneNumber(
-                $payload['phoneNumberId'],
-                $payload['accessToken']
-            );
-            $whatsappRegistered = $registerResult['success'];
-            $whatsappError = $registerResult['error'];
-        }
-
-        $config = $configModel->findById($result['id']);
-
-        $this->json([
-            'success' => true,
-            'id' => $result['id'],
-            'configuration' => $config,
-            'whatsappRegistered' => $whatsappRegistered,
-            'whatsappError' => $whatsappError
-        ]);
+        $this->json((new CreateWhatsAppConfigurationFeature())->handle(
+            new CreateWhatsAppConfigurationRequest()
+        ));
     }
 
     /**
@@ -1118,31 +867,9 @@ class AdminController extends Controller
      */
     public function whatsappDeleteJson(string $id)
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'DELETE' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        if (empty($id)) {
-            $this->json(['error' => 'ID es requerido'], 422);
-        }
-
-        $configModel = new WhatsAppConfigurationModel();
-        $result = $configModel->delete($id);
-
-        if (!$result['success']) {
-            $this->json(['error' => $result['error']], 404);
-        }
-
-        $this->json([
-            'success' => true,
-            'message' => 'Configuración eliminada correctamente'
-        ]);
+        $this->json((new DeleteWhatsAppConfigurationFeature())->handle(
+            new WhatsAppConfigurationIdRequest(['DELETE', 'POST'], $id)
+        ));
     }
 
     /**
@@ -1151,46 +878,9 @@ class AdminController extends Controller
      */
     public function whatsappRegisterJson(string $id)
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $configModel = new WhatsAppConfigurationModel();
-        $config = $configModel->findById($id);
-
-        if (!$config) {
-            $this->json(['error' => 'Configuración no encontrada'], 404);
-        }
-
-        if (empty($config['AccessToken'])) {
-            $this->json(['error' => 'Esta configuración no tiene Access Token'], 422);
-        }
-
-        $whatsappService = new WhatsAppService();
-        $result = $whatsappService->registerPhoneNumber(
-            $config['PhoneNumberId'],
-            $config['AccessToken']
-        );
-
-        if (!$result['success']) {
-            $this->json([
-                'success' => false,
-                'error' => $result['error'],
-                'httpCode' => $result['httpCode'] ?? null
-            ], 422);
-        }
-
-        $this->json([
-            'success' => true,
-            'message' => 'Número registrado correctamente en WhatsApp',
-            'response' => $result['response'] ?? null
-        ]);
+        $this->json((new RegisterWhatsAppNumberFeature())->handle(
+            new WhatsAppConfigurationIdRequest(['POST'], $id)
+        ));
     }
 
     /**
@@ -1199,113 +889,28 @@ class AdminController extends Controller
      */
     public function whatsappStatusJson(string $id)
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $configModel = new WhatsAppConfigurationModel();
-        $config = $configModel->findById($id);
-
-        if (!$config) {
-            $this->json(['error' => 'Configuración no encontrada'], 404);
-        }
-
-        if (empty($config['AccessToken'])) {
-            $this->json(['error' => 'Esta configuración no tiene Access Token'], 422);
-        }
-
-        $whatsappService = new WhatsAppService();
-        $result = $whatsappService->getPhoneNumberStatus(
-            $config['PhoneNumberId'],
-            $config['AccessToken']
-        );
-
-        $this->json([
-            'success' => $result['success'],
-            'status' => $result['status'],
-            'data' => $result['data'] ?? null,
-            'error' => $result['error']
-        ]);
+        $this->json((new GetWhatsAppNumberStatusFeature())->handle(
+            new WhatsAppConfigurationIdRequest(['GET'], $id)
+        ));
     }
 
     public function whatsappTemplatesJson()
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $templateModel = new WhatsAppTemplateModel();
-        $this->json([
-            'success' => true,
-            'events' => WhatsAppEvent::options(),
-            'variables' => $templateModel->getVariables(),
-            'templates' => $templateModel->getAllWithEvents(),
-        ]);
+        $this->json((new ListWhatsAppTemplatesFeature())->handle());
     }
 
     public function whatsappTemplateCreateJson()
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $payload = json_decode(file_get_contents('php://input'), true) ?: [];
-        $customerId = trim((string) ($payload['customerId'] ?? ''));
-        $templateName = trim((string) ($payload['templateName'] ?? ''));
-        $languageCode = trim((string) ($payload['languageCode'] ?? 'es_MX')) ?: 'es_MX';
-        $eventKey = trim((string) ($payload['eventKey'] ?? ''));
-        $components = $payload['components'] ?? [];
-
-        if ($customerId === '' || $templateName === '') {
-            $this->json(['error' => 'customerId y templateName son requeridos'], 422);
-        }
-
-        if (!is_array($components)) {
-            $this->json(['error' => 'components debe ser un array'], 422);
-        }
-
-        if ($eventKey !== '' && !WhatsAppEvent::tryFrom($eventKey)) {
-            $this->json(['error' => 'Evento de WhatsApp invalido'], 422);
-        }
-
-        $templateModel = new WhatsAppTemplateModel();
-        $result = $templateModel->createTemplate([
-            'CustomerId' => $customerId,
-            'TemplateName' => $templateName,
-            'LanguageCode' => $languageCode,
-            'Description' => $payload['description'] ?? null,
-            'ComponentsJson' => $components,
-            'EventKey' => $eventKey,
-            'CreatedBy' => 'admin',
-        ]);
-
-        if (!$result['success']) {
-            $this->json(['error' => $result['error']], 422);
-        }
-
-        $this->json(['success' => true, 'id' => $result['id']]);
+        $this->json((new CreateWhatsAppTemplateFeature())->handle(
+            new CreateWhatsAppTemplateRequest()
+        ));
     }
 
     public function whatsappTemplateDeleteJson(string $id)
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $_SERVER['REQUEST_METHOD'] !== 'DELETE') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $templateModel = new WhatsAppTemplateModel();
-        $this->json($templateModel->deleteTemplate($id));
+        $this->json((new DeleteWhatsAppTemplateFeature())->handle(
+            new WhatsAppTemplateIdRequest(['POST', 'DELETE'], $id)
+        ));
     }
 
     // ===== Gestión de Tokens JWT =====
@@ -1316,8 +921,6 @@ class AdminController extends Controller
      */
     public function jwtTokens()
     {
-        $this->requirePermission('admin_access');
-
         $currentUser = $this->userModel->getCurrentUser();
 
         $data = [
@@ -1335,31 +938,7 @@ class AdminController extends Controller
      */
     public function jwtTokensJson()
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        
-        $registry = new CustomerRegistryModel();
-        $ipLogModel = new \Models\CustomerIpLogModel();
-
-        // Obtener estadísticas de JWT
-        $stats = $registry->getJwtStats($this->selectedAppId());
-
-        // Obtener resumen de clientes con IPs
-        $customerSummary = $ipLogModel->getCustomerIpSummary($this->selectedAppId());
-
-        $this->json([
-            'success' => true,
-            'stats' => $stats,
-            'customers' => $customerSummary,
-        ]);
+        $this->json((new ListJwtTokensFeature())->handle($this->selectedAppId()));
     }
 
     /**
@@ -1368,60 +947,10 @@ class AdminController extends Controller
      */
     public function createJwtToken()
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $payload = json_decode(file_get_contents('php://input'), true);
-        $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
-        $expiresIn = isset($payload['expiresIn']) ? (int) $payload['expiresIn'] : null;
-
-        if ($customerId === '') {
-            $this->json(['error' => 'customerId es obligatorio'], 422);
-        }
-        $registry = new CustomerRegistryModel();
-        $customer = $registry->getCustomer($customerId);
-        if (!$customer || (($customer['appId'] ?? $this->selectedAppId()) !== $this->selectedAppId())) {
-            $this->json(['error' => 'Cliente no pertenece a la app seleccionada'], 403);
-        }
-
-        $customerJwtService = new \App\Services\CustomerJwtService();
-
-        try {
-            $result = $customerJwtService->renewCustomerToken($customerId, $expiresIn);
-
-            if (!$result) {
-                $this->json([
-                    'success' => false,
-                    'error' => 'No se pudo crear el token. Verifique que el cliente exista, esté activo y tenga un token de máquina registrado.'
-                ], 422);
-            }
-
-            $this->json([
-                'success' => true,
-                'message' => 'Token JWT creado exitosamente',
-                'data' => [
-                    'customerId' => $customerId,
-                    'expiresAt' => $result['expiresAt'],
-                    'expiresIn' => $result['expiresIn'],
-                ]
-            ]);
-        } catch (\RuntimeException $e) {
-            $errorMessages = [
-                'customer_not_found' => 'Cliente no encontrado',
-                'customer_inactive' => 'El cliente está inactivo',
-                'machine_token_mismatch' => 'El token de máquina no coincide',
-            ];
-
-            $message = $errorMessages[$e->getMessage()] ?? $e->getMessage();
-            $this->json(['success' => false, 'error' => $message], 422);
-        }
+        $this->json((new CreateJwtTokenFeature())->handle(
+            new JwtTokenRequest(),
+            $this->selectedAppId()
+        ));
     }
 
     /**
@@ -1430,38 +959,10 @@ class AdminController extends Controller
      */
     public function revokeJwtToken()
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $payload = json_decode(file_get_contents('php://input'), true);
-        $customerId = isset($payload['customerId']) ? trim((string) $payload['customerId']) : '';
-
-        if ($customerId === '') {
-            $this->json(['error' => 'customerId es obligatorio'], 422);
-        }
-
-        $registry = new CustomerRegistryModel();
-        $customer = $registry->getCustomer($customerId);
-        if (!$customer || (($customer['appId'] ?? $this->selectedAppId()) !== $this->selectedAppId())) {
-            $this->json(['success' => false, 'error' => 'Cliente no pertenece a la app seleccionada'], 403);
-        }
-        $result = $registry->revokeJwtToken($customerId);
-
-        if (!$result) {
-            $this->json(['success' => false, 'error' => 'Cliente no encontrado'], 404);
-        }
-
-        $this->json([
-            'success' => true,
-            'message' => 'Token JWT revocado exitosamente'
-        ]);
+        $this->json((new RevokeJwtTokenFeature())->handle(
+            new JwtTokenRequest(),
+            $this->selectedAppId()
+        ));
     }
 
     /**
@@ -1470,39 +971,10 @@ class AdminController extends Controller
      */
     public function customerIpsJson(string $customerId)
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $customerId = trim($customerId);
-
-        if ($customerId === '') {
-            $this->json(['error' => 'customerId es obligatorio'], 422);
-        }
-
-        $registry = new CustomerRegistryModel();
-        $customer = $registry->getCustomer($customerId);
-        if (!$customer || (($customer['appId'] ?? $this->selectedAppId()) !== $this->selectedAppId())) {
-            $this->json(['error' => 'Cliente no pertenece a la app seleccionada'], 403);
-        }
-
-        $ipLogModel = new \Models\CustomerIpLogModel();
-
-        $ips = $ipLogModel->getCustomerIps($customerId);
-        $hasMultiple = $ipLogModel->hasMultipleRecentIps($customerId);
-
-        $this->json([
-            'success' => true,
-            'customerId' => $customerId,
-            'hasMultipleRecentIps' => $hasMultiple,
-            'ips' => $ips,
-        ]);
+        $this->json((new GetCustomerIpsFeature())->handle(
+            new CustomerIdRequest(['GET'], ['customerId' => $customerId]),
+            $this->selectedAppId()
+        ));
     }
 
     /**
@@ -1511,47 +983,10 @@ class AdminController extends Controller
      */
     public function flagIp(string $id)
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $payload = json_decode(file_get_contents('php://input'), true);
-        $flagged = isset($payload['flagged']) ? (bool) $payload['flagged'] : true;
-        $reason = isset($payload['reason']) ? trim((string) $payload['reason']) : null;
-
-        $ipLogModel = new \Models\CustomerIpLogModel();
-        $appModel = $this->applicationModel();
-        if ($appModel->columnExists('Customers', 'AppId')) {
-            $db = new \Database();
-            $ipRow = $db->fetchOne(
-                'SELECT ipl.Id
-                 FROM CustomerIpLogs ipl
-                 INNER JOIN Customers c ON c.Id = ipl.CustomerId
-                 WHERE ipl.Id = ? AND c.AppId = ?
-                 LIMIT 1',
-                [$id, $this->selectedAppId()]
-            );
-            if (!$ipRow) {
-                $this->json(['success' => false, 'error' => 'Registro de IP no pertenece a la app seleccionada'], 403);
-            }
-        }
-
-        $result = $ipLogModel->setFlagged($id, $flagged, $reason);
-
-        if (!$result) {
-            $this->json(['success' => false, 'error' => 'Registro de IP no encontrado'], 404);
-        }
-
-        $this->json([
-            'success' => true,
-            'message' => $flagged ? 'IP marcada como sospechosa' : 'Marca de IP eliminada'
-        ]);
+        $this->json((new FlagIpFeature())->handle(
+            new FlagIpRequest($id),
+            $this->selectedAppId()
+        ));
     }
 
     /**
@@ -1560,8 +995,6 @@ class AdminController extends Controller
      */
     public function customerStats()
     {
-        $this->requirePermission('admin_access');
-
         $currentUser = $this->userModel->getCurrentUser();
         
         try {
@@ -1601,33 +1034,7 @@ class AdminController extends Controller
      */
     public function customerStatsJson()
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        try {
-            $statsService = new CustomerStatsService();
-            $globalStats = $statsService->getGlobalStats($this->selectedAppId());
-            $customersStats = $statsService->getAllCustomersStats($this->selectedAppId());
-
-            $this->json([
-                'global' => $globalStats,
-                'customers' => $customersStats,
-                'generatedAt' => date('Y-m-d H:i:s'),
-            ]);
-        } catch (\Throwable $e) {
-            error_log('CustomerStatsJson error: ' . $e->getMessage());
-            $this->json([
-                'error' => 'Error al obtener estadísticas',
-                'debug' => $e->getMessage(),
-            ], 500);
-        }
+        $this->json((new GetCustomerStatsFeature())->handle($this->selectedAppId()));
     }
 
     /**
@@ -1636,54 +1043,14 @@ class AdminController extends Controller
      */
     public function customerStatsDetailJson(string $customerId)
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $customerId = trim($customerId);
-        if ($customerId === '') {
-            $this->json(['error' => 'customerId es obligatorio'], 422);
-        }
-
-        try {
-            $registry = new CustomerRegistryModel();
-            $customer = $registry->getCustomer($customerId);
-
-            if (!$customer) {
-                $this->json(['error' => 'Cliente no encontrado'], 404);
-            }
-
-            if (($customer['appId'] ?? $this->selectedAppId()) !== $this->selectedAppId()) {
-                $this->json(['error' => 'Cliente no pertenece a la app seleccionada'], 403);
-            }
-
-            $statsService = new CustomerStatsService();
-            $stats = $statsService->getCustomerStats($customerId);
-
-            $this->json([
-                'customer' => $customer,
-                'stats' => $stats,
-                'generatedAt' => date('Y-m-d H:i:s'),
-            ]);
-        } catch (\Throwable $e) {
-            error_log('CustomerStatsDetailJson error: ' . $e->getMessage());
-            $this->json([
-                'error' => 'Error al obtener estadísticas del cliente',
-                'debug' => $e->getMessage(),
-            ], 500);
-        }
+        $this->json((new GetCustomerStatsDetailFeature())->handle(
+            new CustomerIdRequest(['GET'], ['customerId' => $customerId]),
+            $this->selectedAppId()
+        ));
     }
 
     public function dashboard(): void
     {
-        $this->requirePermission('admin_access');
-
         $data = [
             'currentUser' => $this->userModel->getCurrentUser(),
             'title' => 'Dashboard',
@@ -1695,46 +1062,51 @@ class AdminController extends Controller
 
     public function dashboardJson(): void
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        try {
-            $service = new AdminDashboardService();
-            $this->json([
-                'success' => true,
-                'dashboard' => $service->getDashboard($this->selectedStripeService(), $this->selectedAppId()),
-                'stripe_dashboard_url' => ($_ENV['APP_MODE'] ?? 'DEV') === 'PROD'
-                    ? 'https://dashboard.stripe.com/'
-                    : 'https://dashboard.stripe.com/test/',
-            ]);
-        } catch (\Throwable $e) {
-            $this->json(['success' => false, 'error' => $e->getMessage()], 500);
-        }
+        $this->json((new GetDashboardFeature())->handle(
+            $this->selectedStripeService(),
+            $this->selectedAppId()
+        ));
     }
 
     public function dashboardSettingsJson(): void
     {
-        $this->requirePermission('admin_access');
+        $this->json((new SaveDashboardSettingsFeature())->handle(
+            new DashboardSettingsRequest(),
+            $this->selectedAppId()
+        ));
+    }
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
+    public function customerErrorReports(): void
+    {
+        $request = new CustomerErrorReportsRequest();
+        $result = (new ListCustomerErrorReportsFeature())->handle($request, $this->selectedAppId());
 
-        $payload = json_decode(file_get_contents('php://input'), true) ?? [];
-        $cost = (float)($payload['whatsapp_message_unit_cost_mxn'] ?? 0);
+        $this->view('admin/customer-error-reports', [
+            'currentUser' => $this->userModel->getCurrentUser(),
+            'title' => 'Errores de clientes',
+            'isAuthenticated' => true,
+            'reports' => $result['reports'],
+            'summary' => $result['summary'],
+            'filters' => $request->filters,
+        ]);
+    }
 
-        try {
-            $service = new AdminDashboardService();
-            $service->updateWhatsappMessageCost($cost, $this->selectedAppId());
-            $this->json(['success' => true]);
-        } catch (\InvalidArgumentException $e) {
-            $this->json(['success' => false, 'error' => $e->getMessage()], 422);
-        } catch (\Throwable $e) {
-            $this->json(['success' => false, 'error' => $e->getMessage()], 500);
-        }
+    public function customerErrorReportsJson(): void
+    {
+        $this->json((new ListCustomerErrorReportsFeature())->handle(
+            new CustomerErrorReportsRequest(),
+            $this->selectedAppId()
+        ));
+    }
+
+    public function markCustomerErrorReportReadJson(string $id): void
+    {
+        $currentUser = $this->userModel->getCurrentUser();
+        $this->json((new MarkCustomerErrorReportReadFeature())->handle(
+            new CustomerErrorReportIdRequest($id),
+            $this->selectedAppId(),
+            $currentUser['username'] ?? null
+        ));
     }
 
     // ==================== HISTORIAL DE DESCARGAS ====================
@@ -1745,8 +1117,6 @@ class AdminController extends Controller
      */
     public function downloads()
     {
-        $this->requirePermission('admin_access');
-
         $currentUser = $this->userModel->getCurrentUser();
         $downloadLogModel = new DownloadLogModel();
         
@@ -1777,32 +1147,10 @@ class AdminController extends Controller
      */
     public function downloadsJson()
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $downloadLogModel = new DownloadLogModel();
-        
-        // Obtener parámetros
-        $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
-        $perPage = isset($_GET['perPage']) ? max(10, min(100, (int) $_GET['perPage'])) : 20;
-        $searchIp = isset($_GET['ip']) ? trim($_GET['ip']) : null;
-        
-        // Obtener datos
-        $downloads = $downloadLogModel->getDownloadsGroupedByIp($page, $perPage, $searchIp ?: null, $this->selectedAppId());
-        $summary = $downloadLogModel->getDownloadsSummary($this->selectedAppId());
-
-        $this->json([
-            'downloads' => $downloads,
-            'summary' => $summary,
-            'generatedAt' => date('Y-m-d H:i:s'),
-        ]);
+        $this->json((new GetDownloadsFeature())->handle(
+            new DownloadsRequest(),
+            $this->selectedAppId()
+        ));
     }
 
     /**
@@ -1811,30 +1159,10 @@ class AdminController extends Controller
      */
     public function downloadsByIpJson(string $ipAddress)
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $ipAddress = urldecode(trim($ipAddress));
-
-        if ($ipAddress === '') {
-            $this->json(['error' => 'IP es obligatoria'], 422);
-        }
-
-        $downloadLogModel = new DownloadLogModel();
-        $downloads = $downloadLogModel->getDownloadsByIp($ipAddress, 100, $this->selectedAppId());
-
-        $this->json([
-            'ipAddress' => $ipAddress,
-            'count' => count($downloads),
-            'downloads' => $downloads,
-        ]);
+        $this->json((new GetDownloadsByIpFeature())->handle(
+            new DownloadIpRequest($ipAddress),
+            $this->selectedAppId()
+        ));
     }
 
     // ==================== LICENCIAS ====================
@@ -1845,8 +1173,6 @@ class AdminController extends Controller
      */
     public function licenses(): void
     {
-        $this->requirePermission('admin_access');
-
         $currentUser = $this->userModel->getCurrentUser();
 
         $data = [
@@ -1864,29 +1190,11 @@ class AdminController extends Controller
      */
     public function licensesJson(): void
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $logModel = new LicenseLogModel();
-        $licenses = $logModel->getAll(0, 0, $this->selectedAppId());
-
-        $this->json([
-            'count'    => count($licenses),
-            'licenses' => $licenses,
-        ]);
+        $this->json((new ListLicensesFeature())->handle($this->selectedAppId()));
     }
 
     public function stripePlans(): void
     {
-        $this->requirePermission('admin_access');
-
         $data = [
             'currentUser' => $this->userModel->getCurrentUser(),
             'title' => 'Planes Stripe',
@@ -1898,258 +1206,59 @@ class AdminController extends Controller
 
     public function stripePlansJson(): void
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        try {
-            $model = new StripePlanModel();
-            $tablesReady = $model->hasPlanTables() && $model->hasPriceFields();
-            $plans = [];
-            $source = 'database';
-
-            $appId = $this->selectedAppId();
-
-            if ($tablesReady && $model->hasPlans($appId)) {
-                $plans = array_values($model->getPlans(false, $appId));
-            } else {
-                $plans = array_values($this->makeStripeService()->getConfiguredPlans());
-                $source = 'config';
-            }
-
-            if (!in_array('free', array_column($plans, 'lookup_key'), true)) {
-                $freePlan = $this->makeStripeService()->getPlanRulesByLookupKey('free');
-                if ($freePlan) {
-                    array_unshift($plans, $freePlan + [
-                        'unit_amount' => null,
-                        'currency' => 'mxn',
-                        'is_active' => true,
-                        'sort_order' => 0,
-                    ]);
-                }
-            }
-
-            $stripeService = $this->makeStripeService();
-            $stripeLookup = $stripeService->findPricesByLookupKeys(array_column($plans, 'lookup_key'));
-            if (!($stripeLookup['success'] ?? false)) {
-                $pricesByLookupKey = [];
-                foreach (array_column($plans, 'lookup_key') as $lookupKey) {
-                    $single = $stripeService->findPriceByLookupKey($lookupKey);
-                    if (($single['success'] ?? false) && ($single['exists'] ?? false) && !empty($single['price'])) {
-                        $pricesByLookupKey[$lookupKey] = $single['price'];
-                    }
-                }
-                $stripeLookup = [
-                    'success' => true,
-                    'prices' => $pricesByLookupKey,
-                    'fallback' => true,
-                ];
-            }
-
-            if ($stripeLookup['success'] ?? false) {
-                $pricesByLookupKey = $stripeLookup['prices'] ?? [];
-                foreach ($plans as &$plan) {
-                    $stripePrice = $pricesByLookupKey[$plan['lookup_key'] ?? ''] ?? null;
-                    $plan['stripe_exists'] = $stripePrice !== null;
-                    $plan['stripe_price'] = $stripePrice;
-
-                    if ($stripePrice && empty($plan['stripe_price_id'])) {
-                        $plan['stripe_price_id'] = $stripePrice['id'] ?? null;
-                        if ($tablesReady && $source === 'database' && !empty($stripePrice['id'])) {
-                            $model->setStripePriceId($plan['lookup_key'], $stripePrice['id'], $appId);
-                        }
-                    }
-                }
-                unset($plan);
-            }
-
-            $this->json([
-                'success' => true,
-                'plans' => $plans,
-                'rules_catalog' => $tablesReady ? $model->getRuleCatalog($appId) : [],
-                'tables_ready' => $tablesReady,
-                'source' => $source,
-                'stripe_checked' => $stripeLookup['success'] ?? false,
-                'stripe_dashboard_base' => ($_ENV['APP_MODE'] ?? 'DEV') === 'PROD'
-                    ? 'https://dashboard.stripe.com/prices/'
-                    : 'https://dashboard.stripe.com/test/prices/',
-            ]);
-        } catch (\Throwable $e) {
-            $this->json(['success' => false, 'error' => $e->getMessage()], 500);
-        }
+        $this->json((new ListStripePlansFeature())->handle(
+            $this->selectedStripeService(),
+            $this->selectedAppId()
+        ));
     }
 
     public function stripePlanSaveJson(): void
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $payload = json_decode(file_get_contents('php://input'), true) ?? [];
-
-        try {
-            $model = new StripePlanModel();
-            if (!$model->hasPlanTables() || !$model->hasPriceFields()) {
-                $this->json(['success' => false, 'error' => 'Ejecuta primero las migraciones 009_create_stripe_plan_catalog.sql y 010_add_stripe_plan_price_fields.sql'], 400);
-            }
-
-            $payload['rules'] = $this->normalizePlanRules($payload['rules'] ?? []);
-            $payload['showBillingIds'] = $this->normalizeBillingIds($payload['showBillingIds'] ?? []);
-            $payload['app_id'] = $this->selectedAppId();
-
-            $plan = $model->savePlan($payload);
-            $this->json(['success' => true, 'plan' => $plan]);
-        } catch (\InvalidArgumentException $e) {
-            $this->json(['success' => false, 'error' => $e->getMessage()], 422);
-        } catch (\Throwable $e) {
-            $this->json(['success' => false, 'error' => $e->getMessage()], 500);
-        }
+        $this->json((new SaveStripePlanFeature())->handle(
+            new StripePlanRequest(),
+            $this->selectedAppId()
+        ));
     }
 
     public function stripePlanVerifyJson(string $lookupKey): void
     {
-        $this->requirePermission('admin_access');
+        $result = (new VerifyStripePlanFeature())->handle(
+            new StripeLookupKeyRequest(['GET'], $lookupKey),
+            $this->selectedStripeService(),
+            $this->selectedAppId()
+        );
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $service = $this->makeStripeService();
-        $result = $service->findPriceByLookupKey($lookupKey);
-        if (($result['success'] ?? false) && ($result['exists'] ?? false) && !empty($result['price']['id'])) {
-            try {
-                $model = new StripePlanModel();
-                if ($model->hasPlanTables()) {
-                    $model->setStripePriceId($lookupKey, $result['price']['id'], $this->selectedAppId());
-                }
-            } catch (\Throwable $e) {
-                // La verificacion contra Stripe ya fue exitosa; no bloquear por sincronizacion local.
-            }
-        }
-        $this->json($result, ($result['success'] ?? false) ? 200 : 400);
+        $this->json($result['payload'], $result['httpStatus']);
     }
 
     public function stripePlanCreateStripePriceJson(string $lookupKey): void
     {
-        $this->requirePermission('admin_access');
+        $appId = $this->selectedAppId();
+        $config = $this->applicationModel()->getStripeConfig($appId);
+        $result = (new CreateStripePriceFeature())->handle(
+            new StripeLookupKeyRequest(['POST'], $lookupKey),
+            $this->makeStripeService($config),
+            $config['product_id'] ?? null,
+            $appId
+        );
 
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        try {
-            $model = new StripePlanModel();
-            if (!$model->hasPlanTables() || !$model->hasPriceFields()) {
-                $this->json(['success' => false, 'error' => 'Ejecuta primero las migraciones de planes Stripe'], 400);
-            }
-
-            $appId = $this->selectedAppId();
-            $plan = $model->getPlanByLookupKey($lookupKey, false, $appId);
-            if (!$plan) {
-                $this->json(['success' => false, 'error' => 'Plan no encontrado'], 404);
-            }
-
-            $config = $this->applicationModel()->getStripeConfig($appId);
-            $service = $this->makeStripeService($config);
-            $productId = $plan['stripe_product_id'] ?? ($config['product_id'] ?? null);
-            $result = $service->createStripePriceFromPlan($plan, $productId);
-
-            if ($result['success'] ?? false) {
-                $priceId = $result['price']['id'] ?? null;
-                if ($priceId) {
-                    $model->setStripePriceId($lookupKey, $priceId, $appId);
-                }
-            }
-
-            $this->json($result, ($result['success'] ?? false) ? 200 : 400);
-        } catch (\Throwable $e) {
-            $this->json(['success' => false, 'error' => $e->getMessage()], 500);
-        }
+        $this->json($result['payload'], $result['httpStatus']);
     }
 
     public function stripePlanRuleSaveJson(): void
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $payload = json_decode(file_get_contents('php://input'), true) ?? [];
-
-        try {
-            $model = new StripePlanModel();
-            if (!$model->hasPlanTables()) {
-                $this->json(['success' => false, 'error' => 'Ejecuta primero las migraciones de planes Stripe'], 400);
-            }
-            if (!$model->hasRuleCatalogAppField()) {
-                $this->json(['success' => false, 'error' => 'Ejecuta la migracion 015_make_stripe_rule_catalog_app_specific.sql para administrar reglas por app'], 400);
-            }
-
-            $rule = $model->saveRuleCatalogEntry($payload, $this->selectedAppId());
-            $this->json(['success' => true, 'rule' => $rule]);
-        } catch (\InvalidArgumentException $e) {
-            $this->json(['success' => false, 'error' => $e->getMessage()], 422);
-        } catch (\Throwable $e) {
-            $this->json(['success' => false, 'error' => $e->getMessage()], 500);
-        }
+        $this->json((new SaveStripePlanRuleFeature())->handle(
+            new StripePlanRequest(),
+            $this->selectedAppId()
+        ));
     }
 
     public function stripePlanRuleUnlinkJson(string $ruleId): void
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'DELETE' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        try {
-            $model = new StripePlanModel();
-            $model->unlinkRuleFromApp((int)$ruleId, $this->selectedAppId());
-            $this->json(['success' => true]);
-        } catch (\InvalidArgumentException $e) {
-            $this->json(['success' => false, 'error' => $e->getMessage()], 422);
-        } catch (\Throwable $e) {
-            $this->json(['success' => false, 'error' => $e->getMessage()], 500);
-        }
-    }
-
-    private function normalizePlanRules(array $rules): array
-    {
-        $normalized = [];
-        foreach ($rules as $key => $value) {
-            $key = trim((string)$key);
-            if ($key === '') {
-                continue;
-            }
-
-            if ($value === '__null__' || $value === '') {
-                $normalized[$key] = null;
-            } elseif ($value === 'true' || $value === true) {
-                $normalized[$key] = true;
-            } elseif ($value === 'false' || $value === false) {
-                $normalized[$key] = false;
-            } elseif (is_numeric($value)) {
-                $normalized[$key] = (int)$value;
-            } else {
-                $normalized[$key] = $value;
-            }
-        }
-
-        return $normalized;
-    }
-
-    private function normalizeBillingIds($value): array
-    {
-        if (is_string($value)) {
-            $value = preg_split('/[\r\n,]+/', $value);
-        }
-
-        return array_values(array_unique(array_filter(array_map('trim', is_array($value) ? $value : []))));
+        $this->json((new UnlinkStripePlanRuleFeature())->handle(
+            new StripeRuleIdRequest($ruleId),
+            $this->selectedAppId()
+        ));
     }
 
     private function makeStripeService(?array $config = null, ?string $appId = null): StripeService
@@ -2175,200 +1284,12 @@ class AdminController extends Controller
      */
     public function generateLicenseAdmin(): void
     {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            $this->json(['status' => 'ok']);
-        }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-
-        $payload    = json_decode(file_get_contents('php://input'), true) ?? [];
-        $customerId = trim($payload['customerId'] ?? '');
-
-        if ($customerId === '') {
-            $this->json(['error' => 'customerId es obligatorio'], 422);
-        }
-
-        $registry = new CustomerRegistryModel();
-        $customer = $registry->getCustomer($customerId);
-        if (!$customer) {
-            $this->json(['error' => 'Cliente no encontrado'], 404);
-        }
-
-        $billingId     = $customer['billingId'] ?? null;
-        $machineToken  = trim($payload['machineToken'] ?? '') ?: ($customer['token'] ?? null);
-        $customerAppId = $customer['appId'] ?? $this->selectedAppId();
-        $stripeService = $this->makeStripeService($this->applicationModel()->getStripeConfig($customerAppId), $customerAppId);
-        $planLookupKey = trim($payload['planLookupKey'] ?? '');
-        $isFreePlan    = $planLookupKey === 'free';
-        $isPermanent   = false;
-        $expiresAt     = null;
-        $planName      = $planLookupKey;
-        $rules         = null;
-        $applyFreePlan = function () use ($stripeService, &$planLookupKey, &$planName, &$isPermanent, &$expiresAt, &$rules): void {
-            $freePlan = $stripeService->getPlanRulesByLookupKey('free');
-            if (!$freePlan) {
-                $this->json(['error' => 'El plan free no esta configurado'], 400);
-            }
-
-            $planLookupKey = 'free';
-            $planName      = $freePlan['name'] ?? 'Plan Start';
-            $isPermanent   = false;
-            $expiresAt     = strtotime('+1 month');
-            $rules         = $freePlan['rules'] ?? null;
-        };
-
-        if ($isFreePlan) {
-            $applyFreePlan();
-        } else {
-            if (!$billingId) {
-                if ($planLookupKey === '') {
-                    $applyFreePlan();
-                } else {
-                    $this->json(['error' => 'El cliente no tiene billingId vinculado a Stripe'], 422);
-                }
-            } else {
-
-                $activeResult = $stripeService->getActiveSubscription($billingId);
-
-                if (!($activeResult['success'] ?? false)) {
-                    $this->json(['error' => 'Error al consultar Stripe: ' . ($activeResult['error'] ?? '')], 400);
-                }
-
-                $pl  = $activeResult['permanent_license'] ?? null;
-                $sub = $activeResult['subscription']      ?? null;
-
-                if (!$pl && !($activeResult['has_subscription'] ?? false)) {
-                    if ($planLookupKey === '') {
-                        $applyFreePlan();
-                    } else {
-                        $this->json(['error' => 'El cliente no tiene suscripcion activa ni licencia permanente en Stripe. No se puede generar la licencia.'], 400);
-                    }
-                } elseif ($pl) {
-                    if ($planLookupKey === '') $planLookupKey = $pl['lookup_key']  ?? 'permanent';
-                    $planName    = $pl['price_name']  ?? 'Licencia Permanente';
-                    $isPermanent = true;
-                    $expiresAt   = null;
-                } else {
-                    if ($planLookupKey === '') $planLookupKey = $sub['lookup_key'] ?? '';
-                    $planName    = $sub['price_name'] ?? $planLookupKey;
-                    $isPermanent = false;
-                    $expiresAt   = $sub['current_period_end'] ?? null;
-                }
-
-            }
-        }
-
-        $customExpiresAt = isset($payload['expiresAt']) ? (int)$payload['expiresAt'] : null;
-        if ($customExpiresAt && $customExpiresAt > 0) {
-            $expiresAt = $customExpiresAt;
-        }
-
-        if (empty($planLookupKey)) {
-            $this->json(['error' => 'No se pudo determinar el plan'], 400);
-        }
-
-        $planCfg = $stripeService->getPlanRulesByLookupKey($planLookupKey);
-        if ($planCfg) {
-            $planName    = $planCfg['name']  ?? $planName;
-            $isPermanent = ($planCfg['type'] ?? '') === 'permanent' ? true : $isPermanent;
-            $rules       = $planCfg['rules'] ?? $rules;
-        }
-
-        try {
-            $licenseService = new LicenseService();
-        } catch (\Exception $e) {
-            $this->json(['error' => 'LicenseService no disponible: verifique las claves RSA en .env'], 500);
-        }
-
-        $currentUser   = $this->userModel->getCurrentUser();
-        $adminUsername = $currentUser['username'] ?? 'admin';
-        $db = new \Database();
-
-        $dbRow = $db->fetchOne(
-            'SELECT Id, Token, TokenJwt FROM Customers WHERE Id = ? LIMIT 1',
-            [$customerId]
-        );
-
-        $customerJwt = trim((string)($dbRow['TokenJwt'] ?? ''));
-        if ($customerJwt === '' && $dbRow) {
-            $jwtService  = new \App\Services\JwtService();
-            $customerJwt = $jwtService->createToken([
-                'cid' => $dbRow['Id'],
-                'mkt' => $machineToken ?: ($dbRow['Token'] ?? ''),
-                'typ' => 'customer',
-            ], 0);
-
-            $db->update(
-                'Customers',
-                [
-                    'TokenJwt'          => $customerJwt,
-                    'TokenJwtCreatedAt' => date('Y-m-d H:i:s'),
-                    'TokenJwtExpiresAt' => null,
-                ],
-                'Id = ?',
-                [$dbRow['Id']]
-            );
-        }
-
-        try {
-            $token = $licenseService->generateLicense(
-                $billingId ?: $customerId,
-                $customer['name']  ?? '',
-                $customer['email'] ?? '',
-                $planLookupKey,
-                $planName,
-                $isPermanent,
-                $expiresAt,
-                $machineToken,
-                $rules,
-                $customerJwt !== '' ? $customerJwt : null
-            );
-
-            $licenseFile = $licenseService->generateLicenseFile(
-                $token,
-                $customer['name'] ?? '',
-                $planName,
-                $isPermanent,
-                $expiresAt,
-                $machineToken,
-                $rules
-            );
-
-            $logModel = new LicenseLogModel();
-            $logModel->createLog([
-                'AppId'         => $customerAppId,
-                'CustomerId'    => $customerId,
-                'BillingId'     => $billingId,
-                'CustomerName'  => $customer['name']  ?? '',
-                'CustomerEmail' => $customer['email'] ?? '',
-                'PlanLookupKey' => $planLookupKey,
-                'PlanName'      => $planName,
-                'IsPermanent'   => $isPermanent,
-                'ExpiresAt'     => $expiresAt ? date('Y-m-d H:i:s', $expiresAt) : null,
-                'MachineToken'  => $machineToken,
-                'LicenseToken'  => $token,
-                'CreatedBy'     => 'admin',
-                'AdminUsername' => $adminUsername,
-            ]);
-
-            $this->json([
-                'success'         => true,
-                'license_token'   => $token,
-                'license_file'    => $licenseFile,
-                'plan_lookup_key' => $planLookupKey,
-                'plan_name'       => $planName,
-                'is_permanent'    => $isPermanent,
-                'expires_at'      => $expiresAt,
-                'customer_name'   => $customer['name']  ?? '',
-                'customer_email'  => $customer['email'] ?? '',
-            ]);
-        } catch (\Exception $e) {
-            $this->json(['error' => 'Error al generar licencia: ' . $e->getMessage()], 500);
-        }
+        $currentUser = $this->userModel->getCurrentUser();
+        $this->json((new GenerateLicenseFeature())->handle(
+            new GenerateLicenseRequest(),
+            $this->selectedAppId(),
+            $currentUser['username'] ?? 'admin'
+        ));
     }
 }
 

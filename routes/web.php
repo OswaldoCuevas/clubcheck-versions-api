@@ -54,6 +54,7 @@ $router->any('/api/customers/token/register', 'CustomersController', 'registerTo
 $router->any('/api/customers/token/await', 'CustomersController', 'awaitToken');// NO
 $router->any('/api/customers/jwt/validate', 'CustomersController', 'validateJwtToken');
 $router->post('/api/customers/update-client-version', 'CustomersController', 'updateClientVersion', ['customer_jwt']);
+$router->post('/api/customers/error-reports', 'CustomersController', 'reportError', ['customer_jwt']);
 $router->get('/api/customers/announcements/current', 'AnnouncementsController', 'current', ['customer_jwt']);
 $router->post('/api/customers/announcements/viewed', 'AnnouncementsController', 'viewedCurrent', ['customer_jwt']);
 $router->post('/api/customers/announcements/:id/viewed', 'AnnouncementsController', 'viewed', ['customer_jwt']);
@@ -107,96 +108,101 @@ $router->post('/api/customers/whatsapp/send/bulk', 'WhatsAppController', 'sendBu
 $router->post('/api/customers/whatsapp/business-profile/register', 'WhatsAppController', 'registerBusinessProfile'); // NO, Administrativo
 $router->get('/api/customers/whatsapp/business-profile', 'WhatsAppController', 'getBusinessProfile'); // NO, Administrativo
 
+$adminAccessMiddleware = ['permission:admin_access'];
+
 // Rutas administrativas
-$router->any('/admin', 'AdminController', 'index');// NO, Administrativo
-$router->get('/admin/app/select', 'AdminController', 'selectApplication');// NO, Administrativo
-$router->post('/admin/app/select', 'AdminController', 'selectApplication');// NO, Administrativo
-$router->get('/admin/applications', 'AdminController', 'applications');// NO, Administrativo
-$router->post('/admin/applications/save', 'AdminController', 'saveApplication');// NO, Administrativo
-$router->post('/admin/applications/settings', 'AdminController', 'saveApplicationSettings');// NO, Administrativo
-$router->post('/admin/applications/sync-tables', 'AdminController', 'saveApplicationSyncTables');// NO, Administrativo
-$router->get('/admin/dashboard', 'AdminController', 'dashboard');// NO, Administrativo
-$router->get('/admin/api/dashboard', 'AdminController', 'dashboardJson');// NO, Administrativo
-$router->post('/admin/api/dashboard/settings', 'AdminController', 'dashboardSettingsJson');// NO, Administrativo
-$router->get('/admin/customers', 'AdminController', 'customers');// NO, Administrativo
-$router->get('/admin/customer-login-attempts', 'AdminController', 'customerLoginAttempts');// NO, Administrativo
-$router->get('/admin/api/customers', 'AdminController', 'customersJson');// NO, Administrativo
-$router->get('/admin/api/customer-login-attempts', 'AdminController', 'customerLoginAttemptsJson');// NO, Administrativo
-$router->post('/admin/api/customers/save', 'AdminController', 'saveCustomerJson');// NO, Administrativo
-$router->post('/admin/api/customers/regenerate-access-key', 'AdminController', 'regenerateAccessKey');// NO, Administrativo
+$router->any('/admin', 'AdminController', 'index', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/app/select', 'AdminController', 'selectApplication', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/app/select', 'AdminController', 'selectApplication', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/applications', 'AdminController', 'applications', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/applications/save', 'AdminController', 'saveApplication', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/applications/settings', 'AdminController', 'saveApplicationSettings', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/applications/sync-tables', 'AdminController', 'saveApplicationSyncTables', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/dashboard', 'AdminController', 'dashboard', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/dashboard', 'AdminController', 'dashboardJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/dashboard/settings', 'AdminController', 'dashboardSettingsJson', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/customer-error-reports', 'AdminController', 'customerErrorReports', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/customer-error-reports', 'AdminController', 'customerErrorReportsJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/customer-error-reports/:id/read', 'AdminController', 'markCustomerErrorReportReadJson', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/customers', 'AdminController', 'customers', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/customer-login-attempts', 'AdminController', 'customerLoginAttempts', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/customers', 'AdminController', 'customersJson', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/customer-login-attempts', 'AdminController', 'customerLoginAttemptsJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/customers/save', 'AdminController', 'saveCustomerJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/customers/regenerate-access-key', 'AdminController', 'regenerateAccessKey', $adminAccessMiddleware); // NO, Administrativo
 // Eliminar cliente (desde panel admin)
-$router->post('/admin/api/customers/:customerId/delete', 'AdminController', 'deleteCustomerJson');// NO, Administrativo
-$router->delete('/admin/api/customers/:customerId', 'AdminController', 'deleteCustomerJson');// NO, Administrativo
-$router->get('/admin/api-docs', 'AdminController', 'apiDocs');// NO, Administrativo
+$router->post('/admin/api/customers/:customerId/delete', 'AdminController', 'deleteCustomerJson', $adminAccessMiddleware); // NO, Administrativo
+$router->delete('/admin/api/customers/:customerId', 'AdminController', 'deleteCustomerJson', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api-docs', 'AdminController', 'apiDocs', $adminAccessMiddleware); // NO, Administrativo
 
 // Announcements Admin
-$router->get('/admin/announcements', 'AdminController', 'announcements');// NO, Administrativo
-$router->get('/admin/api/announcements', 'AdminController', 'announcementsJson');// NO, Administrativo
-$router->post('/admin/api/announcements', 'AdminController', 'announcementSaveJson');// NO, Administrativo
-$router->post('/admin/api/announcements/upload-image', 'AdminController', 'announcementUploadImageJson');// NO, Administrativo
-$router->get('/admin/api/announcements/:id/views', 'AdminController', 'announcementViewsJson');// NO, Administrativo
-$router->post('/admin/api/announcements/:id/activate', 'AdminController', 'announcementActivateJson');// NO, Administrativo
-$router->post('/admin/api/announcements/:id/delete', 'AdminController', 'announcementDeleteJson');// NO, Administrativo
-$router->delete('/admin/api/announcements/:id', 'AdminController', 'announcementDeleteJson');// NO, Administrativo
+$router->get('/admin/announcements', 'AdminController', 'announcements', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/announcements', 'AdminController', 'announcementsJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/announcements', 'AdminController', 'announcementSaveJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/announcements/upload-image', 'AdminController', 'announcementUploadImageJson', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/announcements/:id/views', 'AdminController', 'announcementViewsJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/announcements/:id/activate', 'AdminController', 'announcementActivateJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/announcements/:id/delete', 'AdminController', 'announcementDeleteJson', $adminAccessMiddleware); // NO, Administrativo
+$router->delete('/admin/api/announcements/:id', 'AdminController', 'announcementDeleteJson', $adminAccessMiddleware); // NO, Administrativo
 
 // WhatsApp Admin CRUD
-$router->get('/admin/whatsapp', 'AdminController', 'whatsapp');// NO, Administrativo
-$router->get('/admin/api/whatsapp', 'AdminController', 'whatsappListJson');// NO, Administrativo
-$router->get('/admin/api/whatsapp/templates', 'AdminController', 'whatsappTemplatesJson');// NO, Administrativo
-$router->post('/admin/api/whatsapp/templates', 'AdminController', 'whatsappTemplateCreateJson');// NO, Administrativo
-$router->post('/admin/api/whatsapp/templates/:id/delete', 'AdminController', 'whatsappTemplateDeleteJson');// NO, Administrativo
-$router->delete('/admin/api/whatsapp/templates/:id', 'AdminController', 'whatsappTemplateDeleteJson');// NO, Administrativo
-$router->post('/admin/api/whatsapp/:id/delete', 'AdminController', 'whatsappDeleteJson');// NO, Administrativo
-$router->post('/admin/api/whatsapp/:id/register', 'AdminController', 'whatsappRegisterJson');// NO, Administrativo
-$router->get('/admin/api/whatsapp/:id/status', 'AdminController', 'whatsappStatusJson');// NO, Administrativo
-$router->delete('/admin/api/whatsapp/:id', 'AdminController', 'whatsappDeleteJson');// NO, Administrativo
-$router->post('/admin/api/whatsapp', 'AdminController', 'whatsappCreateJson');// NO, Administrativo
+$router->get('/admin/whatsapp', 'AdminController', 'whatsapp', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/whatsapp', 'AdminController', 'whatsappListJson', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/whatsapp/templates', 'AdminController', 'whatsappTemplatesJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/whatsapp/templates', 'AdminController', 'whatsappTemplateCreateJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/whatsapp/templates/:id/delete', 'AdminController', 'whatsappTemplateDeleteJson', $adminAccessMiddleware); // NO, Administrativo
+$router->delete('/admin/api/whatsapp/templates/:id', 'AdminController', 'whatsappTemplateDeleteJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/whatsapp/:id/delete', 'AdminController', 'whatsappDeleteJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/whatsapp/:id/register', 'AdminController', 'whatsappRegisterJson', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/whatsapp/:id/status', 'AdminController', 'whatsappStatusJson', $adminAccessMiddleware); // NO, Administrativo
+$router->delete('/admin/api/whatsapp/:id', 'AdminController', 'whatsappDeleteJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/whatsapp', 'AdminController', 'whatsappCreateJson', $adminAccessMiddleware); // NO, Administrativo
 
 // JWT Tokens Admin
-$router->get('/admin/jwt-tokens', 'AdminController', 'jwtTokens');// NO, Administrativo
-$router->get('/admin/api/jwt-tokens', 'AdminController', 'jwtTokensJson');// NO, Administrativo
-$router->post('/admin/api/jwt-tokens/create', 'AdminController', 'createJwtToken');// NO, Administrativo
-$router->post('/admin/api/jwt-tokens/revoke', 'AdminController', 'revokeJwtToken');// NO, Administrativo
-$router->get('/admin/api/jwt-tokens/customer/:customerId/ips', 'AdminController', 'customerIpsJson');// NO, Administrativo
-$router->post('/admin/api/jwt-tokens/ips/:id/flag', 'AdminController', 'flagIp');// NO, Administrativo
+$router->get('/admin/jwt-tokens', 'AdminController', 'jwtTokens', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/jwt-tokens', 'AdminController', 'jwtTokensJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/jwt-tokens/create', 'AdminController', 'createJwtToken', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/jwt-tokens/revoke', 'AdminController', 'revokeJwtToken', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/jwt-tokens/customer/:customerId/ips', 'AdminController', 'customerIpsJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/jwt-tokens/ips/:id/flag', 'AdminController', 'flagIp', $adminAccessMiddleware); // NO, Administrativo
 
 // Customer Stats Admin
-$router->get('/admin/customer-stats', 'AdminController', 'customerStats');// NO, Administrativo
-$router->get('/admin/api/customer-stats', 'AdminController', 'customerStatsJson');// NO, Administrativo
-$router->get('/admin/api/customer-stats/:customerId', 'AdminController', 'customerStatsDetailJson');// NO, Administrativo
+$router->get('/admin/customer-stats', 'AdminController', 'customerStats', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/customer-stats', 'AdminController', 'customerStatsJson', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/customer-stats/:customerId', 'AdminController', 'customerStatsDetailJson', $adminAccessMiddleware); // NO, Administrativo
 
 // Desktop Tables Admin
-$router->get('/admin/desktop-tables', 'DesktopTablesController', 'index');// NO, Administrativo
-$router->get('/admin/desktop-tables/view', 'DesktopTablesController', 'viewTable');// NO, Administrativo
-$router->get('/admin/desktop-tables/api/data', 'DesktopTablesController', 'getData');// NO, Administrativo
+$router->get('/admin/desktop-tables', 'DesktopTablesController', 'index', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/desktop-tables/view', 'DesktopTablesController', 'viewTable', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/desktop-tables/api/data', 'DesktopTablesController', 'getData', $adminAccessMiddleware); // NO, Administrativo
 
 // Downloads History Admin
-$router->any('/admin/versions', 'HomeController', 'index');// NO, Administrativo
-$router->get('/admin/downloads', 'AdminController', 'downloads');// NO, Administrativo
-$router->get('/admin/api/downloads', 'AdminController', 'downloadsJson');// NO, Administrativo
-$router->get('/admin/api/downloads/ip/:ipAddress', 'AdminController', 'downloadsByIpJson');// NO, Administrativo
+$router->any('/admin/versions', 'HomeController', 'index', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/downloads', 'AdminController', 'downloads', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/downloads', 'AdminController', 'downloadsJson', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/downloads/ip/:ipAddress', 'AdminController', 'downloadsByIpJson', $adminAccessMiddleware); // NO, Administrativo
 
 // License Validation (public — no auth required)
 $router->post('/api/licenses/validate', 'StripeController', 'validateLicense');
 
 // Licenses Admin
-$router->get('/admin/licenses', 'AdminController', 'licenses');// NO, Administrativo
-$router->get('/admin/api/licenses', 'AdminController', 'licensesJson');// NO, Administrativo
-$router->post('/admin/api/licenses/generate', 'AdminController', 'generateLicenseAdmin');// NO, Administrativo
+$router->get('/admin/licenses', 'AdminController', 'licenses', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/licenses', 'AdminController', 'licensesJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/licenses/generate', 'AdminController', 'generateLicenseAdmin', $adminAccessMiddleware); // NO, Administrativo
 
 // Stripe Plans Admin
-$router->get('/admin/stripe-plans', 'AdminController', 'stripePlans');// NO, Administrativo
-$router->get('/admin/api/stripe-plans', 'AdminController', 'stripePlansJson');// NO, Administrativo
-$router->post('/admin/api/stripe-plans', 'AdminController', 'stripePlanSaveJson');// NO, Administrativo
-$router->post('/admin/api/stripe-plan-rules', 'AdminController', 'stripePlanRuleSaveJson');// NO, Administrativo
-$router->delete('/admin/api/stripe-plan-rules/:ruleId', 'AdminController', 'stripePlanRuleUnlinkJson');// NO, Administrativo
-$router->get('/admin/api/stripe-plans/:lookupKey/verify', 'AdminController', 'stripePlanVerifyJson');// NO, Administrativo
-$router->post('/admin/api/stripe-plans/:lookupKey/create-stripe-price', 'AdminController', 'stripePlanCreateStripePriceJson');// NO, Administrativo
+$router->get('/admin/stripe-plans', 'AdminController', 'stripePlans', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/stripe-plans', 'AdminController', 'stripePlansJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/stripe-plans', 'AdminController', 'stripePlanSaveJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/stripe-plan-rules', 'AdminController', 'stripePlanRuleSaveJson', $adminAccessMiddleware); // NO, Administrativo
+$router->delete('/admin/api/stripe-plan-rules/:ruleId', 'AdminController', 'stripePlanRuleUnlinkJson', $adminAccessMiddleware); // NO, Administrativo
+$router->get('/admin/api/stripe-plans/:lookupKey/verify', 'AdminController', 'stripePlanVerifyJson', $adminAccessMiddleware); // NO, Administrativo
+$router->post('/admin/api/stripe-plans/:lookupKey/create-stripe-price', 'AdminController', 'stripePlanCreateStripePriceJson', $adminAccessMiddleware); // NO, Administrativo
 
 // Rutas de herramientas
-$router->any('/password-generator', 'ToolsController', 'passwordGenerator');
-$router->any('/quick-hash', 'ToolsController', 'quickHash');
-$router->any('/generate-password', 'ToolsController', 'generatePassword');
+$router->any('/password-generator', 'ToolsController', 'passwordGenerator', $adminAccessMiddleware);
+$router->any('/quick-hash', 'ToolsController', 'quickHash', $adminAccessMiddleware);
+$router->any('/generate-password', 'ToolsController', 'generatePassword', $adminAccessMiddleware);
 
 // ==================== STRIPE ====================
 // Configuración pública (clave pública para el cliente)

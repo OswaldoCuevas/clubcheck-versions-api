@@ -6,23 +6,32 @@ ob_start();
 <div class="container mt-4">
     <div id="alertBox"></div>
 
+    <div class="d-flex justify-content-end mb-3">
+        <button type="button" class="btn btn-primary" id="openAnnouncementFormBtn">
+            <i class="fas fa-plus me-1"></i>Nuevo anuncio
+        </button>
+    </div>
+
     <div class="row g-4">
-        <div class="col-lg-4">
+        <div class="col-12" id="announcementListPanel">
+            <div id="announcementsFilter"></div>
             <div class="card">
                 <div class="card-header">
                     <h5 class="mb-0">Anuncios guardados</h5>
                 </div>
                 <div class="list-group list-group-flush" id="announcementList"></div>
             </div>
+            <div id="announcementsPagination"></div>
         </div>
 
-        <div class="col-lg-8">
-            <div class="card">
+        <div class="col-12 d-none" id="announcementFormPanel">
+            <div class="admin-form-panel">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Constructor visual</h5>
-                    <button type="button" class="btn btn-light btn-sm" id="newBtn">
-                        <i class="fas fa-plus me-1"></i>Nuevo
-                    </button>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="newBtn"><i class="fas fa-eraser me-1"></i>Limpiar</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="closeAnnouncementFormBtn">Cerrar</button>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
@@ -163,7 +172,7 @@ CSS;
 
 $customScripts = <<<'JS'
 <script>
-const state = { announcements: [], slides: [], previewIndex: 0 };
+const state = { announcements: [], slides: [], previewIndex: 0, page: 1, pageSize: 10, filters: { search: '', status: 'all' } };
 const api = path => `${window.location.origin}${window.location.pathname.replace(/\/admin\/announcements$/, '')}${path}`;
 
 function esc(value) {
@@ -183,11 +192,24 @@ async function loadAnnouncements() {
 
 function renderList() {
     const list = document.getElementById('announcementList');
-    if (!state.announcements.length) {
+    const search = state.filters.search.toLowerCase().trim();
+    const filtered = state.announcements.filter(a => {
+        const matchesSearch = !search || [a.title, a.id, a.version, a.subtitle].some(value => String(value || '').toLowerCase().includes(search));
+        const matchesStatus = state.filters.status === 'all'
+            || (state.filters.status === 'active' && a.isActive)
+            || (state.filters.status === 'inactive' && !a.isActive);
+        return matchesSearch && matchesStatus;
+    });
+    const page = window.AdminPagination
+        ? window.AdminPagination.range(filtered, state.page, state.pageSize)
+        : { items: filtered, page: 1 };
+    state.page = page.page;
+    if (!filtered.length) {
         list.innerHTML = '<div class="p-3 text-muted">Sin anuncios guardados.</div>';
+        window.AdminPagination?.render({ container: '#announcementsPagination', page: 1, pageSize: state.pageSize, totalItems: 0 });
         return;
     }
-    list.innerHTML = state.announcements.map(a => `
+    list.innerHTML = page.items.map(a => `
         <div class="list-group-item">
             <div class="d-flex justify-content-between">
                 <strong>${esc(a.title)}</strong>
@@ -202,6 +224,24 @@ function renderList() {
             </div>
         </div>
     `).join('');
+    window.AdminPagination?.render({
+        container: '#announcementsPagination', page: state.page, pageSize: state.pageSize,
+        totalItems: filtered.length, label: 'Paginacion de anuncios',
+        onChange: pageNumber => { state.page = pageNumber; renderList(); }
+    });
+}
+
+function showAnnouncementList() {
+    document.getElementById('announcementFormPanel').classList.add('d-none');
+    document.getElementById('announcementListPanel').classList.remove('d-none');
+    document.getElementById('openAnnouncementFormBtn').classList.remove('d-none');
+}
+
+function showAnnouncementForm() {
+    document.getElementById('announcementListPanel').classList.add('d-none');
+    document.getElementById('announcementFormPanel').classList.remove('d-none');
+    document.getElementById('openAnnouncementFormBtn').classList.add('d-none');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function blankForm() {
@@ -226,6 +266,7 @@ function editAnnouncement(id) {
     document.getElementById('isActive').checked = !!a.isActive;
     state.slides = JSON.parse(JSON.stringify(a.slides || []));
     renderSlides();
+    showAnnouncementForm();
 }
 
 function renderSlides() {
@@ -318,7 +359,7 @@ async function saveAnnouncement() {
     if (!res.ok) return alertMsg(data.error || 'No se pudo guardar', 'danger');
     alertMsg('Anuncio guardado correctamente.');
     await loadAnnouncements();
-    editAnnouncement(data.announcement.id);
+    showAnnouncementList();
 }
 
 async function activateAnnouncement(id) {
@@ -383,6 +424,8 @@ function renderPreview() {
     document.getElementById('previewDots').innerHTML = slides.map((_, i) => `<span class="dot ${i === state.previewIndex ? 'active' : ''}"></span>`).join('');
 }
 
+document.getElementById('openAnnouncementFormBtn').onclick = () => { blankForm(); showAnnouncementForm(); };
+document.getElementById('closeAnnouncementFormBtn').onclick = showAnnouncementList;
 document.getElementById('newBtn').onclick = blankForm;
 document.getElementById('addSlideBtn').onclick = () => { state.slides.push({ title: '', text: '', imageUrl: '', imageAlt: '' }); renderSlides(); };
 document.getElementById('saveBtn').onclick = saveAnnouncement;
@@ -390,6 +433,21 @@ document.getElementById('previewBtn').onclick = preview;
 document.getElementById('prevPreview').onclick = () => { state.previewIndex = Math.max(0, state.previewIndex - 1); renderPreview(); };
 document.getElementById('nextPreview').onclick = () => { state.previewIndex = Math.min(state.slides.length - 1, state.previewIndex + 1); renderPreview(); };
 
+if (window.AdminFilters) {
+    window.AdminFilters.mount({
+        container: '#announcementsFilter',
+        id: 'announcements-filter-drawer',
+        title: 'Filtrar anuncios',
+        defaults: { search: '', status: 'all' },
+        fields: [
+            { name: 'search', label: 'Buscar', type: 'search', placeholder: 'Titulo, ID o version' },
+            { name: 'status', label: 'Estado', type: 'select', hideChipValues: ['all'], options: [
+                { value: 'all', label: 'Todos' }, { value: 'active', label: 'Activos' }, { value: 'inactive', label: 'Inactivos' }
+            ] }
+        ],
+        onApply: values => { state.filters = values; state.page = 1; renderList(); }
+    });
+}
 blankForm();
 loadAnnouncements();
 </script>

@@ -39,6 +39,7 @@ if (!function_exists('admin_pagination_styles')) {
             font-size: 13px;
             font-weight: 800;
             box-shadow: 0 10px 22px rgba(47, 128, 237, 0.08);
+            text-decoration: none;
         }
 
         .admin-pagination-button:hover:not(:disabled),
@@ -48,10 +49,12 @@ if (!function_exists('admin_pagination_styles')) {
             color: #ffffff;
         }
 
-        .admin-pagination-button:disabled {
+        .admin-pagination-button:disabled,
+        .admin-pagination-button.disabled {
             cursor: not-allowed;
             opacity: 0.48;
             box-shadow: none;
+            pointer-events: none;
         }
 
         @media (max-width: 640px) {

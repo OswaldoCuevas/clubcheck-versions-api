@@ -78,6 +78,7 @@ ob_start();
                         <strong><?= htmlspecialchars($tableInfo['name']) ?></strong>.
                     </div>
                 <?php else: ?>
+                    <div id="desktopDataFilter"></div>
                     <div class="card shadow-sm">
                         <div class="card-header bg-light">
                             <div class="row align-items-center">
@@ -88,7 +89,7 @@ ob_start();
                                     </h5>
                                 </div>
                                 <div class="col-md-6 text-end">
-                                    <input type="text" class="form-control form-control-sm d-inline-block" 
+                                    <input type="text" class="form-control form-control-sm d-none"
                                            id="searchInput" placeholder="Buscar en la tabla..." 
                                            style="max-width: 300px;">
                                 </div>
@@ -167,6 +168,7 @@ ob_start();
                             </div>
                         </div>
                     </div>
+                    <div id="desktopDataPagination"></div>
                 <?php endif; ?>
             <?php else: ?>
                 <div class="alert alert-info text-center py-5">
@@ -212,6 +214,26 @@ document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchInput');
     const customerSearch = document.getElementById('customerSearch');
     const tableKey = '<?= htmlspecialchars($tableKey) ?>';
+    let tablePage = 1;
+    const tablePageSize = 20;
+
+    const renderTableRows = function(resetPage = false) {
+        const rows = Array.from(document.querySelectorAll('#dataTable tbody tr'));
+        const searchTerm = (searchInput?.value || '').toLowerCase().trim();
+        const filtered = rows.filter(row => row.textContent.toLowerCase().includes(searchTerm));
+        if (resetPage) tablePage = 1;
+        const page = window.AdminPagination
+            ? window.AdminPagination.range(filtered, tablePage, tablePageSize)
+            : { items: filtered, page: 1 };
+        tablePage = page.page;
+        rows.forEach(row => { row.style.display = 'none'; });
+        page.items.forEach(row => { row.style.display = ''; });
+        window.AdminPagination?.render({
+            container: '#desktopDataPagination', page: tablePage, pageSize: tablePageSize,
+            totalItems: filtered.length, label: 'Paginacion de datos',
+            onChange: pageNumber => { tablePage = pageNumber; renderTableRows(); }
+        });
+    };
 
     // Cargar datos
     loadDataBtn?.addEventListener('click', function() {
@@ -267,18 +289,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Búsqueda en la tabla
     searchInput?.addEventListener('input', function() {
-        const searchTerm = this.value.toLowerCase();
-        const table = document.getElementById('dataTable');
-        const rows = table?.querySelectorAll('tbody tr');
-
-        rows?.forEach(function(row) {
-            const text = row.textContent.toLowerCase();
-            if (text.includes(searchTerm)) {
-                row.style.display = '';
-            } else {
-                row.style.display = 'none';
-            }
-        });
+        renderTableRows(true);
     });
 
     // Cambio de cliente con Enter
@@ -298,6 +309,19 @@ document.addEventListener('DOMContentLoaded', function() {
             option.hidden = searchTerm !== '' && !option.textContent.toLowerCase().includes(searchTerm);
         });
     });
+
+    window.AdminFilters?.mount({
+        container: '#desktopDataFilter',
+        id: 'desktop-data-filter-drawer',
+        title: 'Filtrar registros',
+        defaults: { search: '' },
+        fields: [{ name: 'search', label: 'Buscar', type: 'search', placeholder: 'Buscar en todas las columnas' }],
+        onApply: values => {
+            if (searchInput) searchInput.value = values.search || '';
+            renderTableRows(true);
+        }
+    });
+    renderTableRows();
 });
 </script>
 

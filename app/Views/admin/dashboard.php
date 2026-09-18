@@ -74,22 +74,23 @@ ob_start();
             <small>MXN por mensaje exitoso</small>
         </section>
 
-        <section class="finance-band">
-            <div>
-                <span>Proyeccion del mes</span>
-                <strong id="totalToReceive">$0.00</strong>
-                <small>Estimado desde suscripciones Stripe</small>
+        <a href="<?= app_url('/admin/customer-error-reports?status=unread&type=client') ?>" class="metric-tile metric-link error-status-tile ok" id="clientErrorsTile">
+            <div class="tile-top">
+                <span>Errores cliente</span>
+                <i class="fas fa-circle-check"></i>
             </div>
-            <div>
-                <span>Gasto WhatsApp</span>
-                <strong id="whatsappTotalBand">$0.00</strong>
-                <small>Mensajes enviados x costo configurado</small>
+            <strong id="clientErrorsCount">0</strong>
+            <small id="clientErrorsStatus">Todo bien</small>
+        </a>
+
+        <a href="<?= app_url('/admin/customer-error-reports?status=unread&type=server_group') ?>" class="metric-tile metric-link error-status-tile ok" id="serverErrorsTile">
+            <div class="tile-top">
+                <span>Errores servidor</span>
+                <i class="fas fa-circle-check"></i>
             </div>
-            <a href="<?= app_url('/admin/stripe-plans') ?>" class="band-action">
-                <i class="fas fa-tags"></i>
-                <span>Planes</span>
-            </a>
-        </section>
+            <strong id="serverErrorsCount">0</strong>
+            <small id="serverErrorsStatus">Todo bien</small>
+        </a>
 
         <section class="insight-panel summary-panel">
             <div class="panel-heading">
@@ -169,6 +170,7 @@ function renderDashboard(dashboard) {
     const customers = dashboard.customers || {};
     const whatsapp = dashboard.whatsapp || {};
     const storage = dashboard.storage || {};
+    const errors = dashboard.errors || {};
 
     const received = Number(stripe.receivedThisMonth?.amount || 0);
     const expected = Number(stripe.expectedThisMonth?.amount || 0);
@@ -179,7 +181,6 @@ function renderDashboard(dashboard) {
     document.getElementById('expectedSubscriptions').textContent = `${stripe.expectedThisMonth?.subscriptions || 0} pagos esperados`;
     document.getElementById('stripeStatus').textContent = stripe.success ? 'Datos sincronizados desde Stripe' : (stripe.error || 'Stripe no disponible');
     document.getElementById('expectedBar').style.width = `${Math.min(100, expected > 0 ? (received / expected) * 100 : 0)}%`;
-    document.getElementById('totalToReceive').textContent = moneyCents(expected, currency);
 
     document.getElementById('totalCustomers').textContent = customers.total || 0;
     document.getElementById('activeCustomers').textContent = `${customers.active || 0} activos / ${customers.withBillingId || 0} con billing`;
@@ -187,13 +188,27 @@ function renderDashboard(dashboard) {
     document.getElementById('whatsappCost').textContent = moneyPesos(whatsapp.currentMonthCost || 0);
     document.getElementById('whatsappMessages').textContent = `${whatsapp.currentMonthMessages || 0} mensajes enviados`;
     document.getElementById('messageCostInput').value = whatsapp.unitCost ?? 0;
-    document.getElementById('whatsappTotalBand').textContent = moneyPesos(whatsapp.currentMonthCost || 0);
+    renderErrorStatus('client', errors.client || 0);
+    renderErrorStatus('server', (errors.server || 0) + (errors.internal || 0));
 
     document.getElementById('storageTotal').textContent = `${Number(storage.totalMb || 0).toFixed(2)} MB`;
     renderSummaryChart(customers, whatsapp, stripe);
     renderStorageChart(storage.tables || []);
     renderStorageList(storage.tables || []);
     renderWhatsappMonths(whatsapp.months || []);
+}
+
+function renderErrorStatus(kind, count) {
+    const tile = document.getElementById(`${kind}ErrorsTile`);
+    const icon = tile.querySelector('.tile-top i');
+    document.getElementById(`${kind}ErrorsCount`).textContent = count;
+    document.getElementById(`${kind}ErrorsStatus`).textContent = count > 0
+        ? `${count} sin leer`
+        : 'Todo bien';
+
+    tile.classList.toggle('has-errors', count > 0);
+    tile.classList.toggle('ok', count === 0);
+    icon.className = count > 0 ? 'fas fa-triangle-exclamation' : 'fas fa-circle-check';
 }
 
 function renderSummaryChart(customers, whatsapp, stripe) {
@@ -434,7 +449,6 @@ body {
 
 .hero-revenue,
 .metric-tile,
-.finance-band,
 .insight-panel {
     background: #ffffff;
     border: 1px solid #d7eafd;
@@ -468,7 +482,6 @@ body {
 
 .hero-revenue span,
 .metric-tile span,
-.finance-band span,
 .panel-heading span,
 .storage-total span {
     display: block;
@@ -489,8 +502,7 @@ body {
 }
 
 .hero-revenue small,
-.metric-tile small,
-.finance-band small {
+.metric-tile small {
     color: #6b8299;
     font-weight: 500;
 }
@@ -551,6 +563,38 @@ body {
 .settings-tile .tile-top i {
     background: #e6f8ff;
     color: #087cba;
+}
+
+.error-status-tile {
+    grid-column: span 6;
+}
+
+.error-status-tile.ok {
+    border-color: #bfe8cf;
+    background: #f5fff8;
+}
+
+.error-status-tile.has-errors {
+    border-color: #ffc9c9;
+    background: #fff7f7;
+}
+
+.error-status-tile.ok .tile-top i {
+    background: #e7f8ee;
+    color: #1f9d55;
+}
+
+.error-status-tile.has-errors .tile-top i {
+    background: #ffe8e8;
+    color: #d92d20;
+}
+
+.error-status-tile.ok strong {
+    color: #0f7a3b;
+}
+
+.error-status-tile.has-errors strong {
+    color: #b42318;
 }
 
 .metric-tile strong {
@@ -616,50 +660,6 @@ body {
     background: #21b26f;
     color: #ffffff;
     box-shadow: 0 6px 14px rgba(33, 178, 111, 0.12);
-}
-
-.finance-band {
-    grid-column: span 12;
-    display: grid;
-    grid-template-columns: 1fr 1fr auto;
-    align-items: center;
-    gap: 18px;
-    padding: 20px;
-    background: #f7fbff;
-    color: #17324d;
-}
-
-.finance-band span,
-.finance-band small {
-    color: #66819b;
-}
-
-.finance-band strong {
-    display: block;
-    margin: 6px 0;
-    color: #1769aa;
-    font-size: clamp(26px, 4vw, 38px);
-    font-weight: 700;
-    line-height: 1;
-}
-
-.band-action {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 9px;
-    min-height: 44px;
-    padding: 0 16px;
-    border-radius: 7px;
-    background: #2f80ed;
-    color: #ffffff;
-    text-decoration: none;
-    font-weight: 700;
-    box-shadow: 0 6px 14px rgba(47, 128, 237, 0.12);
-}
-
-.band-action:hover {
-    color: #ffffff;
 }
 
 .insight-panel {
@@ -815,14 +815,6 @@ body {
         grid-column: span 12;
         min-height: 118px;
         padding: 18px;
-    }
-
-    .finance-band {
-        grid-template-columns: 1fr;
-    }
-
-    .band-action {
-        width: 100%;
     }
 
     .storage-content {
