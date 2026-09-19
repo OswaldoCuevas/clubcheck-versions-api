@@ -202,6 +202,10 @@ class MessageSentModel extends Model
                       LIMIT ? OFFSET ?";
         $dataParams = array_merge($params, [$perPage, $offset]);
         $data = $this->db->fetchAll($dataQuery, $dataParams);
+        foreach ($data as &$message) {
+            unset($message['Debug'], $message['IsDebug']);
+        }
+        unset($message);
 
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 0;
 
