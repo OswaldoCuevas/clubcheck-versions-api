@@ -178,6 +178,9 @@ ob_start();
                                 <div><strong>Contados:</strong> <?= (int) $debug['messages_counted'] ?></div>
                                 <div><strong>Límite:</strong> <?= $debug['messages_limit'] === null ? 'null' : $escape($debug['messages_limit']) ?></div>
                                 <small class="text-muted">Plan: <?= $escape($debug['plan_lookup_key'] ?? 'desconocido') ?></small>
+                                <?php if (!empty($debug['subscription_status'])): ?>
+                                    <small class="text-muted">Estado: <?= $escape($debug['subscription_status']) ?></small>
+                                <?php endif; ?>
                                 <?php if (isset($debug['limit_rule_present']) && !$debug['limit_rule_present']): ?>
                                     <div class="text-danger small">Regla max_messages ausente</div>
                                 <?php endif; ?>

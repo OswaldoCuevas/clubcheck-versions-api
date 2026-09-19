@@ -396,8 +396,9 @@ class StripeService
 
     /**
      * Obtiene la suscripción activa de un cliente, si no se encuentra devuelve la ultima suscripción aunque esté cancelada
+     * Opcionalmente acepta past_due para consultar el plan usado al enviar mensajes.
      */
-    public function getActiveSubscription(string $customerId): array
+    public function getActiveSubscription(string $customerId, bool $includePastDue = false): array
     {
         try {
             $subscriptions = $this->stripe->subscriptions->all([
@@ -411,6 +412,15 @@ class StripeService
                 if (in_array($sub->status, ['active', 'trialing'])) {
                     $active = $sub;
                     break;
+                }
+            }
+
+            if (!$active && $includePastDue) {
+                foreach ($subscriptions->data as $sub) {
+                    if ($sub->status === 'past_due') {
+                        $active = $sub;
+                        break;
+                    }
                 }
             }
 
@@ -1294,16 +1304,17 @@ private function formatMoney(int $amountInCents, string $currency = 'MXN'): stri
  * Si no tiene suscripción activa, devuelve 'free'
  * 
  * @param string $customerId ID del cliente en Stripe
+ * @param bool $includePastDue Permite usar el plan de una suscripción past_due
  * @return array Información del paquete actual con sus reglas
  */
-public function getCurrentPlan(string $customerId): array
+public function getCurrentPlan(string $customerId, bool $includePastDue = false): array
 {
     try {
         $config = require __DIR__ . '/../../config/stripe.php';
         $plans = $config['plans'] ?? [];
         
         // Obtener suscripción activa
-        $subscriptionResult = $this->getActiveSubscription($customerId);
+        $subscriptionResult = $this->getActiveSubscription($customerId, $includePastDue);
         
         if (!$subscriptionResult['success']) {
             return [

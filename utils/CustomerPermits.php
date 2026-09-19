@@ -44,6 +44,7 @@ class CustomerPermits
             'messages_counted' => (int) $totalMessagesSentThisMonth,
             'messages_limit' => $maxMessages,
             'plan_lookup_key' => $plan['lookup_key'] ?? null,
+            'subscription_status' => $plan['subscription_status'] ?? null,
             'limit_rule_present' => array_key_exists('max_messages', $rules),
             'count_source' => $countSource,
             'comparison_month' => $comparisonMonth,
@@ -64,7 +65,7 @@ class CustomerPermits
             $config['test_clock_id'] ?? null
         );
 
-        $itemPlan = $stripeService->getCurrentPlan($this->customer['BillingId']);
+        $itemPlan = $stripeService->getCurrentPlan($this->customer['BillingId'], true);
 
         if (!$itemPlan) {
             throw new NotFoundException('No se pudo determinar el plan actual del cliente');
