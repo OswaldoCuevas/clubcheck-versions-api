@@ -5,6 +5,7 @@ namespace Controllers;
 use Core\Controller;
 use Models\CustomerRegistryModel;
 use Models\CustomerWebLoginAttemptModel;
+use Models\MessageSentModel;
 use Models\WhatsAppConfigurationModel;
 use Models\WhatsAppTemplateModel;
 use Models\DownloadLogModel;
@@ -19,6 +20,7 @@ use App\Services\LicenseService;
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
 require_once __DIR__ . '/../Models/CustomerWebLoginAttemptModel.php';
+require_once __DIR__ . '/../Models/MessageSentModel.php';
 require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
 require_once __DIR__ . '/../Models/WhatsAppTemplateModel.php';
 require_once __DIR__ . '/../Models/DownloadLogModel.php';
@@ -93,6 +95,40 @@ class AdminController extends Controller
         ];
 
         $this->view('admin/customer-login-attempts', $data);
+    }
+
+    public function whatsappMessages(): void
+    {
+        $this->requirePermission('admin_access');
+
+        $validDate = static function ($value): string {
+            $value = trim((string) $value);
+            $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+            return $date && $date->format('Y-m-d') === $value ? $value : '';
+        };
+
+        $filters = [
+            'customerId' => trim((string) ($_GET['customerId'] ?? '')),
+            'status' => in_array($_GET['status'] ?? '', ['success', 'failed'], true) ? $_GET['status'] : '',
+            'from' => $validDate($_GET['from'] ?? ''),
+            'to' => $validDate($_GET['to'] ?? ''),
+            'error' => mb_substr(trim((string) ($_GET['error'] ?? '')), 0, 200),
+        ];
+        $page = max(1, (int) ($_GET['page'] ?? 1));
+        $perPage = (int) ($_GET['perPage'] ?? 50);
+        if (!in_array($perPage, [25, 50, 100], true)) {
+            $perPage = 50;
+        }
+
+        $registry = new CustomerRegistryModel();
+        $model = new MessageSentModel();
+        $this->view('admin/whatsapp-messages', [
+            'currentUser' => $this->userModel->getCurrentUser(),
+            'isAuthenticated' => true,
+            'customers' => $registry->getCustomers(),
+            'messages' => $model->searchAllForAdmin($filters, $page, $perPage),
+            'filters' => $filters,
+        ]);
     }
 
     public function customerLoginAttemptsJson()

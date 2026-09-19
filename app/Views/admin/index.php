@@ -179,6 +179,20 @@ ob_start();
                                         <div class="card h-100 border-0 shadow-sm hover-shadow">
                                             <div class="card-body d-flex flex-column">
                                                 <div class="d-flex align-items-center mb-3">
+                                                    <span class="icon-circle bg-success text-white me-3"><i class="fas fa-envelope"></i></span>
+                                                    <div>
+                                                        <h5 class="card-title mb-1">Historial WhatsApp</h5>
+                                                        <small class="text-muted">Mensajes y errores de todos los clientes</small>
+                                                    </div>
+                                                </div>
+                                                <a href="<?= app_url('/admin/whatsapp/messages') ?>" class="btn btn-outline-success mt-auto">Ver mensajes <i class="fas fa-arrow-right ms-2"></i></a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card h-100 border-0 shadow-sm hover-shadow">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex align-items-center mb-3">
                                                     <span class="icon-circle bg-danger text-white me-3">
                                                         <i class="fas fa-shield-halved"></i>
                                                     </span>

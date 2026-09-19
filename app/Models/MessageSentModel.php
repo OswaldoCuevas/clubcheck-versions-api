@@ -56,6 +56,81 @@ class MessageSentModel extends Model
     }
 
     /**
+     * Historial global para el panel administrativo, con filtros y paginacion.
+     */
+    public function searchAllForAdmin(array $filters = [], int $page = 1, int $perPage = 50): array
+    {
+        $page = max(1, $page);
+        $perPage = max(10, min(100, $perPage));
+        $where = [];
+        $params = [];
+
+        if (!empty($filters['customerId'])) {
+            $where[] = 'm.CustomerApiId = ?';
+            $params[] = $filters['customerId'];
+        }
+
+        if (($filters['status'] ?? '') === 'success') {
+            $where[] = 'm.Successful = 1';
+        } elseif (($filters['status'] ?? '') === 'failed') {
+            $where[] = 'm.Successful = 0';
+        }
+
+        if (!empty($filters['from'])) {
+            $where[] = 'm.DateSent >= ?';
+            $params[] = $filters['from'] . ' 00:00:00';
+        }
+        if (!empty($filters['to'])) {
+            $where[] = 'm.DateSent < ?';
+            $params[] = (new \DateTimeImmutable($filters['to']))->modify('+1 day')->format('Y-m-d 00:00:00');
+        }
+        if (!empty($filters['error'])) {
+            $where[] = 'm.ErrorMessage LIKE ?';
+            $params[] = '%' . $filters['error'] . '%';
+        }
+
+        $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+        $summary = $this->db->fetchOne(
+            "SELECT COUNT(*) AS total,
+                    COALESCE(SUM(CASE WHEN m.Successful = 1 THEN 1 ELSE 0 END), 0) AS successful,
+                    COALESCE(SUM(CASE WHEN m.Successful = 0 THEN 1 ELSE 0 END), 0) AS failed,
+                    COUNT(DISTINCT CASE WHEN m.Successful = 0 THEN m.CustomerApiId END) AS customersWithErrors
+             FROM {$this->table} m {$whereSql}",
+            $params
+        ) ?: [];
+
+        $total = (int) ($summary['total'] ?? 0);
+        $totalPages = max(1, (int) ceil($total / $perPage));
+        $page = min($page, $totalPages);
+        $offset = ($page - 1) * $perPage;
+        $rows = $this->db->fetchAll(
+            "SELECT m.Id, m.CustomerApiId, c.Name AS CustomerName, m.DateSent,
+                    m.PhoneNumber, m.Username, m.Message, m.Successful, m.ErrorMessage
+             FROM {$this->table} m
+             LEFT JOIN Customers c ON c.Id = m.CustomerApiId
+             {$whereSql}
+             ORDER BY m.DateSent DESC, m.Id DESC
+             LIMIT ? OFFSET ?",
+            array_merge($params, [$perPage, $offset])
+        );
+
+        return [
+            'data' => $rows,
+            'summary' => [
+                'total' => $total,
+                'successful' => (int) ($summary['successful'] ?? 0),
+                'failed' => (int) ($summary['failed'] ?? 0),
+                'customersWithErrors' => (int) ($summary['customersWithErrors'] ?? 0),
+            ],
+            'pagination' => [
+                'page' => $page,
+                'perPage' => $perPage,
+                'totalPages' => $totalPages,
+            ],
+        ];
+    }
+
+    /**
      * Búsqueda avanzada de mensajes con filtros, paginado y conteo total
      * 
      * @param string $customerApiId ID del cliente (requerido)
