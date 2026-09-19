@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/11.5/phpunit.xsd"
+         bootstrap="tests/bootstrap.php"
+         colors="true"
+         cacheDirectory=".phpunit.cache"
+         failOnWarning="true"
+         failOnRisky="true">
+    <php>
+        <env name="APP_ENV" value="testing" force="true"/>
+        <env name="APP_MODE" value="TEST" force="true"/>
+    </php>
+    <testsuites>
+        <testsuite name="Live">
+            <directory>tests/Live</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>

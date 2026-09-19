@@ -24,6 +24,7 @@ Thumbs.db
 .env.local
 .env.production
 .env.staging
+.env.testing
 config/secrets.php
 .htaccess
 
@@ -71,8 +72,8 @@ test_*.php
 debug_*.php
 *_test.php
 *_debug.php
-phpunit.xml
 .phpunit.result.cache
+.phpunit.cache/
 
 # Documentación temporal
 # ===========================================

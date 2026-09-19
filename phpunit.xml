@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/11.5/phpunit.xsd"
+         bootstrap="tests/bootstrap.php"
+         colors="true"
+         cacheDirectory=".phpunit.cache"
+         failOnWarning="true"
+         failOnRisky="true">
+    <php>
+        <env name="APP_ENV" value="testing" force="true"/>
+        <env name="APP_MODE" value="TEST" force="true"/>
+        <env name="RUN_ENDPOINT_TESTS" value="0"/>
+        <env name="RUN_SYNC_ENDPOINT_TESTS" value="0"/>
+        <env name="RUN_STRIPE_LIVE_TEST" value="0"/>
+        <env name="RUN_WHATSAPP_LIVE_TEST" value="0"/>
+    </php>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Endpoint">
+            <directory>tests/Endpoint</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>

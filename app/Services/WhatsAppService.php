@@ -582,31 +582,10 @@ class WhatsAppService
         $year = (int) $now->format('Y');
         $totalMessagesAtMonth = $this->messageSentModel->countSuccessfulByMonth($customerApiId, $month, $year);
 
-        $customerPermits = new CustomerPermits($customerApiId);
-
         foreach ($bulkItems as $item) {
             $subscriptionId = $item['subscriptionId'] ?? null;
             $errorMessage = null;
 
-            try{    
-                $customerPermits->checkSendMessage($totalMessagesAtMonth);
-            } catch (\App\Exceptions\ApiException $e) {
-                $errorMessage = $e->getMessage();
-            } catch (\Exception $e) {
-                $errorMessage = $e->getMessage();
-            }
-
-            if ($errorMessage) {
-                $results['failed'][] = [
-                    'subscriptionId' => $subscriptionId,
-                    'error' => $errorMessage,
-                ];
-                $results['failedCount']++;
-         
-            }
-
-           
-            
             if (empty($subscriptionId)) {
                 $errorMessage = 'subscriptionId es requerido';
                 $results['failed'][] = [
@@ -614,7 +593,7 @@ class WhatsAppService
                     'error' => $errorMessage,
                 ];
                 $results['failedCount']++;
-    
+                continue;
             }
 
             $template = $item['template'] ?? '';
@@ -630,6 +609,34 @@ class WhatsAppService
                     'error' => $errorMessage,
                 ];
                 $results['failedCount']++;
+                continue;
+            }
+
+            if (WhatsAppEvent::fromTemplateType($template) === null) {
+                $results['failed'][] = [
+                    'subscriptionId' => $subscriptionId,
+                    'error' => "Template desconocido: {$template}",
+                ];
+                $results['failedCount']++;
+                continue;
+            }
+
+            try {
+                $customerPermits = new CustomerPermits($customerApiId);
+                $customerPermits->checkSendMessage($totalMessagesAtMonth);
+            } catch (\App\Exceptions\ApiException $e) {
+                $errorMessage = $e->getMessage();
+            } catch (\Exception $e) {
+                $errorMessage = $e->getMessage();
+            }
+
+            if ($errorMessage) {
+                $results['failed'][] = [
+                    'subscriptionId' => $subscriptionId,
+                    'error' => $errorMessage,
+                ];
+                $results['failedCount']++;
+                continue;
             }
 
             $result = $this->sendTemplateByType(

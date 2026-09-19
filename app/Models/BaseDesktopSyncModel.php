@@ -72,11 +72,16 @@ abstract class BaseDesktopSyncModel extends Model
             }
 
             try {
-                if ($this->recordExists($primaryValue)) {
+                if ($this->recordExists($primaryValue, $customerApiId)) {
                     $updateData = $this->prepareUpdate($record, $customerApiId);
 
                     if (!empty($updateData)) {
-                        $this->db->update($this->table, $updateData, sprintf('%s = ?', $this->primaryKey), [$primaryValue]);
+                        $this->db->update(
+                            $this->table,
+                            $updateData,
+                            sprintf('%s = ? AND CustomerApiId = ?', $this->primaryKey),
+                            [$primaryValue, $customerApiId]
+                        );
                     }
                 } else {
                     $insertData = $this->prepareInsert($record, $customerApiId);
@@ -95,11 +100,16 @@ abstract class BaseDesktopSyncModel extends Model
         return $results;
     }
 
-    protected function recordExists(string $primaryValue): bool
+    protected function recordExists(string $primaryValue, string $customerApiId): bool
     {
         $row = $this->db->fetchOne(
-            sprintf('SELECT %s FROM %s WHERE %s = ? LIMIT 1', $this->primaryKey, $this->table, $this->primaryKey),
-            [$primaryValue]
+            sprintf(
+                'SELECT %s FROM %s WHERE %s = ? AND CustomerApiId = ? LIMIT 1',
+                $this->primaryKey,
+                $this->table,
+                $this->primaryKey
+            ),
+            [$primaryValue, $customerApiId]
         );
 
         return $row !== null;
