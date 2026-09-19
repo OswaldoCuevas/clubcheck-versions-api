@@ -133,6 +133,7 @@ $router->delete('/admin/api/announcements/:id', 'AdminController', 'announcement
 // WhatsApp Admin CRUD
 $router->get('/admin/whatsapp', 'AdminController', 'whatsapp');// NO, Administrativo
 $router->get('/admin/whatsapp/messages', 'AdminController', 'whatsappMessages');// NO, Administrativo
+$router->post('/admin/whatsapp/messages/test', 'AdminController', 'sendWhatsappTestMessage');// NO, Administrativo
 $router->get('/admin/api/whatsapp', 'AdminController', 'whatsappListJson');// NO, Administrativo
 $router->get('/admin/api/whatsapp/templates', 'AdminController', 'whatsappTemplatesJson');// NO, Administrativo
 $router->post('/admin/api/whatsapp/templates', 'AdminController', 'whatsappTemplateCreateJson');// NO, Administrativo

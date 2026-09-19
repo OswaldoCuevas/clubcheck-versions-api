@@ -34,7 +34,7 @@ class CustomerPermits
         $comparisonMonth = (new \DateTimeImmutable('now', new \DateTimeZone('America/Mexico_City')))->format('Y-m');
 
         if ($totalMessagesSentThisMonth === null) {
-            $row = $this->db->fetchOne("SELECT COUNT(*) as Total, DATE_FORMAT(CURRENT_DATE(), '%Y-%m') AS ComparedMonth FROM MessageSent WHERE Successful = 1 AND CustomerApiId = ? AND MONTH(DateSent) = MONTH(CURRENT_DATE()) AND YEAR(DateSent) = YEAR(CURRENT_DATE())", [$this->customer['Id']]);
+            $row = $this->db->fetchOne("SELECT COUNT(*) as Total, DATE_FORMAT(CURRENT_DATE(), '%Y-%m') AS ComparedMonth FROM MessageSent WHERE Successful = 1 AND IsDebug = 0 AND CustomerApiId = ? AND MONTH(DateSent) = MONTH(CURRENT_DATE()) AND YEAR(DateSent) = YEAR(CURRENT_DATE())", [$this->customer['Id']]);
             $totalMessagesSentThisMonth = $row['Total'] ?? 0;
             $comparisonMonth = $row['ComparedMonth'] ?? $comparisonMonth;
         }

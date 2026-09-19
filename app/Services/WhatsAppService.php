@@ -44,6 +44,7 @@ class WhatsAppService
     private WhatsAppTemplateStrategyInterface $templateStrategy;
     private ?string $customerId;
     private ?array $messageLimitDebug = null;
+    private bool $isDebug = false;
     private string $clubName = 'tu club';
 
     /**
@@ -144,6 +145,11 @@ class WhatsAppService
     public function setMessageLimitDebug(?array $debug): void
     {
         $this->messageLimitDebug = $debug;
+    }
+
+    public function setIsDebug(bool $isDebug): void
+    {
+        $this->isDebug = $isDebug;
     }
 
     /**
@@ -649,7 +655,9 @@ class WhatsAppService
                     'messageId' => $result['messageId'],
                 ];
                 $results['successCount']++;
-                $totalMessagesAtMonth++;
+                if (!$this->isDebug) {
+                    $totalMessagesAtMonth++;
+                }
             } else {
                 $results['failed'][] = [
                     'subscriptionId' => $subscriptionId,
@@ -773,6 +781,7 @@ class WhatsAppService
                 'Successful' => $result['success'] ? 1 : 0,
                 'ErrorMessage' => $result['errorMessage'],
                 'Debug' => $this->messageLimitDebug === null ? null : json_encode($this->messageLimitDebug, JSON_UNESCAPED_UNICODE),
+                'IsDebug' => $this->isDebug ? 1 : 0,
             ];
 
             if (!$this->messageSentModel->create($data)) {

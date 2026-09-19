@@ -192,6 +192,7 @@ class CustomerStatsService extends Model
             'SELECT COUNT(*) AS total FROM MessageSent 
              WHERE CustomerApiId = ? 
              AND Successful = 1 
+             AND IsDebug = 0
              AND MONTH(DateSent) = MONTH(CURDATE()) 
              AND YEAR(DateSent) = YEAR(CURDATE())',
             [$customerApiId]
@@ -255,6 +256,7 @@ class CustomerStatsService extends Model
         return $this->safeCount(
             'SELECT COUNT(*) AS total FROM MessageSent 
              WHERE Successful = 1 
+             AND IsDebug = 0
              AND MONTH(DateSent) = MONTH(CURDATE()) 
              AND YEAR(DateSent) = YEAR(CURDATE())'
         );

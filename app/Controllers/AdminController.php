@@ -101,6 +101,12 @@ class AdminController extends Controller
     {
         $this->requirePermission('admin_access');
 
+        if (empty($_SESSION['whatsapp_test_csrf'])) {
+            $_SESSION['whatsapp_test_csrf'] = bin2hex(random_bytes(32));
+        }
+        $testResult = $_SESSION['whatsapp_test_result'] ?? null;
+        unset($_SESSION['whatsapp_test_result']);
+
         $validDate = static function ($value): string {
             $value = trim((string) $value);
             $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
@@ -110,6 +116,7 @@ class AdminController extends Controller
         $filters = [
             'customerId' => trim((string) ($_GET['customerId'] ?? '')),
             'status' => in_array($_GET['status'] ?? '', ['success', 'failed'], true) ? $_GET['status'] : '',
+            'isDebug' => in_array($_GET['isDebug'] ?? '', ['debug', 'normal'], true) ? $_GET['isDebug'] : '',
             'from' => $validDate($_GET['from'] ?? ''),
             'to' => $validDate($_GET['to'] ?? ''),
             'error' => mb_substr(trim((string) ($_GET['error'] ?? '')), 0, 200),
@@ -128,7 +135,94 @@ class AdminController extends Controller
             'customers' => $registry->getCustomers(),
             'messages' => $model->searchAllForAdmin($filters, $page, $perPage),
             'filters' => $filters,
+            'testCsrf' => $_SESSION['whatsapp_test_csrf'],
+            'testResult' => $testResult,
         ]);
+    }
+
+    public function sendWhatsappTestMessage(): void
+    {
+        $this->requirePermission('admin_access');
+
+        $expectedToken = (string) ($_SESSION['whatsapp_test_csrf'] ?? '');
+        if ($expectedToken === '' || !hash_equals($expectedToken, (string) ($_POST['csrf_token'] ?? ''))) {
+            http_response_code(403);
+            echo 'Solicitud no autorizada';
+            return;
+        }
+
+        $customerId = trim((string) ($_POST['customerId'] ?? ''));
+        $phone = trim((string) ($_POST['phone'] ?? ''));
+        $firstName = trim((string) ($_POST['firstName'] ?? ''));
+        $template = (string) ($_POST['template'] ?? '');
+        $allowedTemplates = ['subscription', 'warning', 'finalized', 'last_day'];
+
+        if ($customerId === '' || $phone === '' || $firstName === '' || !in_array($template, $allowedTemplates, true)) {
+            $_SESSION['whatsapp_test_result'] = ['success' => false, 'message' => 'Completa cliente, teléfono, nombre del socio y template.'];
+            $this->redirect('/admin/whatsapp/messages');
+        }
+
+        $registry = new CustomerRegistryModel();
+        if (!$registry->getCustomer($customerId)) {
+            $_SESSION['whatsapp_test_result'] = ['success' => false, 'message' => 'El cliente seleccionado no existe.'];
+            $this->redirect('/admin/whatsapp/messages');
+        }
+
+        $startDate = (string) ($_POST['startDate'] ?? '');
+        $endDate = (string) ($_POST['endDate'] ?? '');
+        if ($template === 'subscription') {
+            $start = \DateTimeImmutable::createFromFormat('!Y-m-d', $startDate);
+            $end = \DateTimeImmutable::createFromFormat('!Y-m-d', $endDate);
+            if (!$start || !$end || $start->format('Y-m-d') !== $startDate || $end->format('Y-m-d') !== $endDate || $end < $start) {
+                $_SESSION['whatsapp_test_result'] = ['success' => false, 'message' => 'Indica fechas de membresía válidas; la fecha final debe ser posterior o igual a la inicial.'];
+                $this->redirect('/admin/whatsapp/messages');
+            }
+        }
+
+        $days = filter_var($_POST['days'] ?? 3, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 365]]);
+        if ($template === 'warning' && $days === false) {
+            $_SESSION['whatsapp_test_result'] = ['success' => false, 'message' => 'Los días de aviso deben estar entre 1 y 365.'];
+            $this->redirect('/admin/whatsapp/messages');
+        }
+
+        $limitDebug = null;
+        $limitError = null;
+        try {
+            (new \CustomerPermits($customerId))->checkSendMessage(null, $limitDebug);
+        } catch (\Throwable $e) {
+            $limitError = $e->getMessage();
+        }
+
+        try {
+            $service = new WhatsAppService($customerId);
+            $service->setIsDebug(true);
+            $service->setMessageLimitDebug($limitDebug);
+            $result = match ($template) {
+                'subscription' => $service->sendSubscriptionTemplate(
+                    $phone, $firstName, $start->format('d/m/Y'), $end->format('d/m/Y'),
+                    $customerId, null, null, $firstName, $limitError
+                ),
+                'warning' => $service->sendWarningTemplate(
+                    $phone, (string) $days, $customerId, null, null, $firstName, $limitError
+                ),
+                'finalized' => $service->sendFinalizedTemplate(
+                    $phone, $customerId, null, null, $firstName, $limitError
+                ),
+                'last_day' => $service->sendLastDayTemplate(
+                    $phone, $customerId, null, null, $firstName, $limitError
+                ),
+            };
+            $_SESSION['whatsapp_test_result'] = [
+                'success' => (bool) ($result['success'] ?? false),
+                'message' => ($result['success'] ?? false)
+                    ? 'Mensaje de prueba aceptado por WhatsApp. Revisa el historial para ver la comparación.'
+                    : 'No se envió el mensaje de prueba: ' . ($result['errorMessage'] ?? 'Error desconocido'),
+            ];
+        } catch (\Throwable $e) {
+            $_SESSION['whatsapp_test_result'] = ['success' => false, 'message' => 'No se pudo procesar el mensaje de prueba: ' . $e->getMessage()];
+        }
+
+        $this->redirect('/admin/whatsapp/messages?customerId=' . rawurlencode($customerId));
     }
 
     public function customerLoginAttemptsJson()

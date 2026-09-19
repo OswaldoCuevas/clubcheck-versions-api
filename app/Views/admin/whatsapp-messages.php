@@ -25,6 +25,68 @@ ob_start();
         <a href="<?= app_url('/admin') ?>" class="btn btn-outline-secondary"><i class="fas fa-arrow-left me-2"></i>Volver al panel</a>
     </div>
 
+    <?php if (is_array($testResult ?? null)): ?>
+        <div class="alert <?= !empty($testResult['success']) ? 'alert-success' : 'alert-danger' ?>" role="alert">
+            <?= $escape($testResult['message'] ?? '') ?>
+        </div>
+    <?php endif; ?>
+
+    <div class="card mb-4">
+        <div class="card-header"><h2 class="h5 mb-0">Enviar mensaje de prueba</h2></div>
+        <div class="card-body">
+            <form method="post" action="<?= app_url('/admin/whatsapp/messages/test') ?>" class="row g-3 align-items-end">
+                <input type="hidden" name="csrf_token" value="<?= $escape($testCsrf ?? '') ?>">
+                <div class="col-md-6 col-lg-4">
+                    <label for="testCustomerId" class="form-label">Cliente</label>
+                    <select name="customerId" id="testCustomerId" class="form-select" required>
+                        <option value="">Selecciona un cliente</option>
+                        <?php foreach ($customers as $customer): ?>
+                            <?php $testCustomerId = (string) ($customer['customerId'] ?? ''); ?>
+                            <option value="<?= $escape($testCustomerId) ?>" <?= ($filters['customerId'] ?? '') === $testCustomerId ? 'selected' : '' ?>><?= $escape($customer['name'] ?? $testCustomerId) ?> (<?= $escape($testCustomerId) ?>)</option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-6 col-lg-3">
+                    <label for="testPhone" class="form-label">Número destinatario</label>
+                    <input type="tel" name="phone" id="testPhone" class="form-control" maxlength="25" placeholder="5512345678" required>
+                </div>
+                <div class="col-md-6 col-lg-3">
+                    <label for="testFirstName" class="form-label">Nombre del socio</label>
+                    <input type="text" name="firstName" id="testFirstName" class="form-control" maxlength="100" required>
+                </div>
+                <div class="col-md-6 col-lg-2">
+                    <label for="testTemplate" class="form-label">Template</label>
+                    <select name="template" id="testTemplate" class="form-select" required>
+                        <option value="subscription">Bienvenida</option>
+                        <option value="warning">Aviso de vencimiento</option>
+                        <option value="finalized">Membresía finalizada</option>
+                        <option value="last_day">Último día</option>
+                    </select>
+                </div>
+                <?php
+                    $today = new DateTimeImmutable('now', new DateTimeZone('America/Mexico_City'));
+                    $nextMonth = $today->modify('+1 month');
+                ?>
+                <div class="col-md-4" data-template-fields="subscription">
+                    <label for="testStartDate" class="form-label">Inicio de membresía</label>
+                    <input type="date" name="startDate" id="testStartDate" class="form-control" value="<?= $today->format('Y-m-d') ?>">
+                </div>
+                <div class="col-md-4" data-template-fields="subscription">
+                    <label for="testEndDate" class="form-label">Fin de membresía</label>
+                    <input type="date" name="endDate" id="testEndDate" class="form-control" value="<?= $nextMonth->format('Y-m-d') ?>">
+                </div>
+                <div class="col-md-4 d-none" data-template-fields="warning">
+                    <label for="testDays" class="form-label">Días restantes</label>
+                    <input type="number" name="days" id="testDays" class="form-control" min="1" max="365" value="3">
+                </div>
+                <div class="col-12 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <small class="text-muted">El mensaje se enviará al número indicado y quedará marcado como prueba. Se aplicará el límite del cliente.</small>
+                    <button type="submit" class="btn btn-success"><i class="fab fa-whatsapp me-2"></i>Enviar prueba</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div class="row g-3 mb-4">
         <div class="col-sm-6 col-lg-3"><div class="card h-100"><div class="card-body"><div class="text-muted small">Intentos con estos filtros</div><div class="fs-3 fw-semibold"><?= $total ?></div></div></div></div>
         <div class="col-sm-6 col-lg-3"><div class="card h-100"><div class="card-body"><div class="text-muted small">Aceptados por la API</div><div class="fs-3 fw-semibold text-success"><?= (int) ($summary['successful'] ?? 0) ?></div></div></div></div>
@@ -35,7 +97,7 @@ ob_start();
     <div class="card mb-4">
         <div class="card-body">
             <form method="get" action="<?= app_url('/admin/whatsapp/messages') ?>" class="row g-3 align-items-end">
-                <div class="col-lg-4">
+                <div class="col-lg-3">
                     <label for="customerId" class="form-label">Cliente</label>
                     <select name="customerId" id="customerId" class="form-select">
                         <option value="">Todos los clientes</option>
@@ -54,6 +116,14 @@ ob_start();
                     </select>
                 </div>
                 <div class="col-sm-6 col-lg-2">
+                    <label for="isDebug" class="form-label">Tipo</label>
+                    <select name="isDebug" id="isDebug" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="normal" <?= ($filters['isDebug'] ?? '') === 'normal' ? 'selected' : '' ?>>Normales</option>
+                        <option value="debug" <?= ($filters['isDebug'] ?? '') === 'debug' ? 'selected' : '' ?>>Pruebas</option>
+                    </select>
+                </div>
+                <div class="col-sm-6 col-lg-2">
                     <label for="from" class="form-label">Desde</label>
                     <input type="date" name="from" id="from" class="form-control" value="<?= $escape($filters['from'] ?? '') ?>">
                 </div>
@@ -61,7 +131,7 @@ ob_start();
                     <label for="to" class="form-label">Hasta</label>
                     <input type="date" name="to" id="to" class="form-control" value="<?= $escape($filters['to'] ?? '') ?>">
                 </div>
-                <div class="col-sm-6 col-lg-2">
+                <div class="col-sm-6 col-lg-1">
                     <label for="perPage" class="form-label">Por página</label>
                     <select name="perPage" id="perPage" class="form-select">
                         <?php foreach ([25, 50, 100] as $size): ?>
@@ -88,10 +158,10 @@ ob_start();
         </div>
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
-                <thead class="table-light"><tr><th>Fecha</th><th>Cliente</th><th>Teléfono</th><th>Mensaje</th><th>Estado</th><th>Error</th><th>Comparación del límite</th></tr></thead>
+                <thead class="table-light"><tr><th>Fecha</th><th>Cliente</th><th>Teléfono</th><th>Mensaje</th><th>Estado</th><th>Tipo</th><th>Error</th><th>Comparación del límite</th></tr></thead>
                 <tbody>
                 <?php if (!$rows): ?>
-                    <tr><td colspan="7" class="text-center text-muted py-5">No hay mensajes con estos filtros.</td></tr>
+                    <tr><td colspan="8" class="text-center text-muted py-5">No hay mensajes con estos filtros.</td></tr>
                 <?php endif; ?>
                 <?php foreach ($rows as $row): ?>
                     <?php $debug = json_decode((string) ($row['Debug'] ?? ''), true); ?>
@@ -101,6 +171,7 @@ ob_start();
                         <td class="text-nowrap"><?= $escape($row['PhoneNumber'] ?? '') ?></td>
                         <td class="message-cell"><?= $escape($row['Message'] ?? '') ?></td>
                         <td><?= (int) ($row['Successful'] ?? 0) === 1 ? '<span class="badge bg-success">Aceptado</span>' : '<span class="badge bg-danger">Fallido</span>' ?></td>
+                        <td><?= (int) ($row['IsDebug'] ?? 0) === 1 ? '<span class="badge bg-info text-dark">Prueba</span>' : '<span class="badge bg-secondary">Normal</span>' ?></td>
                         <td class="error-cell text-danger"><?= $escape($row['ErrorMessage'] ?? '') ?></td>
                         <td class="text-nowrap">
                             <?php if (is_array($debug) && array_key_exists('messages_counted', $debug)): ?>
@@ -136,6 +207,23 @@ ob_start();
 
 <?php
 $customStyles = '.message-cell, .error-cell { min-width: 220px; max-width: 360px; overflow-wrap: anywhere; }';
+$customScripts = <<<'HTML'
+<script>
+(() => {
+    const select = document.getElementById('testTemplate');
+    if (!select) return;
+    const updateFields = () => {
+        document.querySelectorAll('[data-template-fields]').forEach((group) => {
+            const active = group.dataset.templateFields === select.value;
+            group.classList.toggle('d-none', !active);
+            group.querySelectorAll('input').forEach((input) => { input.required = active; });
+        });
+    };
+    select.addEventListener('change', updateFields);
+    updateFields();
+})();
+</script>
+HTML;
 $content = ob_get_clean();
 include __DIR__ . '/../layouts/app.php';
 ?>

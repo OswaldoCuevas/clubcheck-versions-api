@@ -33,7 +33,7 @@ class MessageSentModel extends Model
     public function findByCustomer(string $customerApiId, int $limit = 500, int $offset = 0): array
     {
         return $this->db->fetchAll(
-            "SELECT * FROM {$this->table} WHERE CustomerApiId = ? ORDER BY DateSent DESC LIMIT ? OFFSET ?",
+            "SELECT * FROM {$this->table} WHERE CustomerApiId = ? AND IsDebug = 0 ORDER BY DateSent DESC LIMIT ? OFFSET ?",
             [$customerApiId, $limit, $offset]
         );
     }
@@ -46,6 +46,7 @@ class MessageSentModel extends Model
         $row = $this->db->fetchOne(
             "SELECT COUNT(*) AS total FROM {$this->table}
              WHERE Successful = 1
+               AND IsDebug = 0
                AND CustomerApiId = ?
                AND MONTH(DateSent) = ?
                AND YEAR(DateSent) = ?",
@@ -74,6 +75,11 @@ class MessageSentModel extends Model
             $where[] = 'm.Successful = 1';
         } elseif (($filters['status'] ?? '') === 'failed') {
             $where[] = 'm.Successful = 0';
+        }
+        if (($filters['isDebug'] ?? '') === 'debug') {
+            $where[] = 'm.IsDebug = 1';
+        } elseif (($filters['isDebug'] ?? '') === 'normal') {
+            $where[] = 'm.IsDebug = 0';
         }
 
         if (!empty($filters['from'])) {
@@ -105,7 +111,7 @@ class MessageSentModel extends Model
         $offset = ($page - 1) * $perPage;
         $rows = $this->db->fetchAll(
             "SELECT m.Id, m.CustomerApiId, c.Name AS CustomerName, m.DateSent,
-                    m.PhoneNumber, m.Username, m.Message, m.Successful, m.ErrorMessage, m.Debug
+                    m.PhoneNumber, m.Username, m.Message, m.Successful, m.ErrorMessage, m.Debug, m.IsDebug
              FROM {$this->table} m
              LEFT JOIN Customers c ON c.Id = m.CustomerApiId
              {$whereSql}
@@ -150,7 +156,7 @@ class MessageSentModel extends Model
         $offset = ($page - 1) * $perPage;
 
         // Construir WHERE clause dinámicamente
-        $where = ['CustomerApiId = ?'];
+        $where = ['CustomerApiId = ?', 'IsDebug = 0'];
         $params = [$customerApiId];
 
         // Filtro por rango de fechas
@@ -268,7 +274,7 @@ class MessageSentModel extends Model
     private function sanitize(array $data): array
     {
         $allowed = ['Id', 'UserId', 'Username', 'CustomerApiId', 'PhoneNumber', 'Message',
-                    'DateSent', 'Successful', 'ErrorMessage', 'Debug', 'Sync'];
+                    'DateSent', 'Successful', 'ErrorMessage', 'Debug', 'IsDebug', 'Sync'];
 
         $clean = [];
         foreach ($allowed as $col) {
@@ -281,6 +287,10 @@ class MessageSentModel extends Model
         if (isset($clean['Successful'])) {
             $val = $clean['Successful'];
             $clean['Successful'] = ($val === true || $val === 'true' || $val === '1' || $val === 1) ? 1 : 0;
+        }
+
+        if (isset($clean['IsDebug'])) {
+            $clean['IsDebug'] = (int) (bool) $clean['IsDebug'];
         }
 
         return $clean;
