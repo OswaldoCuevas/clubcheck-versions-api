@@ -105,7 +105,7 @@ class MessageSentModel extends Model
         $offset = ($page - 1) * $perPage;
         $rows = $this->db->fetchAll(
             "SELECT m.Id, m.CustomerApiId, c.Name AS CustomerName, m.DateSent,
-                    m.PhoneNumber, m.Username, m.Message, m.Successful, m.ErrorMessage
+                    m.PhoneNumber, m.Username, m.Message, m.Successful, m.ErrorMessage, m.Debug
              FROM {$this->table} m
              LEFT JOIN Customers c ON c.Id = m.CustomerApiId
              {$whereSql}
@@ -268,7 +268,7 @@ class MessageSentModel extends Model
     private function sanitize(array $data): array
     {
         $allowed = ['Id', 'UserId', 'Username', 'CustomerApiId', 'PhoneNumber', 'Message',
-                    'DateSent', 'Successful', 'ErrorMessage', 'Sync'];
+                    'DateSent', 'Successful', 'ErrorMessage', 'Debug', 'Sync'];
 
         $clean = [];
         foreach ($allowed as $col) {

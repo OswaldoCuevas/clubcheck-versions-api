@@ -43,6 +43,7 @@ class WhatsAppService
     private WhatsAppTemplateComponentBuilder $componentBuilder;
     private WhatsAppTemplateStrategyInterface $templateStrategy;
     private ?string $customerId;
+    private ?array $messageLimitDebug = null;
     private string $clubName = 'tu club';
 
     /**
@@ -138,6 +139,11 @@ class WhatsAppService
     public function isConfigured(): bool
     {
         return !empty($this->phoneNumberId) && !empty($this->accessToken);
+    }
+
+    public function setMessageLimitDebug(?array $debug): void
+    {
+        $this->messageLimitDebug = $debug;
     }
 
     /**
@@ -579,14 +585,16 @@ class WhatsAppService
         foreach ($bulkItems as $item) {
             $subscriptionId = $item['subscriptionId'] ?? null;
             $errorMessage = null;
+            $limitDebug = null;
 
             try{    
-                $customerPermits->checkSendMessage($totalMessagesAtMonth);
+                $customerPermits->checkSendMessage($totalMessagesAtMonth, $limitDebug);
             } catch (\App\Exceptions\ApiException $e) {
                 $errorMessage = $e->getMessage();
             } catch (\Exception $e) {
                 $errorMessage = $e->getMessage();
             }
+            $this->setMessageLimitDebug($limitDebug);
 
             if ($errorMessage) {
                 $results['failed'][] = [
@@ -764,12 +772,17 @@ class WhatsAppService
                 'SentHour' => $now->format('H:i:s'),
                 'Successful' => $result['success'] ? 1 : 0,
                 'ErrorMessage' => $result['errorMessage'],
+                'Debug' => $this->messageLimitDebug === null ? null : json_encode($this->messageLimitDebug, JSON_UNESCAPED_UNICODE),
             ];
 
-            $this->messageSentModel->create($data);
+            if (!$this->messageSentModel->create($data)) {
+                error_log('Error logging WhatsApp message: MessageSent insert failed');
+            }
         } catch (\Throwable $e) {
             // No interrumpir el flujo principal si falla el logging
             error_log("Error logging WhatsApp message: " . $e->getMessage());
+        } finally {
+            $this->messageLimitDebug = null;
         }
     }
 

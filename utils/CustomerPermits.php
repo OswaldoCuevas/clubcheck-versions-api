@@ -23,19 +23,34 @@ class CustomerPermits
             throw new ApiException('Cliente no encontrado con ID: ' . $customerId);
         }
     }
-    public function checkSendMessage($totalMessagesSentThisMonth = null)
+    public function checkSendMessage($totalMessagesSentThisMonth = null, ?array &$debug = null)
     {
+        $debug = null;
         $plan = $this->getCurrentPlan();
 
         $rules = $plan['rules'] ?? [];
         $maxMessages = $rules['max_messages'] ?? 0;
+        $countSource = $totalMessagesSentThisMonth === null ? 'database_current_date' : 'bulk_counter';
+        $comparisonMonth = (new \DateTimeImmutable('now', new \DateTimeZone('America/Mexico_City')))->format('Y-m');
 
         if ($totalMessagesSentThisMonth === null) {
-            $row = $this->db->fetchOne("SELECT COUNT(*) as Total FROM MessageSent WHERE Successful = 1 AND CustomerApiId = ? AND MONTH(DateSent) = MONTH(CURRENT_DATE()) AND YEAR(DateSent) = YEAR(CURRENT_DATE())", [$this->customer['Id']]);
+            $row = $this->db->fetchOne("SELECT COUNT(*) as Total, DATE_FORMAT(CURRENT_DATE(), '%Y-%m') AS ComparedMonth FROM MessageSent WHERE Successful = 1 AND CustomerApiId = ? AND MONTH(DateSent) = MONTH(CURRENT_DATE()) AND YEAR(DateSent) = YEAR(CURRENT_DATE())", [$this->customer['Id']]);
             $totalMessagesSentThisMonth = $row['Total'] ?? 0;
+            $comparisonMonth = $row['ComparedMonth'] ?? $comparisonMonth;
         }
 
-        if ($totalMessagesSentThisMonth >= $maxMessages) {
+        $limitReached = $totalMessagesSentThisMonth >= $maxMessages;
+        $debug = [
+            'messages_counted' => (int) $totalMessagesSentThisMonth,
+            'messages_limit' => $maxMessages,
+            'plan_lookup_key' => $plan['lookup_key'] ?? null,
+            'limit_rule_present' => array_key_exists('max_messages', $rules),
+            'count_source' => $countSource,
+            'comparison_month' => $comparisonMonth,
+            'limit_reached' => $limitReached,
+        ];
+
+        if ($limitReached) {
             throw new ApiException('Se ha alcanzado el límite de mensajes permitidos para este mes');
         }
     }

@@ -88,12 +88,13 @@ ob_start();
         </div>
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
-                <thead class="table-light"><tr><th>Fecha</th><th>Cliente</th><th>Teléfono</th><th>Mensaje</th><th>Estado</th><th>Error</th></tr></thead>
+                <thead class="table-light"><tr><th>Fecha</th><th>Cliente</th><th>Teléfono</th><th>Mensaje</th><th>Estado</th><th>Error</th><th>Comparación del límite</th></tr></thead>
                 <tbody>
                 <?php if (!$rows): ?>
-                    <tr><td colspan="6" class="text-center text-muted py-5">No hay mensajes con estos filtros.</td></tr>
+                    <tr><td colspan="7" class="text-center text-muted py-5">No hay mensajes con estos filtros.</td></tr>
                 <?php endif; ?>
                 <?php foreach ($rows as $row): ?>
+                    <?php $debug = json_decode((string) ($row['Debug'] ?? ''), true); ?>
                     <tr>
                         <td class="text-nowrap"><?= $escape($row['DateSent'] ?? '') ?></td>
                         <td><div class="fw-semibold"><?= $escape($row['CustomerName'] ?? 'Cliente sin nombre') ?></div><small class="text-muted"><?= $escape($row['CustomerApiId'] ?? '') ?></small></td>
@@ -101,6 +102,22 @@ ob_start();
                         <td class="message-cell"><?= $escape($row['Message'] ?? '') ?></td>
                         <td><?= (int) ($row['Successful'] ?? 0) === 1 ? '<span class="badge bg-success">Aceptado</span>' : '<span class="badge bg-danger">Fallido</span>' ?></td>
                         <td class="error-cell text-danger"><?= $escape($row['ErrorMessage'] ?? '') ?></td>
+                        <td class="text-nowrap">
+                            <?php if (is_array($debug) && array_key_exists('messages_counted', $debug)): ?>
+                                <div><strong>Contados:</strong> <?= (int) $debug['messages_counted'] ?></div>
+                                <div><strong>Límite:</strong> <?= $debug['messages_limit'] === null ? 'null' : $escape($debug['messages_limit']) ?></div>
+                                <small class="text-muted">Plan: <?= $escape($debug['plan_lookup_key'] ?? 'desconocido') ?></small>
+                                <?php if (isset($debug['limit_rule_present']) && !$debug['limit_rule_present']): ?>
+                                    <div class="text-danger small">Regla max_messages ausente</div>
+                                <?php endif; ?>
+                                <div class="text-muted small"><?= ($debug['count_source'] ?? '') === 'bulk_counter' ? 'Conteo de lote' : 'Consulta de base de datos' ?></div>
+                                <?php if (!empty($debug['comparison_month'])): ?>
+                                    <div class="text-muted small">Mes: <?= $escape($debug['comparison_month']) ?></div>
+                                <?php endif; ?>
+                            <?php else: ?>
+                                <span class="text-muted small">Sin comparación registrada</span>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>

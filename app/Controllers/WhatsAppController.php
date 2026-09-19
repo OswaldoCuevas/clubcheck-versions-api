@@ -169,8 +169,9 @@ class WhatsAppController extends Controller
 
         $customerPermits = new CustomerPermits($payload['customerApiId']);
         $erroMessages = null;
+        $limitDebug = null;
         try{
-            $customerPermits->checkSendMessage();
+            $customerPermits->checkSendMessage(null, $limitDebug);
         } catch (\App\Exceptions\ApiException $e) {
             $erroMessages = $e->getMessage();
         } catch (\Exception $e) {
@@ -178,6 +179,7 @@ class WhatsAppController extends Controller
         }
 
         $service = $this->getServiceForCustomer($payload['customerApiId']);
+        $service->setMessageLimitDebug($limitDebug);
         $result = $service->sendSubscriptionTemplate(
             $payload['phone'],
             $payload['firstName'] ?? 'Cliente',
@@ -218,8 +220,9 @@ class WhatsAppController extends Controller
 
         $customerPermits = new CustomerPermits($payload['customerApiId']);
         $erroMessages = null;
+        $limitDebug = null;
         try{
-            $customerPermits->checkSendMessage();
+            $customerPermits->checkSendMessage(null, $limitDebug);
         } catch (\App\Exceptions\ApiException $e) {
             $erroMessages = $e->getMessage();
         } catch (\Exception $e) {
@@ -230,6 +233,7 @@ class WhatsAppController extends Controller
         $daysText = $days == 1 ? 'un día' : "{$days} días";
 
         $service = $this->getServiceForCustomer($payload['customerApiId']);
+        $service->setMessageLimitDebug($limitDebug);
         $result = $service->sendWarningTemplate(
             $payload['phone'],
             $daysText,
@@ -268,8 +272,9 @@ class WhatsAppController extends Controller
 
         $customerPermits = new CustomerPermits($payload['customerApiId']);
         $erroMessages = null;
+        $limitDebug = null;
         try{
-            $customerPermits->checkSendMessage();
+            $customerPermits->checkSendMessage(null, $limitDebug);
         } catch (\App\Exceptions\ApiException $e) {
             $erroMessages = $e->getMessage();
         } catch (\Exception $e) {
@@ -277,6 +282,7 @@ class WhatsAppController extends Controller
         }
 
         $service = $this->getServiceForCustomer($payload['customerApiId']);
+        $service->setMessageLimitDebug($limitDebug);
         $result = $service->sendFinalizedTemplate(
             $payload['phone'],
             $payload['customerApiId'],
@@ -314,8 +320,9 @@ class WhatsAppController extends Controller
 
         $customerPermits = new CustomerPermits($payload['customerApiId']);
         $erroMessages = null;
+        $limitDebug = null;
         try{
-            $customerPermits->checkSendMessage();
+            $customerPermits->checkSendMessage(null, $limitDebug);
         } catch (\App\Exceptions\ApiException $e) {
             $erroMessages = $e->getMessage();
         } catch (\Exception $e) {
@@ -323,6 +330,7 @@ class WhatsAppController extends Controller
         }
 
         $service = $this->getServiceForCustomer($payload['customerApiId']);
+        $service->setMessageLimitDebug($limitDebug);
         $result = $service->sendLastDayTemplate(
             $payload['phone'],
             $payload['customerApiId'],
