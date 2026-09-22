@@ -69,7 +69,7 @@ Devuelve productos bajos en stock, listado paginado sin imagen y historial pagin
 
 `GET /api/desktop/attendances`
 
-Devuelve asistencias del rango, permitidas/no permitidas, promedio diario, grafica por dia, por dia de semana y por hora, mas listado paginado.
+Devuelve asistencias del rango, permitidas/no permitidas, promedio diario, grafica por dia, por dia de semana y por hora, mas listado paginado. Cada registro de `attendances.data` y `memberAccess.data` incluye `EndingDate` de la ultima membresia del socio segun `ViewSubscriptions`; es `null` si no tiene membresia.
 
 `GET /api/desktop/sales`
 

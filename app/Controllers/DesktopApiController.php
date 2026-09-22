@@ -371,9 +371,10 @@ class DesktopApiController extends Controller
             [$customerId, $from, $to]
         );
         $rows = $this->db->fetchAll(
-            "SELECT a.Id, a.CheckIn, a.Active, a.UserId, u.Fullname, u.Code
+            "SELECT a.Id, a.CheckIn, a.Active, a.UserId, u.Fullname, u.Code, v.EndingDate
              FROM AttendancesDesktop a
              LEFT JOIN UsersDesktop u ON u.Id = a.UserId
+             LEFT JOIN ViewSubscriptions v ON v.UserId = a.UserId AND v.CustomerApiId = a.CustomerApiId
              WHERE a.CustomerApiId = ? AND COALESCE(a.Removed, 0) = 0 AND STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
              ORDER BY STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s') DESC
              LIMIT ? OFFSET ?",
@@ -397,15 +398,17 @@ class DesktopApiController extends Controller
                     DATE(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s')) AS date,
                     COALESCE(u.Fullname, '') AS Fullname,
                     u.Code,
+                    v.EndingDate,
                     COUNT(*) AS totalAttempts,
                     SUM(CASE WHEN a.Active = 1 THEN 1 ELSE 0 END) AS allowedAttempts,
                     SUM(CASE WHEN a.Active = 0 THEN 1 ELSE 0 END) AS deniedAttempts,
                     MAX(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s')) AS lastAttemptAt
              FROM AttendancesDesktop a
              LEFT JOIN UsersDesktop u ON u.Id = a.UserId
+             LEFT JOIN ViewSubscriptions v ON v.UserId = a.UserId AND v.CustomerApiId = a.CustomerApiId
              WHERE a.CustomerApiId = ? AND COALESCE(a.Removed, 0) = 0 AND STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
              {$memberSearchWhere}
-             GROUP BY a.UserId, DATE(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s')), u.Fullname, u.Code
+             GROUP BY a.UserId, DATE(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s')), u.Fullname, u.Code, v.EndingDate
              {$memberHaving}
              ORDER BY lastAttemptAt DESC, Fullname ASC
              LIMIT ? OFFSET ?",
