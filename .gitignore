@@ -25,6 +25,9 @@ Thumbs.db
 .env.production
 .env.staging
 config/secrets.php
+/secrets/
+*firebase*service-account*.json
+*firebase*credentials*.json
 .htaccess
 
 # Logs y archivos temporales

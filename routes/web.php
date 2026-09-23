@@ -54,6 +54,8 @@ $router->any('/api/customers/token/register', 'CustomersController', 'registerTo
 $router->any('/api/customers/token/await', 'CustomersController', 'awaitToken');// NO
 $router->any('/api/customers/jwt/validate', 'CustomersController', 'validateJwtToken');
 $router->post('/api/customers/update-client-version', 'CustomersController', 'updateClientVersion', ['customer_jwt']);
+$router->post('/api/customers/push-tokens', 'PushNotificationsController', 'register', ['push_client_jwt']);
+$router->post('/api/customers/push-tokens/unregister', 'PushNotificationsController', 'unregister', ['push_client_jwt']);
 $router->get('/api/customers/announcements/current', 'AnnouncementsController', 'current', ['customer_jwt']);
 $router->post('/api/customers/announcements/viewed', 'AnnouncementsController', 'viewedCurrent', ['customer_jwt']);
 $router->post('/api/customers/announcements/:id/viewed', 'AnnouncementsController', 'viewed', ['customer_jwt']);
@@ -119,6 +121,8 @@ $router->post('/admin/api/customers/regenerate-access-key', 'AdminController', '
 $router->post('/admin/api/customers/:customerId/delete', 'AdminController', 'deleteCustomerJson');// NO, Administrativo
 $router->delete('/admin/api/customers/:customerId', 'AdminController', 'deleteCustomerJson');// NO, Administrativo
 $router->get('/admin/api-docs', 'AdminController', 'apiDocs');// NO, Administrativo
+$router->get('/admin/push', 'PushNotificationsController', 'page');
+$router->post('/admin/api/push/send', 'PushNotificationsController', 'send');
 
 // Announcements Admin
 $router->get('/admin/announcements', 'AdminController', 'announcements');// NO, Administrativo
