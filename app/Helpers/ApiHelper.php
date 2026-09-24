@@ -17,13 +17,25 @@ class ApiHelper
     }
     public static function respond($data, $statusCode = 200)
     {
+        $json = json_encode(
+            $data,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE
+        );
+        if ($json === false) {
+            $statusCode = 500;
+            $json = '{"success":false,"error":"No se pudo serializar la respuesta JSON"}';
+        }
+
         http_response_code($statusCode);
-        header('Content-Type: application/json');
+        header_remove('Transfer-Encoding');
+        header('Content-Type: application/json; charset=utf-8');
+        header('Content-Length: ' . strlen($json));
+        header('X-Content-Type-Options: nosniff');
         header('Access-Control-Allow-Origin: *');
         header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
         header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-Access-Token, X-Customer-JWT, X-Desktop-JWT, X-Device-Name, X-Client-Version, X-HTTP-Method-Override');
         header('Access-Control-Max-Age: 86400');
-        echo json_encode($data, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+        echo $json;
         exit;
     }
 

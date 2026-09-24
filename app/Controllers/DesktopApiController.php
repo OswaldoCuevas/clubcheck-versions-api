@@ -103,6 +103,8 @@ class DesktopApiController extends Controller
         $token = $jwt->createToken([
             'name' => $row['CustomerName'],
             'customerId' => $row['CustomerId'],
+            'adminId' => $row['AdminId'],
+            'role' => (int) $row['Role'],
         ], self::JWT_TTL_SECONDS);
 
         ApiHelper::respond([
@@ -113,6 +115,12 @@ class DesktopApiController extends Controller
             'customer' => [
                 'name' => $row['CustomerName'],
                 'customerId' => $row['CustomerId'],
+            ],
+            'administrator' => [
+                'id' => $row['AdminId'],
+                'username' => $row['Username'],
+                'email' => $row['Email'],
+                'role' => (int) $row['Role'],
             ],
         ]);
     }

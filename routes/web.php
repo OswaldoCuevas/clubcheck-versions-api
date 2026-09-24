@@ -56,6 +56,9 @@ $router->any('/api/customers/jwt/validate', 'CustomersController', 'validateJwtT
 $router->post('/api/customers/update-client-version', 'CustomersController', 'updateClientVersion', ['customer_jwt']);
 $router->post('/api/customers/push-tokens', 'PushNotificationsController', 'register', ['push_client_jwt']);
 $router->post('/api/customers/push-tokens/unregister', 'PushNotificationsController', 'unregister', ['push_client_jwt']);
+$router->post('/api/customers/permission-requests', 'PermissionRequestsController', 'create', ['customer_jwt']);
+$router->get('/api/customers/permission-requests/:id', 'PermissionRequestsController', 'status', ['customer_jwt']);
+$router->post('/api/customers/permission-requests/:id/cancel', 'PermissionRequestsController', 'cancel', ['customer_jwt']);
 $router->get('/api/customers/announcements/current', 'AnnouncementsController', 'current', ['customer_jwt']);
 $router->post('/api/customers/announcements/viewed', 'AnnouncementsController', 'viewedCurrent', ['customer_jwt']);
 $router->post('/api/customers/announcements/:id/viewed', 'AnnouncementsController', 'viewed', ['customer_jwt']);
@@ -80,6 +83,11 @@ $router->get('/api/desktop/charts/memberships', 'DesktopApiController', 'chartsM
 $router->get('/api/desktop/charts/products', 'DesktopApiController', 'chartsProducts', ['desktop_jwt']);
 $router->get('/api/desktop/charts/attendances', 'DesktopApiController', 'chartsAttendances', ['desktop_jwt']);
 $router->get('/api/desktop/charts/sales', 'DesktopApiController', 'chartsSales', ['desktop_jwt']);
+$router->get('/api/desktop/permission-requests', 'PermissionRequestsController', 'index', ['desktop_jwt']);
+$router->patch('/api/desktop/permission-requests/:id', 'PermissionRequestsController', 'resolve', ['desktop_jwt']);
+$router->get('/api/desktop/notifications', 'NotificationsController', 'index', ['desktop_jwt']);
+$router->patch('/api/desktop/notifications/read-all', 'NotificationsController', 'markAllRead', ['desktop_jwt']);
+$router->patch('/api/desktop/notifications/:id/read', 'NotificationsController', 'markRead', ['desktop_jwt']);
 
 // Rutas de mensajes enviados (MessageSent)
 // $router->get('/api/messages-sent', 'MessageSentController', 'index');

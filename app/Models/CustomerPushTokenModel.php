@@ -51,4 +51,13 @@ class CustomerPushTokenModel extends Model
             [$customerId]
         );
     }
+
+    public function forCustomerPlatform(string $customerId, string $platform): array
+    {
+        return $this->db->fetchAll(
+            'SELECT Id, Token FROM CustomerPushTokens
+             WHERE CustomerId = ? AND Platform = ? ORDER BY Id',
+            [$customerId, $platform]
+        );
+    }
 }
