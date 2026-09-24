@@ -16,6 +16,15 @@ class PermissionRequestPushService
         $failed = 0;
 
         try {
+            $config = require __DIR__ . '/../../config/firebase.php';
+            $webOptions = [
+                'iconUrl' => (string) ($config['web_icon_url'] ?? ''),
+                'link' => (string) ($config['web_link'] ?? ''),
+            ];
+            if ($webOptions['link'] !== '') {
+                // También queda disponible para onMessage o service workers personalizados.
+                $data['link'] = $webOptions['link'];
+            }
             $tokens = new CustomerPushTokenModel();
             $devices = $tokens->forCustomerPlatform($customerId, 'web');
             if ($devices === []) {
@@ -29,7 +38,7 @@ class PermissionRequestPushService
 
         foreach ($devices as $device) {
             try {
-                $result = $push->send($device['Token'], $title, $body, $data);
+                $result = $push->send($device['Token'], $title, $body, $data, $webOptions);
                 if ($result['success']) {
                     ++$sent;
                     continue;

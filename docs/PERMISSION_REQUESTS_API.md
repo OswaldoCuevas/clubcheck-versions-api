@@ -110,6 +110,8 @@ También acepta `Denied`. El backend toma el administrador resolutor del `deskto
 
 El navegador debe registrar su token con `POST /api/customers/push-tokens`, usando el `desktop_jwt` y `platform: "web"`. Al recibir `permission_request.created` o `permission_request.cancelled`, puede usar `screen` y `recordId` para navegar al registro y debe volver a pedir el listado de pendientes; la notificación es una señal de actualización, no la fuente de verdad.
 
+Las notificaciones de solicitudes usan como icono `FIREBASE_WEB_ICON_URL` y al hacer clic abren `FIREBASE_WEB_LINK`. Sus valores predeterminados son `https://clubcheck.com.mx/admin/favicon.ico` y `https://clubcheck.com.mx/admin/` respectivamente.
+
 ## Campana de notificaciones web
 
 Las notificaciones pertenecen al administrador autenticado. Por eso cada administrador mantiene su propio contador y estado leído/no leído. Todos estos endpoints requieren `desktop_jwt`.
