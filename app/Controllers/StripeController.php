@@ -461,8 +461,9 @@ class StripeController extends Controller
      * POST /api/stripe/customers/:customerId/subscriptions
      * Crea una suscripción
      * 
-     * Body: { "price_id": "price_xxx", "trial_days": 30, "coupon_code": "DESCUENTO20" }
-     * O usando lookup_key: { "plan_lookup_key": "professional_monthly", "trial_days": 30, "coupon_code": "DESCUENTO20" }
+     * Body: { "price_id": "price_xxx", "trial_days": 30, "coupon_code": "DESCUENTO20", "idempotency_key": "uuid" }
+     * O usando lookup_key: { "plan_lookup_key": "professional_monthly", "trial_days": 30, "coupon_code": "DESCUENTO20", "idempotency_key": "uuid" }
+     * La clave también puede enviarse en el header Idempotency-Key.
      */
     public function createSubscription(string $billingId): void
     {
@@ -483,7 +484,16 @@ class StripeController extends Controller
 
         $trialDays  = (int)($input['trial_days'] ?? 0);
         $couponCode = $input['coupon_code'] ?? null;
-        $result     = $this->stripeService->createSubscription($customerId, $priceId, $trialDays, 'error_if_incomplete', $couponCode);
+        $rawIdempotencyKey = $input['idempotency_key'] ?? ($_SERVER['HTTP_IDEMPOTENCY_KEY'] ?? null);
+        $idempotencyKey = is_scalar($rawIdempotencyKey) ? (string)$rawIdempotencyKey : null;
+        $result     = $this->stripeService->createSubscription(
+            $customerId,
+            $priceId,
+            $trialDays,
+            'error_if_incomplete',
+            $couponCode,
+            $idempotencyKey
+        );
 
         if ($result['success']) {
             $customer = $this->getCustomerFromSession();

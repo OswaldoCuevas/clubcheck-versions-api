@@ -282,7 +282,14 @@ class StripeService
      * @param string $paymentBehavior 'default_incomplete' (requiere confirmación) o 'error_if_incomplete' (cobra automáticamente o falla)
      * @param string|null $couponCode Código de cupón opcional
      */
-    public function createSubscription(string $customerId, string $priceId, int $trialDays = 0, string $paymentBehavior = 'error_if_incomplete', ?string $couponCode = null): array
+    public function createSubscription(
+        string $customerId,
+        string $priceId,
+        int $trialDays = 0,
+        string $paymentBehavior = 'error_if_incomplete',
+        ?string $couponCode = null,
+        ?string $idempotencyKey = null
+    ): array
     {
         try {
             // Obtener información del precio para verificar su tipo
@@ -290,7 +297,19 @@ class StripeService
             
             // Si es un precio one-time (permanente), usar createOneTimePayment
             if ($price->type === 'one_time') {
-                return $this->createOneTimePayment($customerId, $priceId, $couponCode);
+                return $this->createOneTimePayment($customerId, $priceId, $couponCode, $idempotencyKey);
+            }
+
+            // Nunca crear otra suscripción si el cliente ya tiene una vigente o
+            // recuperable. En particular, una suscripción past_due conserva una
+            // factura abierta que Stripe puede volver a cobrar automáticamente.
+            $existingResult = $this->resolveExistingSubscriptionForCreation(
+                $customerId,
+                $priceId,
+                $idempotencyKey
+            );
+            if ($existingResult !== null) {
+                return $existingResult;
             }
 
             // Validar cupón si se proporcionó
@@ -338,7 +357,18 @@ class StripeService
 
             // NO se pasa test_clock aquí - se hereda automáticamente del cliente
 
-            $subscription = $this->stripe->subscriptions->create($options);
+            $subscription = $this->stripe->subscriptions->create(
+                $options,
+                [
+                    'idempotency_key' => $this->buildIdempotencyKey(
+                        'subscription-create',
+                        $customerId,
+                        $priceId,
+                        $couponCode,
+                        $idempotencyKey
+                    )
+                ]
+            );
 
             // Verificar si requiere autenticación 3DS
             $paymentIntent = $subscription->latest_invoice->payment_intent ?? null;
@@ -382,6 +412,223 @@ class StripeService
                 'debug' => $e->getMessage()
             ];
         }
+    }
+
+    /**
+     * Reutiliza o recupera una suscripción existente antes de crear otra.
+     * Devuelve null únicamente cuando es seguro continuar con la creación.
+     */
+    private function resolveExistingSubscriptionForCreation(
+        string $customerId,
+        string $requestedPriceId,
+        ?string $idempotencyKey
+    ): ?array {
+        $subscriptions = $this->stripe->subscriptions->all([
+            'customer' => $customerId,
+            'limit' => 100,
+            'expand' => [
+                'data.items.data.price',
+                'data.latest_invoice'
+            ]
+        ]);
+
+        $byPriority = [
+            'active' => [],
+            'trialing' => [],
+            'past_due' => [],
+            'unpaid' => [],
+            'incomplete' => [],
+            'paused' => [],
+        ];
+
+        foreach ($subscriptions->data as $subscription) {
+            if (array_key_exists($subscription->status, $byPriority)) {
+                $byPriority[$subscription->status][] = $subscription;
+            }
+        }
+
+        foreach ($byPriority as $status => $candidates) {
+            foreach ($candidates as $subscription) {
+                if (!$this->subscriptionUsesPrice($subscription, $requestedPriceId)) {
+                    return $this->existingSubscriptionConflict($subscription);
+                }
+
+                if (in_array($status, ['active', 'trialing'], true)) {
+                    if ($subscription->cancel_at_period_end) {
+                        return [
+                            'success' => false,
+                            'code' => 'SUBSCRIPTION_CANCELING',
+                            'error' => 'La suscripción actual está programada para cancelarse. Reactívala en lugar de crear otra.',
+                            'subscription_id' => $subscription->id,
+                            'status' => $subscription->status,
+                            'cancel_at_period_end' => true,
+                        ];
+                    }
+
+                    return $this->subscriptionSuccessResult($subscription, [
+                        'reused_subscription' => true,
+                    ]);
+                }
+
+                if (in_array($status, ['past_due', 'unpaid', 'incomplete'], true)) {
+                    return $this->payExistingSubscriptionInvoice(
+                        $subscription,
+                        $customerId,
+                        $idempotencyKey
+                    );
+                }
+
+                return [
+                    'success' => false,
+                    'code' => 'SUBSCRIPTION_REQUIRES_ATTENTION',
+                    'error' => 'La suscripción existente requiere atención antes de crear otra.',
+                    'subscription_id' => $subscription->id,
+                    'status' => $subscription->status,
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    private function subscriptionUsesPrice($subscription, string $priceId): bool
+    {
+        foreach ($subscription->items->data ?? [] as $item) {
+            $itemPriceId = is_string($item->price ?? null)
+                ? $item->price
+                : ($item->price->id ?? null);
+
+            if ($itemPriceId === $priceId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function existingSubscriptionConflict($subscription): array
+    {
+        $price = $subscription->items->data[0]->price ?? null;
+
+        return [
+            'success' => false,
+            'code' => 'SUBSCRIPTION_EXISTS',
+            'error' => 'Ya existe una suscripción para este cliente. Solo se puede elegir el plan que se usa actualmente.',
+            'subscription_id' => $subscription->id,
+            'status' => $subscription->status,
+            'current_plan_lookup_key' => is_object($price) ? ($price->lookup_key ?? null) : null,
+        ];
+    }
+
+    private function payExistingSubscriptionInvoice(
+        $subscription,
+        string $customerId,
+        ?string $idempotencyKey
+    ): array {
+        $invoice = $subscription->latest_invoice ?? null;
+
+        if (is_string($invoice)) {
+            $invoice = $this->stripe->invoices->retrieve($invoice);
+        }
+
+        if (!$invoice || empty($invoice->id)) {
+            return [
+                'success' => false,
+                'code' => 'SUBSCRIPTION_PAYMENT_PENDING',
+                'error' => 'La suscripción existente tiene un pago pendiente, pero no se encontró una factura cobrable.',
+                'subscription_id' => $subscription->id,
+                'status' => $subscription->status,
+            ];
+        }
+
+        if ($invoice->status === 'open') {
+            $invoice = $this->stripe->invoices->pay(
+                $invoice->id,
+                [],
+                [
+                    'idempotency_key' => $this->buildIdempotencyKey(
+                        'invoice-pay',
+                        $customerId,
+                        $invoice->id,
+                        null,
+                        $idempotencyKey
+                    )
+                ]
+            );
+        }
+
+        if ($invoice->status !== 'paid') {
+            return [
+                'success' => false,
+                'code' => 'SUBSCRIPTION_PAYMENT_PENDING',
+                'error' => 'La suscripción existente continúa pendiente de pago.',
+                'subscription_id' => $subscription->id,
+                'invoice_id' => $invoice->id,
+                'invoice_status' => $invoice->status,
+                'status' => $subscription->status,
+            ];
+        }
+
+        $subscription = $this->stripe->subscriptions->retrieve($subscription->id, [
+            'expand' => ['items.data.price']
+        ]);
+
+        if (!in_array($subscription->status, ['active', 'trialing'], true)) {
+            return [
+                'success' => false,
+                'code' => 'SUBSCRIPTION_PAYMENT_PENDING',
+                'error' => 'La factura fue pagada, pero la suscripción todavía no está activa.',
+                'subscription_id' => $subscription->id,
+                'invoice_id' => $invoice->id,
+                'invoice_status' => $invoice->status,
+                'status' => $subscription->status,
+            ];
+        }
+
+        return $this->subscriptionSuccessResult($subscription, [
+            'reused_subscription' => true,
+            'recovered_payment' => true,
+            'invoice_id' => $invoice->id,
+        ]);
+    }
+
+    private function subscriptionSuccessResult($subscription, array $extra = []): array
+    {
+        return array_merge([
+            'success' => true,
+            'subscription_id' => $subscription->id,
+            'status' => $subscription->status,
+            'current_period_end' => $subscription->current_period_end
+                ?? ($subscription->items->data[0]->current_period_end ?? null),
+        ], $extra);
+    }
+
+    /**
+     * La clave enviada por el cliente identifica una operación completa. Cuando no
+     * se envía, la ventana corta protege doble clic y concurrencia sin impedir que
+     * el cliente vuelva a intentar el pago después de corregir su tarjeta.
+     */
+    private function buildIdempotencyKey(
+        string $scope,
+        string $customerId,
+        string $resourceId,
+        ?string $couponCode,
+        ?string $providedKey
+    ): string {
+        $providedKey = trim((string)$providedKey);
+        $operation = $providedKey !== ''
+            ? 'provided|' . $providedKey
+            : 'window|' . intdiv(time(), 60);
+
+        return 'clubcheck-' . $scope . '-' . hash(
+            'sha256',
+            implode('|', [
+                $operation,
+                $customerId,
+                $resourceId,
+                (string)$couponCode,
+            ])
+        );
     }
 
     /**
@@ -1402,7 +1649,12 @@ public function getCurrentPlan(string $customerId, bool $includePastDue = false)
      * @param string|null $couponCode Código de cupón opcional
      * @return array Resultado del pago
      */
-    public function createOneTimePayment(string $customerId, string $priceId, ?string $couponCode = null): array
+    public function createOneTimePayment(
+        string $customerId,
+        string $priceId,
+        ?string $couponCode = null,
+        ?string $idempotencyKey = null
+    ): array
     {
         try {
             // Validar cupón si se proporcionó
@@ -1449,7 +1701,18 @@ public function getCurrentPlan(string $customerId, bool $includePastDue = false)
             //     }
             // }
 
-            $paymentIntent = $this->stripe->paymentIntents->create($paymentIntentOptions);
+            $paymentIntent = $this->stripe->paymentIntents->create(
+                $paymentIntentOptions,
+                [
+                    'idempotency_key' => $this->buildIdempotencyKey(
+                        'one-time-payment',
+                        $customerId,
+                        $priceId,
+                        $couponCode,
+                        $idempotencyKey
+                    )
+                ]
+            );
 
             // Verificar el estado del pago
             if ($paymentIntent->status !== 'succeeded') {
