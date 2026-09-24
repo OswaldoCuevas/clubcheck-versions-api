@@ -142,7 +142,6 @@ class FirebasePushService
         $result = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        curl_close($ch);
 
         if ($result === false) {
             throw new \RuntimeException('Error de conexión con Firebase: ' . $error);

@@ -258,7 +258,8 @@ class Router
             error_log($e->getTraceAsString());
 
             // En producción no mostrar detalles del error
-            $isProduction = ($_ENV['APP_MODE'] ?? 'DEV') === 'PROD';
+            $appMode = strtoupper((string) ($_ENV['APP_MODE'] ?? getenv('APP_MODE') ?: 'DEV'));
+            $isProduction = in_array($appMode, ['PROD', 'PRODUCTION'], true);
             
             $this->respondJson([
                 'success' => false,

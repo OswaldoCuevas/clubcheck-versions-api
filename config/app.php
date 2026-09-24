@@ -1,11 +1,18 @@
 <?php
 
+$appMode = strtoupper((string) ($_ENV['APP_MODE'] ?? getenv('APP_MODE') ?: 'DEV'));
+$isProduction = in_array($appMode, ['PROD', 'PRODUCTION'], true);
+$debugValue = $_ENV['APP_DEBUG'] ?? getenv('APP_DEBUG');
+$debug = $debugValue === false || $debugValue === null || $debugValue === ''
+    ? !$isProduction
+    : filter_var($debugValue, FILTER_VALIDATE_BOOLEAN);
+
 return [
     'app' => [
         'name' => 'ClubCheck Version Manager',
         'version' => '2.0.0',
-        'environment' => 'development', // development, production
-        'debug' => true,
+        'environment' => $isProduction ? 'production' : 'development',
+        'debug' => $debug,
         'timezone' => 'America/Mexico_City',
         'url' => 'http://localhost/clubcheck',
     ],

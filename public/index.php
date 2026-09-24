@@ -1,7 +1,9 @@
 <?php
 // Habilitar reporte de errores para depuración
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+// Evita que avisos de PHP contaminen respuestas JSON antes de cargar el entorno.
+// config/bootstrap.php vuelve a habilitarlos cuando la aplicación está en desarrollo.
+ini_set('display_errors', '0');
 
 // Inicializar sesión
 session_start();
