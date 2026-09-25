@@ -71,6 +71,24 @@ ob_start();
                                         <div class="card h-100 border-0 shadow-sm hover-shadow">
                                             <div class="card-body d-flex flex-column">
                                                 <div class="d-flex align-items-center mb-3">
+                                                    <span class="icon-circle text-white me-3" style="background-color: #0d6efd;">
+                                                        <i class="fas fa-fingerprint"></i>
+                                                    </span>
+                                                    <div>
+                                                        <h5 class="card-title mb-1">Diagnostico ISAPI</h5>
+                                                        <small class="text-muted">Consulta terminales faciales mediante el cliente de escritorio</small>
+                                                    </div>
+                                                </div>
+                                                <a href="<?= app_url('/admin/isapi') ?>" class="btn btn-primary mt-auto">
+                                                    Abrir diagnostico <i class="fas fa-arrow-right ms-2"></i>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card h-100 border-0 shadow-sm hover-shadow">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex align-items-center mb-3">
                                                     <span class="icon-circle bg-primary text-white me-3"><i class="fas fa-bell"></i></span>
                                                     <div>
                                                         <h5 class="card-title mb-1">Notificaciones push</h5>

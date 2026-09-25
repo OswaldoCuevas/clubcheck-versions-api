@@ -89,6 +89,12 @@ $router->get('/api/desktop/notifications', 'NotificationsController', 'index', [
 $router->patch('/api/desktop/notifications/read-all', 'NotificationsController', 'markAllRead', ['desktop_jwt']);
 $router->patch('/api/desktop/notifications/:id/read', 'NotificationsController', 'markRead', ['desktop_jwt']);
 
+// Cliente ISAPI de escritorio (customer_jwt): canal persistente basado en cola.
+// WebSocket puede agregarse despues como aviso; estos endpoints conservan entrega y reintentos.
+$router->post('/api/customers/isapi/heartbeat', 'IsapiController', 'heartbeat', ['customer_jwt']);
+$router->post('/api/customers/isapi/commands/claim', 'IsapiController', 'claim', ['customer_jwt']);
+$router->post('/api/customers/isapi/commands/:id/result', 'IsapiController', 'result', ['customer_jwt']);
+
 // Rutas de mensajes enviados (MessageSent)
 // $router->get('/api/messages-sent', 'MessageSentController', 'index');
 // $router->get('/api/messages-sent/:id', 'MessageSentController', 'show');
@@ -187,6 +193,12 @@ $router->post('/api/licenses/validate', 'StripeController', 'validateLicense');
 $router->get('/admin/licenses', 'AdminController', 'licenses');// NO, Administrativo
 $router->get('/admin/api/licenses', 'AdminController', 'licensesJson');// NO, Administrativo
 $router->post('/admin/api/licenses/generate', 'AdminController', 'generateLicenseAdmin');// NO, Administrativo
+
+// Diagnostico remoto ISAPI
+$router->get('/admin/isapi', 'IsapiController', 'page');
+$router->get('/admin/api/isapi', 'IsapiController', 'adminIndex');
+$router->post('/admin/api/isapi/commands', 'IsapiController', 'adminCreate');
+$router->get('/admin/api/isapi/commands/:id', 'IsapiController', 'adminShow');
 
 // Rutas de herramientas
 $router->any('/password-generator', 'ToolsController', 'passwordGenerator');
