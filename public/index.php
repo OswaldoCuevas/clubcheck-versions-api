@@ -120,7 +120,7 @@ try {
     // Resolver la ruta
     $router->resolve();
     
-} catch (Exception $e) {
+} catch (\Throwable $e) {
     // Manejo de errores
     echo "Error: " . $e->getMessage() . "<br>";
     echo "Archivo: " . $e->getFile() . "<br>";

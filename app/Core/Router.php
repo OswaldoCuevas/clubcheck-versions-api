@@ -252,24 +252,41 @@ class Router
         } catch (ApiException $e) {
             // Excepción controlada - responder con JSON formateado
             $e->respond();
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             // Excepción no controlada - loguear y responder error genérico
-            error_log("Unhandled Exception in {$controllerClass}@{$method}: " . $e->getMessage());
-            error_log($e->getTraceAsString());
+            $errorId = 'err_' . date('YmdHis') . '_' . bin2hex(random_bytes(4));
+            $logMessage = sprintf(
+                '[%s] Unhandled %s in %s@%s: %s in %s:%d%s%s',
+                $errorId,
+                get_class($e),
+                $controllerClass,
+                $method,
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine(),
+                PHP_EOL,
+                $e->getTraceAsString()
+            );
+            function_exists('logger') ? logger($logMessage, 'error') : error_log($logMessage);
 
-            // En producción no mostrar detalles del error
-            $appMode = strtoupper((string) ($_ENV['APP_MODE'] ?? getenv('APP_MODE') ?: 'DEV'));
-            $isProduction = in_array($appMode, ['PROD', 'PRODUCTION'], true);
+            // APP_DEBUG controla los detalles incluso cuando APP_MODE=PROD.
+            $showDebug = (bool) config('app.debug', false);
             
-            $this->respondJson([
+            $response = [
                 'success' => false,
-                'error' => $isProduction ? 'Error interno del servidor' : $e->getMessage(),
+                'error' => $showDebug ? $e->getMessage() : 'Error interno del servidor',
                 'error_code' => 'INTERNAL_ERROR',
-                'debug' => $isProduction ? null : [
+                'error_id' => $errorId,
+            ];
+            if ($showDebug) {
+                $response['debug'] = [
+                    'type' => get_class($e),
                     'file' => $e->getFile(),
                     'line' => $e->getLine(),
-                ]
-            ], 500);
+                    'trace' => explode(PHP_EOL, $e->getTraceAsString()),
+                ];
+            }
+            $this->respondJson($response, 500);
         }
     }
 
