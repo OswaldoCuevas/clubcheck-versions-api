@@ -43,7 +43,6 @@ class IsapiController extends Controller
             'isAuthenticated' => true,
             'customers' => (new CustomerRegistryModel())->getCustomers(),
             'actions' => $this->service->actions(),
-            'proxyAllowDelete' => (bool) config('isapi.test_proxy_allow_delete', false),
             'csrfToken' => $_SESSION['isapi_csrf'],
         ]);
     }

@@ -103,46 +103,6 @@ ob_start();
                             </select>
                             <div class="form-text" id="actionDescription"></div>
                         </div>
-                        <div id="proxyFields" class="border border-warning rounded p-3 mb-3 d-none">
-                            <div class="fw-semibold text-warning-emphasis mb-2">
-                                <i class="fas fa-triangle-exclamation me-1"></i>Proxy temporal de pruebas
-                            </div>
-                            <div class="alert alert-warning py-2 small">
-                                Solo acepta rutas relativas <code>/ISAPI/...</code>. La direccion y las credenciales permanecen en el desktop.
-                            </div>
-                            <div class="row g-2">
-                                <div class="col-4">
-                                    <label for="proxyMethod" class="form-label">Metodo</label>
-                                    <select class="form-select" id="proxyMethod">
-                                        <option value="GET">GET</option>
-                                        <option value="POST">POST</option>
-                                        <option value="PUT">PUT</option>
-                                        <?php if (!empty($proxyAllowDelete)): ?>
-                                            <option value="DELETE">DELETE</option>
-                                        <?php endif; ?>
-                                    </select>
-                                </div>
-                                <div class="col-8">
-                                    <label for="proxyContentType" class="form-label">Content-Type</label>
-                                    <select class="form-select" id="proxyContentType">
-                                        <option value="application/xml">application/xml</option>
-                                        <option value="text/xml">text/xml</option>
-                                        <option value="application/json">application/json</option>
-                                    </select>
-                                </div>
-                                <div class="col-12">
-                                    <label for="proxyPath" class="form-label">Ruta relativa</label>
-                                    <input class="form-control font-monospace" id="proxyPath" maxlength="1000"
-                                           value="/ISAPI/System/status" placeholder="/ISAPI/System/status">
-                                </div>
-                                <div class="col-12" id="proxyBodyContainer">
-                                    <label for="proxyBody" class="form-label">Body XML o JSON</label>
-                                    <textarea class="form-control font-monospace" id="proxyBody" rows="9" maxlength="262144"
-                                              placeholder="Pega aqui el cuerpo exacto que recibira la terminal"></textarea>
-                                    <div class="form-text">En GET el body se omite automaticamente.</div>
-                                </div>
-                            </div>
-                        </div>
                         <div id="paginationFields" class="border rounded p-3 mb-3 d-none">
                             <div class="fw-semibold mb-2">Paginacion</div>
                             <div class="row g-2">
@@ -173,6 +133,11 @@ ob_start();
                                 </div>
                             </div>
                         </div>
+                        <div id="cardReaderFields" class="border rounded p-3 mb-3 d-none">
+                            <div class="fw-semibold mb-2">Lector de tarjetas</div>
+                            <label for="readerNo" class="form-label">Numero de lector</label>
+                            <input class="form-control" id="readerNo" type="number" value="1" min="1" max="255">
+                        </div>
                         <div id="activityFields" class="border rounded p-3 mb-3 d-none">
                             <div class="fw-semibold mb-2">Rango de actividad</div>
                             <div class="row g-2">
@@ -184,8 +149,16 @@ ob_start();
                                     <label for="activityTo" class="form-label">Hasta</label>
                                     <input class="form-control" id="activityTo" type="datetime-local">
                                 </div>
+                                <div class="col-6">
+                                    <label for="activityMajor" class="form-label">Evento major</label>
+                                    <input class="form-control" id="activityMajor" type="number" value="0" min="0" max="2147483647">
+                                </div>
+                                <div class="col-6">
+                                    <label for="activityMinor" class="form-label">Evento minor</label>
+                                    <input class="form-control" id="activityMinor" type="number" value="0" min="0" max="2147483647">
+                                </div>
                             </div>
-                            <div class="form-text">Maximo 31 dias. Vacio consulta las ultimas 24 horas.</div>
+                            <div class="form-text">Maximo 31 dias. Vacio consulta las ultimas 24 horas. Major y minor en 0 consultan todos.</div>
                         </div>
                         <button class="btn btn-primary w-100" type="submit" id="submitButton">
                             <i class="fas fa-paper-plane me-2"></i>Enviar consulta
@@ -576,15 +549,11 @@ ob_start();
         const paginated = ['get_registered_members', 'get_recent_activity'].includes(action);
         el('paginationFields').classList.toggle('d-none', !paginated);
         el('pingFields').classList.toggle('d-none', action !== 'network_ping');
+        el('cardReaderFields').classList.toggle('d-none', action !== 'get_card_reader_config');
         el('activityFields').classList.toggle('d-none', action !== 'get_recent_activity');
-        el('proxyFields').classList.toggle('d-none', action !== 'test_proxy_request');
-        updateProxyBodyVisibility();
-    }
-
-    function updateProxyBodyVisibility() {
-        const isGet = el('proxyMethod').value === 'GET';
-        el('proxyBody').disabled = isGet;
-        el('proxyBodyContainer').classList.toggle('opacity-50', isGet);
+        const pageSize = el('pageSize');
+        pageSize.max = action === 'get_recent_activity' ? '30' : '100';
+        if (Number(pageSize.value) > Number(pageSize.max)) pageSize.value = pageSize.max;
     }
 
     async function request(url, options = {}) {
@@ -756,6 +725,9 @@ ob_start();
                 parameters.timeoutMs = Number(el('pingTimeoutMs').value);
                 parameters.attempts = Number(el('pingAttempts').value);
             }
+            if (action === 'get_card_reader_config') {
+                parameters.readerNo = Number(el('readerNo').value);
+            }
             if (['get_registered_members', 'get_recent_activity'].includes(action)) {
                 parameters.page = Number(el('page').value);
                 parameters.pageSize = Number(el('pageSize').value);
@@ -765,20 +737,8 @@ ob_start();
             if (action === 'get_recent_activity') {
                 parameters.from = el('activityFrom').value || null;
                 parameters.to = el('activityTo').value || null;
-            }
-            if (action === 'test_proxy_request') {
-                const method = el('proxyMethod').value;
-                const path = el('proxyPath').value.trim();
-                if (!path.startsWith('/ISAPI/')) {
-                    throw new Error('La ruta debe comenzar con /ISAPI/.');
-                }
-                if (method !== 'GET' && !window.confirm(`Se enviara una solicitud ${method} a ${path}. ¿Deseas continuar?`)) {
-                    return;
-                }
-                parameters.method = method;
-                parameters.path = path;
-                parameters.contentType = el('proxyContentType').value;
-                parameters.body = method === 'GET' ? null : (el('proxyBody').value || null);
+                parameters.major = Number(el('activityMajor').value);
+                parameters.minor = Number(el('activityMinor').value);
             }
             await request(endpoints.create, {
                 method: 'POST',
@@ -803,7 +763,6 @@ ob_start();
     });
 
     el('action').addEventListener('change', updateActionDescription);
-    el('proxyMethod').addEventListener('change', updateProxyBodyVisibility);
     el('customerId').addEventListener('change', updateTerminalOptions);
     el('agentId').addEventListener('input', updateTerminalOptions);
     el('terminalIndex').addEventListener('change', selectTerminalLabel);

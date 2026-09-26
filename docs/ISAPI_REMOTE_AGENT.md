@@ -63,9 +63,8 @@ El servidor puede responder:
 }
 ```
 
-La URL base, puerto y credenciales se resuelven en el cliente. No se reciben
-desde el servidor. La unica excepcion temporal es `test_proxy_request`, que
-incluye exclusivamente una ruta relativa `/ISAPI/...` para diagnostico.
+La URL, ruta ISAPI, metodo, puerto y credenciales se resuelven en el cliente.
+No se reciben desde el servidor.
 
 `terminalIndex` usa base cero y apunta directamente al arreglo local del cliente.
 Antes de ejecutar, el cliente debe validar que el indice exista. Si no existe,
@@ -120,88 +119,14 @@ fase no se deben enviar fotografias, plantillas faciales ni credenciales.
 - `device_info`
 - `system_capabilities`
 - `access_capabilities`
+- `get_system_time`
+- `get_card_reader_config`
+- `get_identity_terminal_config`
 - `get_registered_members`
 - `get_recent_activity`
-- `test_proxy_request` (solo aparece con `ISAPI_TEST_PROXY_ENABLED=true`)
 
 La lista se controla en `app/Services/IsapiCommandService.php`. El cliente debe
 tener un manejador local para cada comando; el panel no acepta rutas arbitrarias.
-
-## Proxy ISAPI temporal de pruebas
-
-Esta funcion permite descubrir rutas, metodos y cuerpos admitidos por una
-terminal sin enviar al servidor su host, puerto, usuario o contrasena. Esta
-deshabilitada por defecto. Para una prueba controlada se habilita en el entorno
-del servidor:
-
-```dotenv
-ISAPI_TEST_PROXY_ENABLED=true
-ISAPI_TEST_PROXY_ALLOW_DELETE=false
-```
-
-Despues de la prueba se cambia `ISAPI_TEST_PROXY_ENABLED=false`. No requiere
-eliminar tablas ni migraciones; la accion desaparece del panel y el servidor
-deja de aceptarla.
-
-Ejemplo de la orden que recibe el desktop:
-
-```json
-{
-  "id": "uuid",
-  "action": "test_proxy_request",
-  "terminalIndex": 0,
-  "deviceId": "entrada",
-  "parameters": {
-    "method": "PUT",
-    "path": "/ISAPI/AccessControl/UserInfo/SetUp?format=json",
-    "contentType": "application/json",
-    "body": "{\"UserInfo\":{\"employeeNo\":\"1001\"}}"
-  }
-}
-```
-
-El `body` es texto intencionalmente: contiene el XML o JSON original que debe
-enviarse sin volver a serializarlo. El objeto completo de la orden si se
-serializa una sola vez para transportarlo entre ClubCheck y el desktop.
-
-Restricciones aplicadas por el servidor:
-
-- Metodos `GET`, `POST` y `PUT`; `DELETE` requiere una segunda bandera y no se
-  muestra en el panel normal.
-- Ruta obligatoria iniciando con `/ISAPI/`; se rechazan hosts, esquemas,
-  retrocesos `..`, barras invertidas y saltos de linea.
-- `Content-Type` limitado a `application/json`, `application/xml` o `text/xml`.
-- Body maximo de 256 KB; un GET se envia siempre sin body.
-- La respuesta que el desktop reporta conserva el limite general de 2 MB.
-
-El desktop debe resolver `terminals[terminalIndex]` mediante el Factory
-existente, construir la URL con la base local de esa terminal y usar el mismo
-cliente HTTP/autenticacion Digest que ya utiliza Hikvision. Antes de enviar,
-debe verificar de nuevo que la URI final conserve el mismo esquema, host y
-puerto de la terminal seleccionada. No debe seguir redirecciones hacia otro
-host, aceptar credenciales en la ruta ni registrar secretos.
-
-Respuesta recomendada del desktop:
-
-```json
-{
-  "success": true,
-  "httpStatus": 200,
-  "contentType": "application/xml",
-  "durationMs": 184,
-  "body": "<ResponseStatus>...</ResponseStatus>",
-  "metadata": {
-    "requestMethod": "PUT",
-    "requestPath": "/ISAPI/AccessControl/UserInfo/SetUp?format=json"
-  }
-}
-```
-
-Una respuesta HTTP 4xx o 5xx de la terminal debe devolverse con su codigo y
-cuerpo originales para diagnostico. Solo errores de transporte, timeout,
-validacion local o autenticacion fallida deben usar `success: false` con un
-`errorCode` estable. Ningun error del proxy debe cerrar la aplicacion ni afectar
-los flujos actuales.
 
 ## Mapa de endpoints del servidor
 
@@ -257,8 +182,66 @@ no debe aceptar acciones desconocidas aunque llegaran por error: debe responder
 | `device_info` | Consultar identificación, modelo, serie y firmware. | XML/JSON original y campos importantes en `metadata`. |
 | `system_capabilities` | Consultar capacidades generales admitidas. | XML/JSON original. |
 | `access_capabilities` | Consultar capacidades de control de acceso. | XML/JSON original. |
+| `get_system_time` | `GET /ISAPI/System/time`. | Hora local, zona horaria y modo de sincronizacion. |
+| `get_card_reader_config` | `GET /ISAPI/AccessControl/CardReaderCfg/{readerNo}?format=json`. | Configuracion JSON original del lector indicado. |
+| `get_identity_terminal_config` | `GET /ISAPI/AccessControl/IdentityTerminal`. | Configuracion original de identificacion facial y umbrales. |
 | `get_registered_members` | Ejecutar la rutina local que pagina usuarios/personas registrados. | JSON normalizado con `items`, `total` y datos de paginación. |
-| `get_recent_activity` | Consultar eventos dentro de las horas solicitadas y paginarlos. | JSON normalizado con `items`, rango consultado y siguiente cursor si existe. |
+| `get_recent_activity` | `POST /ISAPI/AccessControl/AcsEvent?format=json`. | Respuesta `AcsEvent` original y metadatos de paginacion. |
+
+### Consultas ISAPI cerradas
+
+`get_system_time` y `get_identity_terminal_config` no reciben parametros. El
+desktop construye internamente sus rutas y utiliza la autenticacion local de la
+terminal seleccionada.
+
+`get_card_reader_config` recibe:
+
+```json
+{"readerNo": 1}
+```
+
+`readerNo` debe ser un entero entre 1 y 255. El desktop lo inserta solamente en
+la ruta cerrada `/ISAPI/AccessControl/CardReaderCfg/{readerNo}?format=json`.
+
+`get_recent_activity` corresponde a
+`POST /ISAPI/AccessControl/AcsEvent?format=json` y recibe:
+
+```json
+{
+  "page": 1,
+  "pageSize": 30,
+  "offset": 0,
+  "cursor": null,
+  "includeTotal": true,
+  "from": "2026-09-25T00:00:00-06:00 ",
+  "to": "2026-09-26T23:59:59-06:00 ",
+  "major": 0,
+  "minor": 0,
+  "searchId": "cc-identificador-generado"
+}
+```
+
+El desktop debe quitar temporalmente el espacio final de `from` y `to` antes de
+construir este body ISAPI:
+
+```json
+{
+  "AcsEventCond": {
+    "searchID": "cc-identificador-generado",
+    "searchResultPosition": 0,
+    "maxResults": 30,
+    "major": 0,
+    "minor": 0,
+    "startTime": "2026-09-25T00:00:00-06:00",
+    "endTime": "2026-09-26T23:59:59-06:00"
+  }
+}
+```
+
+El mapeo es `offset -> searchResultPosition`, `pageSize -> maxResults`, `from ->
+startTime`, `to -> endTime` y `searchId -> searchID`. El servidor genera un
+`searchId` estable para las paginas que tengan el mismo rango y filtros. El
+maximo aceptado por el panel para eventos es 30 registros por solicitud.
 
 ### Ping de red sin credenciales
 
