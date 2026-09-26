@@ -54,11 +54,16 @@ class IsapiController extends Controller
         ApiHelper::allowedMethodsGet();
         $customerId = trim((string) ($_GET['customerId'] ?? ''));
         $limit = max(1, min(200, (int) ($_GET['limit'] ?? 100)));
+        $commands = $this->commands->listRecent($customerId !== '' ? $customerId : null, $limit);
+        foreach ($commands as &$command) {
+            $command['Parameters'] = $this->decodeJsonObject($command['Parameters'] ?? null);
+        }
+        unset($command);
 
         ApiHelper::respond([
             'success' => true,
             'agents' => $this->commands->listAgents(),
-            'commands' => $this->commands->listRecent($customerId !== '' ? $customerId : null, $limit),
+            'commands' => $commands,
             'serverTime' => date(DATE_ATOM),
         ]);
     }
@@ -122,6 +127,8 @@ class IsapiController extends Controller
         if (!$command) {
             ApiHelper::respond(['error' => 'Orden no encontrada.'], 404);
         }
+
+        $command['Parameters'] = $this->decodeJsonObject($command['Parameters'] ?? null);
 
         ApiHelper::respond(['success' => true, 'command' => $command]);
     }
@@ -187,6 +194,8 @@ class IsapiController extends Controller
             ApiHelper::respond(['error' => 'Orden no encontrada para este cliente.'], 404);
         }
 
+        $command['Parameters'] = $this->decodeJsonObject($command['Parameters'] ?? null);
+
         ApiHelper::respond(['success' => true, 'command' => $command]);
     }
 
@@ -203,13 +212,33 @@ class IsapiController extends Controller
         ];
     }
 
-    private function decodeJsonObject(?string $value): array
+    /** Always return a JSON object, including for empty or legacy double-encoded values. */
+    private function decodeJsonObject($value): object
     {
-        if ($value === null || $value === '') {
-            return [];
+        if (is_object($value)) {
+            return $value;
         }
-        $decoded = json_decode($value, true);
-        return is_array($decoded) ? $decoded : [];
+        if (is_array($value)) {
+            return (object) $value;
+        }
+
+        $decoded = $value;
+        for ($attempt = 0; $attempt < 2 && is_string($decoded) && trim($decoded) !== ''; ++$attempt) {
+            $next = json_decode($decoded);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                break;
+            }
+            $decoded = $next;
+        }
+
+        if (is_object($decoded)) {
+            return $decoded;
+        }
+        if (is_array($decoded)) {
+            return (object) $decoded;
+        }
+
+        return (object) [];
     }
 
     private function customerId(): string

@@ -168,6 +168,7 @@ class IsapiCommandService
     /** ISO 8601 with seconds and an explicit UTC offset, without fractions. */
     private function isoDateWithTimezone(\DateTimeImmutable $value): string
     {
-        return $value->format('Y-m-d\TH:i:sP');
+        // Temporary desktop compatibility: its current parser expects a trailing space.
+        return $value->format('Y-m-d\TH:i:sP') . ' ';
     }
 }
