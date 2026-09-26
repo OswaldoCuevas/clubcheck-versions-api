@@ -236,8 +236,8 @@ fotografías ni plantillas faciales en el listado inicial.
 | `offset` | Calculado por el servidor | `(page - 1) * pageSize`; traducir a la posicion inicial que use ISAPI. |
 | `cursor` | Opcional, maximo 200 caracteres | Continuar una consulta cuando el dispositivo o cliente maneje cursores. |
 | `includeTotal` | Booleano | Indica si debe calcularse o devolverse el total disponible. |
-| `from` | ISO 8601/.NET round-trip, solo actividad | Inicio del rango; por defecto 24 horas antes de `to`. Ejemplo: `2026-09-25T12:00:00.0000000-06:00`. |
-| `to` | ISO 8601/.NET round-trip, solo actividad | Fin del rango; por defecto la hora actual. |
+| `from` | ISO 8601 con zona, solo actividad | Inicio del rango; por defecto 24 horas antes de `to`. Ejemplo: `2026-09-25T12:00:00-06:00`. |
+| `to` | ISO 8601 con zona, solo actividad | Fin del rango; por defecto la hora actual. También puede expresarse en UTC con sufijo `Z`. |
 
 El rango de actividad no puede superar 31 dias. El servidor siempre recalcula
 `offset`; no confia en un offset enviado directamente por el navegador.

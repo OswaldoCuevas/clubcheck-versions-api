@@ -134,8 +134,8 @@ class IsapiCommandService
             if (($to->getTimestamp() - $from->getTimestamp()) > 31 * 86400) {
                 throw new \InvalidArgumentException('El rango de actividad no puede exceder 31 dias.');
             }
-            $normalized['from'] = $this->dotNetRoundTripDate($from);
-            $normalized['to'] = $this->dotNetRoundTripDate($to);
+            $normalized['from'] = $this->isoDateWithTimezone($from);
+            $normalized['to'] = $this->isoDateWithTimezone($to);
         }
 
         return $normalized;
@@ -165,9 +165,9 @@ class IsapiCommandService
         }
     }
 
-    /** ISO 8601 compatible with strict DateTimeOffset "O" parsing in .NET. */
-    private function dotNetRoundTripDate(\DateTimeImmutable $value): string
+    /** ISO 8601 with seconds and an explicit UTC offset, without fractions. */
+    private function isoDateWithTimezone(\DateTimeImmutable $value): string
     {
-        return $value->format('Y-m-d\TH:i:s.u') . '0' . $value->format('P');
+        return $value->format('Y-m-d\TH:i:sP');
     }
 }
