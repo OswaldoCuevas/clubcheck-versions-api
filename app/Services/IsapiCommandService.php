@@ -11,6 +11,14 @@ namespace App\Services;
 class IsapiCommandService
 {
     private const DEFINITIONS = [
+        'network_ping' => [
+            'label' => 'Ping de red',
+            'description' => 'Comprueba conectividad ICMP sin utilizar credenciales de la terminal.',
+            'defaultParameters' => [
+                'timeoutMs' => 2000,
+                'attempts' => 2,
+            ],
+        ],
         'device_status' => [
             'label' => 'Estado del dispositivo',
             'description' => 'Prueba conectividad y obtiene el estado general.',
@@ -87,6 +95,13 @@ class IsapiCommandService
 
     private function normalizeParameters(string $action, array $parameters): array
     {
+        if ($action === 'network_ping') {
+            return [
+                'timeoutMs' => $this->integer($parameters['timeoutMs'] ?? 2000, 250, 10000, 'timeoutMs'),
+                'attempts' => $this->integer($parameters['attempts'] ?? 2, 1, 5, 'attempts'),
+            ];
+        }
+
         if (!in_array($action, ['get_registered_members', 'get_recent_activity'], true)) {
             return [];
         }

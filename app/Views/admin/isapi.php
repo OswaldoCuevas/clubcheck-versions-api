@@ -28,6 +28,8 @@ $customStyles = <<<'CSS'
 }
 .command-row { cursor: pointer; }
 .command-row:hover { background: #f3f7fb; }
+#responseTable { max-height: 520px; overflow: auto; }
+#responseTable thead th { position: sticky; top: 0; z-index: 1; }
 CSS;
 
 ob_start();
@@ -117,6 +119,19 @@ ob_start();
                                 </div>
                             </div>
                         </div>
+                        <div id="pingFields" class="border rounded p-3 mb-3 d-none">
+                            <div class="fw-semibold mb-2">Opciones del ping</div>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label for="pingTimeoutMs" class="form-label">Timeout (ms)</label>
+                                    <input class="form-control" id="pingTimeoutMs" type="number" value="2000" min="250" max="10000">
+                                </div>
+                                <div class="col-6">
+                                    <label for="pingAttempts" class="form-label">Intentos</label>
+                                    <input class="form-control" id="pingAttempts" type="number" value="2" min="1" max="5">
+                                </div>
+                            </div>
+                        </div>
                         <div id="activityFields" class="border rounded p-3 mb-3 d-none">
                             <div class="fw-semibold mb-2">Rango de actividad</div>
                             <div class="row g-2">
@@ -201,13 +216,22 @@ ob_start();
             <div class="modal-body">
                 <div id="detailSummary" class="mb-3"></div>
                 <div id="detailError" class="alert alert-danger d-none"></div>
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <strong>Cuerpo original</strong>
-                    <button class="btn btn-sm btn-outline-secondary" id="copyResponse" type="button">
-                        <i class="fas fa-copy me-1"></i>Copiar
-                    </button>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                    <strong id="responseViewTitle">Respuesta</strong>
+                    <div class="d-flex flex-wrap gap-2">
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Formato de respuesta">
+                            <button class="btn btn-outline-primary response-view-button" data-response-view="json" type="button">JSON</button>
+                            <button class="btn btn-outline-primary response-view-button" data-response-view="xml" type="button">XML</button>
+                            <button class="btn btn-outline-primary response-view-button" data-response-view="table" type="button">Tabla</button>
+                            <button class="btn btn-outline-primary response-view-button" data-response-view="raw" type="button">Original</button>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary" id="copyResponse" type="button">
+                            <i class="fas fa-copy me-1"></i>Copiar
+                        </button>
+                    </div>
                 </div>
                 <pre class="isapi-code mb-0" id="responseBody">Sin respuesta.</pre>
+                <div class="table-responsive border rounded d-none" id="responseTable"></div>
             </div>
         </div>
     </div>
@@ -225,6 +249,8 @@ ob_start();
     const actionMap = Object.fromEntries(actions.map(item => [item.key, item]));
     const detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
     let currentBody = '';
+    let currentRenderedBody = '';
+    let currentResponseView = 'raw';
     let agentsCache = [];
 
     const el = id => document.getElementById(id);
@@ -239,6 +265,265 @@ ob_start();
         Failed: 'danger', Expired: 'secondary', Cancelled: 'secondary'
     })[status] || 'secondary';
 
+    function parseXml(value) {
+        const documentXml = new DOMParser().parseFromString(value, 'application/xml');
+        if (documentXml.querySelector('parsererror')) {
+            throw new Error('La respuesta no contiene XML valido.');
+        }
+        return documentXml;
+    }
+
+    function xmlNodeToValue(node) {
+        const result = {};
+        Array.from(node.attributes || []).forEach(attribute => {
+            result[`@${attribute.name}`] = attribute.value;
+        });
+
+        const childElements = Array.from(node.children || []);
+        if (!childElements.length) {
+            const textValue = (node.textContent || '').trim();
+            if (!Object.keys(result).length) return textValue;
+            if (textValue !== '') result['#text'] = textValue;
+            return result;
+        }
+
+        childElements.forEach(child => {
+            const name = child.localName || child.nodeName;
+            const value = xmlNodeToValue(child);
+            if (Object.prototype.hasOwnProperty.call(result, name)) {
+                if (!Array.isArray(result[name])) result[name] = [result[name]];
+                result[name].push(value);
+            } else {
+                result[name] = value;
+            }
+        });
+        return result;
+    }
+
+    function xmlToPrettyJson(value) {
+        const documentXml = parseXml(value);
+        const root = documentXml.documentElement;
+        return JSON.stringify({[root.localName || root.nodeName]: xmlNodeToValue(root)}, null, 2);
+    }
+
+    function xmlEscape(value) {
+        return String(value)
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&apos;');
+    }
+
+    function xmlTag(value) {
+        const normalized = String(value).replace(/[^A-Za-z0-9_.-]/g, '_');
+        return /^[A-Za-z_]/.test(normalized) ? normalized : `field_${normalized}`;
+    }
+
+    function jsonValueToXml(value, name, depth = 0) {
+        const indent = '  '.repeat(depth);
+        const tag = xmlTag(name);
+        if (value === null || value === undefined) return `${indent}<${tag} xsi:nil="true" />`;
+        if (Array.isArray(value)) {
+            if (!value.length) return `${indent}<${tag} />`;
+            return `${indent}<${tag}>\n${value.map(item => jsonValueToXml(item, 'item', depth + 1)).join('\n')}\n${indent}</${tag}>`;
+        }
+        if (typeof value === 'object') {
+            const entries = Object.entries(value);
+            if (!entries.length) return `${indent}<${tag} />`;
+            return `${indent}<${tag}>\n${entries.map(([key, item]) => jsonValueToXml(item, key, depth + 1)).join('\n')}\n${indent}</${tag}>`;
+        }
+        return `${indent}<${tag}>${xmlEscape(value)}</${tag}>`;
+    }
+
+    function jsonToPrettyXml(value) {
+        const parsed = JSON.parse(value);
+        return `<?xml version="1.0" encoding="UTF-8"?>\n` +
+            `<response xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n` +
+            `${jsonValueToXml(parsed, 'data', 1)}\n</response>`;
+    }
+
+    function prettyXml(value) {
+        const documentXml = parseXml(value);
+        const serialize = (node, depth = 0) => {
+            const indent = '  '.repeat(depth);
+            if (node.nodeType === Node.TEXT_NODE) {
+                const textValue = node.nodeValue.trim();
+                return textValue ? indent + xmlEscape(textValue) : '';
+            }
+            if (node.nodeType !== Node.ELEMENT_NODE) return '';
+            const name = node.nodeName;
+            const attributes = Array.from(node.attributes)
+                .map(attribute => ` ${attribute.name}="${xmlEscape(attribute.value)}"`)
+                .join('');
+            const children = Array.from(node.childNodes).filter(child =>
+                child.nodeType === Node.ELEMENT_NODE ||
+                (child.nodeType === Node.TEXT_NODE && child.nodeValue.trim() !== '')
+            );
+            if (!children.length) return `${indent}<${name}${attributes} />`;
+            const onlyText = children.every(child => child.nodeType === Node.TEXT_NODE);
+            if (onlyText) {
+                return `${indent}<${name}${attributes}>${xmlEscape(children.map(child => child.nodeValue).join('').trim())}</${name}>`;
+            }
+            const content = children.map(child => serialize(child, depth + 1)).filter(Boolean).join('\n');
+            return `${indent}<${name}${attributes}>\n${content}\n${indent}</${name}>`;
+        };
+        return `<?xml version="1.0" encoding="UTF-8"?>\n${serialize(documentXml.documentElement)}`;
+    }
+
+    function responseObject() {
+        try {
+            return JSON.parse(currentBody);
+        } catch (_) {
+            return JSON.parse(xmlToPrettyJson(currentBody));
+        }
+    }
+
+    function displayValue(value) {
+        if (value === null) return 'null';
+        if (value === undefined) return '';
+        if (typeof value === 'object') return JSON.stringify(value);
+        return String(value);
+    }
+
+    function flattenRows(value, path = '', rows = []) {
+        if (value === null || typeof value !== 'object') {
+            rows.push([path || 'valor', displayValue(value)]);
+            return rows;
+        }
+        if (Array.isArray(value)) {
+            if (!value.length) rows.push([path || 'items', '[]']);
+            value.forEach((item, index) => flattenRows(item, `${path || 'items'}[${index}]`, rows));
+            return rows;
+        }
+        const entries = Object.entries(value);
+        if (!entries.length) rows.push([path || 'objeto', '{}']);
+        entries.forEach(([key, item]) => flattenRows(item, path ? `${path}.${key}` : key, rows));
+        return rows;
+    }
+
+    function appendCell(row, value, header = false) {
+        const cell = document.createElement(header ? 'th' : 'td');
+        cell.textContent = displayValue(value);
+        if (!header) cell.className = 'text-break';
+        row.appendChild(cell);
+    }
+
+    function createTable(headers, rows) {
+        const table = document.createElement('table');
+        table.className = 'table table-striped table-hover table-sm align-middle mb-0';
+        const head = document.createElement('thead');
+        head.className = 'table-light';
+        const headRow = document.createElement('tr');
+        headers.forEach(header => appendCell(headRow, header, true));
+        head.appendChild(headRow);
+        table.appendChild(head);
+        const body = document.createElement('tbody');
+        rows.forEach(values => {
+            const row = document.createElement('tr');
+            values.forEach(value => appendCell(row, value));
+            body.appendChild(row);
+        });
+        table.appendChild(body);
+        return table;
+    }
+
+    function renderTableResponse() {
+        const container = el('responseTable');
+        if (!container) return;
+        container.replaceChildren();
+
+        let data;
+        try {
+            data = responseObject();
+        } catch (_) {
+            data = {respuesta: currentBody};
+        }
+
+        const itemList = Array.isArray(data)
+            ? data
+            : (data && Array.isArray(data.items) ? data.items : null);
+        const objectItems = itemList && itemList.every(item => item && typeof item === 'object' && !Array.isArray(item));
+
+        if (objectItems) {
+            if (!itemList.length) {
+                container.appendChild(createTable(['Resultado'], [['Sin registros']]));
+                currentRenderedBody = 'Resultado\nSin registros';
+                return;
+            }
+            const columns = [...new Set(itemList.flatMap(item => Object.keys(item)))];
+            const rows = itemList.map(item => columns.map(column => displayValue(item[column])));
+            container.appendChild(createTable(columns, rows));
+            currentRenderedBody = [columns, ...rows]
+                .map(row => row.map(value => String(value).replaceAll('\t', ' ')).join('\t'))
+                .join('\n');
+
+            if (!Array.isArray(data)) {
+                const summary = Object.fromEntries(Object.entries(data).filter(([key]) => key !== 'items'));
+                const summaryRows = Object.keys(summary).length ? flattenRows(summary) : [];
+                if (summaryRows.length) {
+                    const title = document.createElement('div');
+                    title.className = 'fw-semibold p-2 border-top bg-light';
+                    title.textContent = 'Paginacion y metadatos';
+                    container.appendChild(title);
+                    container.appendChild(createTable(['Campo', 'Valor'], summaryRows));
+                    currentRenderedBody += '\n\nCampo\tValor\n' + summaryRows.map(row => row.join('\t')).join('\n');
+                }
+            }
+            return;
+        }
+
+        const rows = flattenRows(data);
+        container.appendChild(createTable(['Campo', 'Valor'], rows));
+        currentRenderedBody = 'Campo\tValor\n' + rows.map(row => row.join('\t')).join('\n');
+    }
+
+    function renderResponse(view) {
+        const bodyElement = el('responseBody');
+        const tableElement = el('responseTable');
+        if (!bodyElement) return;
+        currentResponseView = view;
+        bodyElement.classList.toggle('d-none', view === 'table');
+        if (tableElement) tableElement.classList.toggle('d-none', view !== 'table');
+        try {
+            if (!currentBody) {
+                currentRenderedBody = 'La orden aun no tiene cuerpo de respuesta.';
+                if (view === 'table' && tableElement) {
+                    tableElement.replaceChildren(createTable(['Resultado'], [[currentRenderedBody]]));
+                }
+            } else if (view === 'table') {
+                renderTableResponse();
+            } else if (view === 'json') {
+                try {
+                    currentRenderedBody = JSON.stringify(JSON.parse(currentBody), null, 2);
+                } catch (_) {
+                    currentRenderedBody = xmlToPrettyJson(currentBody);
+                }
+            } else if (view === 'xml') {
+                try {
+                    currentRenderedBody = prettyXml(currentBody);
+                } catch (_) {
+                    currentRenderedBody = jsonToPrettyXml(currentBody);
+                }
+            } else {
+                currentRenderedBody = currentBody;
+            }
+        } catch (error) {
+            currentRenderedBody = `No fue posible convertir la respuesta a ${view.toUpperCase()}.\n\n${currentBody}`;
+            if (view === 'table' && tableElement) {
+                tableElement.replaceChildren(createTable(['Error'], [[currentRenderedBody]]));
+            }
+        }
+        if (view !== 'table') bodyElement.textContent = currentRenderedBody;
+        const title = el('responseViewTitle');
+        if (title) title.textContent = `Respuesta · ${view === 'raw' ? 'Original' : view.toUpperCase()}`;
+        document.querySelectorAll('.response-view-button').forEach(button => {
+            const active = button.dataset.responseView === view;
+            button.classList.toggle('btn-primary', active);
+            button.classList.toggle('btn-outline-primary', !active);
+        });
+    }
+
     function alertMessage(type, message) {
         el('alertContainer').innerHTML = `<div class="alert alert-${type} alert-dismissible fade show">
             ${escapeHtml(message)}<button class="btn-close" data-bs-dismiss="alert"></button></div>`;
@@ -249,6 +534,7 @@ ob_start();
         el('actionDescription').textContent = actionMap[action]?.description || '';
         const paginated = ['get_registered_members', 'get_recent_activity'].includes(action);
         el('paginationFields').classList.toggle('d-none', !paginated);
+        el('pingFields').classList.toggle('d-none', action !== 'network_ping');
         el('activityFields').classList.toggle('d-none', action !== 'get_recent_activity');
     }
 
@@ -343,30 +629,61 @@ ob_start();
     }
 
     async function showDetail(id) {
-        el('detailSummary').innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Cargando...';
-        el('detailError').classList.add('d-none');
-        el('responseBody').textContent = '';
-        detailModal.show();
+        const summaryElement = el('detailSummary');
+        const errorElement = el('detailError');
+        const bodyElement = el('responseBody');
+
+        if (!summaryElement || !bodyElement) {
+            alertMessage('danger', 'No fue posible abrir el detalle. Recarga la pagina para actualizar la vista.');
+            return;
+        }
+
         try {
+            summaryElement.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Cargando...';
+            if (errorElement) {
+                errorElement.textContent = '';
+                errorElement.classList.add('d-none');
+            }
+            bodyElement.textContent = '';
+            detailModal.show();
+
             const data = await request(endpoints.show.replace(':id', encodeURIComponent(id)));
             const command = data.command;
-            el('detailSummary').innerHTML = `<div class="row g-2">
+            summaryElement.innerHTML = `<div class="row g-2">
                 <div class="col-md-4"><strong>Cliente:</strong> ${escapeHtml(command.CustomerName)}</div>
                 <div class="col-md-4"><strong>Accion:</strong> ${escapeHtml(command.Action)}</div>
                 <div class="col-md-4"><strong>Estado:</strong> <span class="badge bg-${badge(command.Status)}">${escapeHtml(command.Status)}</span></div>
                 <div class="col-md-8"><strong>Comando:</strong> <code>${escapeHtml(command.Action)}</code> · Terminal [${Number(command.TerminalIndex || 0)}]</div>
                 <div class="col-md-4"><strong>HTTP:</strong> ${command.HttpStatus || '—'} · ${command.DurationMs !== null ? `${Number(command.DurationMs)} ms` : '—'}</div>
             </div>`;
-            if (command.ErrorMessage) {
-                el('detailError').textContent = `${command.ErrorCode || 'error'}: ${command.ErrorMessage}`;
-                el('detailError').classList.remove('d-none');
+            if (command.ErrorMessage && errorElement) {
+                errorElement.textContent = `${command.ErrorCode || 'error'}: ${command.ErrorMessage}`;
+                errorElement.classList.remove('d-none');
             }
             currentBody = command.ResponseBody || '';
-            el('responseBody').textContent = currentBody || 'La orden aun no tiene cuerpo de respuesta.';
+            let defaultView = 'raw';
+            if (currentBody) {
+                try {
+                    JSON.parse(currentBody);
+                    defaultView = 'json';
+                } catch (_) {
+                    try {
+                        parseXml(currentBody);
+                        defaultView = 'xml';
+                    } catch (_) {
+                        defaultView = 'raw';
+                    }
+                }
+            }
+            renderResponse(defaultView);
         } catch (error) {
-            el('detailSummary').textContent = '';
-            el('detailError').textContent = error.message;
-            el('detailError').classList.remove('d-none');
+            summaryElement.textContent = '';
+            if (errorElement) {
+                errorElement.textContent = error.message;
+                errorElement.classList.remove('d-none');
+            } else {
+                bodyElement.textContent = `Error: ${error.message}`;
+            }
         }
     }
 
@@ -377,6 +694,10 @@ ob_start();
         try {
             const action = el('action').value;
             const parameters = {};
+            if (action === 'network_ping') {
+                parameters.timeoutMs = Number(el('pingTimeoutMs').value);
+                parameters.attempts = Number(el('pingAttempts').value);
+            }
             if (['get_registered_members', 'get_recent_activity'].includes(action)) {
                 parameters.page = Number(el('page').value);
                 parameters.pageSize = Number(el('pageSize').value);
@@ -415,7 +736,10 @@ ob_start();
     el('terminalIndex').addEventListener('change', selectTerminalLabel);
     el('refreshButton').addEventListener('click', refresh);
     el('historyCustomer').addEventListener('change', refresh);
-    el('copyResponse').addEventListener('click', () => navigator.clipboard?.writeText(currentBody));
+    document.querySelectorAll('.response-view-button').forEach(button => {
+        button.addEventListener('click', () => renderResponse(button.dataset.responseView));
+    });
+    el('copyResponse').addEventListener('click', () => navigator.clipboard?.writeText(currentRenderedBody));
     updateActionDescription();
     refresh();
     setInterval(refresh, 10000);

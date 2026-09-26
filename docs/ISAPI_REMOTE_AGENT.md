@@ -114,6 +114,7 @@ fase no se deben enviar fotografias, plantillas faciales ni credenciales.
 
 ## Operaciones habilitadas
 
+- `network_ping`
 - `device_status`
 - `device_info`
 - `system_capabilities`
@@ -173,12 +174,54 @@ no debe aceptar acciones desconocidas aunque llegaran por error: debe responder
 
 | Comando | Acción local esperada | Resultado sugerido |
 | --- | --- | --- |
+| `network_ping` | Resolver localmente la dirección de `terminals[terminalIndex]` y hacer ICMP sin credenciales. | Estado alcanzable, latencias, pérdida de paquetes y error de red. |
 | `device_status` | Comprobar que `terminals[terminalIndex]` responde. | Estado HTTP, tiempo de respuesta y cuerpo de estado. |
 | `device_info` | Consultar identificación, modelo, serie y firmware. | XML/JSON original y campos importantes en `metadata`. |
 | `system_capabilities` | Consultar capacidades generales admitidas. | XML/JSON original. |
 | `access_capabilities` | Consultar capacidades de control de acceso. | XML/JSON original. |
 | `get_registered_members` | Ejecutar la rutina local que pagina usuarios/personas registrados. | JSON normalizado con `items`, `total` y datos de paginación. |
 | `get_recent_activity` | Consultar eventos dentro de las horas solicitadas y paginarlos. | JSON normalizado con `items`, rango consultado y siguiente cursor si existe. |
+
+### Ping de red sin credenciales
+
+Orden enviada al desktop:
+
+```json
+{
+  "action": "network_ping",
+  "terminalIndex": 0,
+  "deviceId": "entrada",
+  "parameters": {
+    "timeoutMs": 2000,
+    "attempts": 2
+  }
+}
+```
+
+`timeoutMs` acepta de 250 a 10000 milisegundos y `attempts` de 1 a 5. El
+desktop obtiene el host exclusivamente de su configuración local; nunca debe
+aceptar una IP o hostname dentro de los parámetros remotos.
+
+Respuesta recomendada:
+
+```json
+{
+  "reachable": true,
+  "attempts": 2,
+  "received": 2,
+  "lost": 0,
+  "packetLossPercent": 0,
+  "minRoundtripMs": 2,
+  "maxRoundtripMs": 4,
+  "averageRoundtripMs": 3
+}
+```
+
+El resultado HTTP hacia ClubCheck puede ser exitoso aunque `reachable` sea
+`false`: la orden se ejecutó correctamente y determinó que no hubo respuesta.
+ICMP puede estar bloqueado por firewall, por lo que un ping fallido no demuestra
+por sí solo que ISAPI esté fuera de servicio. `device_status` sigue siendo la
+prueba de aplicación con autenticación.
 
 Para datos que pueden tener muchas páginas, el cliente debe completar toda la
 consulta dentro de limites razonables o devolver paginación. No debe incluir
