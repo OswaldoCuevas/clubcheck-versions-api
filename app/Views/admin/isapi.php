@@ -649,12 +649,21 @@ ob_start();
 
             const data = await request(endpoints.show.replace(':id', encodeURIComponent(id)));
             const command = data.command;
+            let requestParameters = {};
+            try {
+                requestParameters = typeof command.Parameters === 'string'
+                    ? JSON.parse(command.Parameters)
+                    : (command.Parameters || {});
+            } catch (_) {
+                requestParameters = {raw: command.Parameters};
+            }
             summaryElement.innerHTML = `<div class="row g-2">
                 <div class="col-md-4"><strong>Cliente:</strong> ${escapeHtml(command.CustomerName)}</div>
                 <div class="col-md-4"><strong>Accion:</strong> ${escapeHtml(command.Action)}</div>
                 <div class="col-md-4"><strong>Estado:</strong> <span class="badge bg-${badge(command.Status)}">${escapeHtml(command.Status)}</span></div>
                 <div class="col-md-8"><strong>Comando:</strong> <code>${escapeHtml(command.Action)}</code> · Terminal [${Number(command.TerminalIndex || 0)}]</div>
                 <div class="col-md-4"><strong>HTTP:</strong> ${command.HttpStatus || '—'} · ${command.DurationMs !== null ? `${Number(command.DurationMs)} ms` : '—'}</div>
+                <div class="col-12"><details><summary class="fw-semibold">Parametros enviados</summary><pre class="bg-light border rounded p-2 mt-2 mb-0 text-break">${escapeHtml(JSON.stringify(requestParameters, null, 2))}</pre></details></div>
             </div>`;
             if (command.ErrorMessage && errorElement) {
                 errorElement.textContent = `${command.ErrorCode || 'error'}: ${command.ErrorMessage}`;
