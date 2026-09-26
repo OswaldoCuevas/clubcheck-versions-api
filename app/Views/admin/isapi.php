@@ -95,12 +95,53 @@ ob_start();
                             <label for="action" class="form-label">Consulta permitida</label>
                             <select class="form-select" id="action" required>
                                 <?php foreach (($actions ?? []) as $action): ?>
-                                    <option value="<?= htmlspecialchars($action['key'], ENT_QUOTES, 'UTF-8') ?>">
+                                    <option value="<?= htmlspecialchars($action['key'], ENT_QUOTES, 'UTF-8') ?>"
+                                        <?= $action['key'] === 'network_ping' ? 'selected' : '' ?>>
                                         <?= htmlspecialchars($action['label'], ENT_QUOTES, 'UTF-8') ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
                             <div class="form-text" id="actionDescription"></div>
+                        </div>
+                        <div id="proxyFields" class="border border-warning rounded p-3 mb-3 d-none">
+                            <div class="fw-semibold text-warning-emphasis mb-2">
+                                <i class="fas fa-triangle-exclamation me-1"></i>Proxy temporal de pruebas
+                            </div>
+                            <div class="alert alert-warning py-2 small">
+                                Solo acepta rutas relativas <code>/ISAPI/...</code>. La direccion y las credenciales permanecen en el desktop.
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-4">
+                                    <label for="proxyMethod" class="form-label">Metodo</label>
+                                    <select class="form-select" id="proxyMethod">
+                                        <option value="GET">GET</option>
+                                        <option value="POST">POST</option>
+                                        <option value="PUT">PUT</option>
+                                        <?php if (!empty($proxyAllowDelete)): ?>
+                                            <option value="DELETE">DELETE</option>
+                                        <?php endif; ?>
+                                    </select>
+                                </div>
+                                <div class="col-8">
+                                    <label for="proxyContentType" class="form-label">Content-Type</label>
+                                    <select class="form-select" id="proxyContentType">
+                                        <option value="application/xml">application/xml</option>
+                                        <option value="text/xml">text/xml</option>
+                                        <option value="application/json">application/json</option>
+                                    </select>
+                                </div>
+                                <div class="col-12">
+                                    <label for="proxyPath" class="form-label">Ruta relativa</label>
+                                    <input class="form-control font-monospace" id="proxyPath" maxlength="1000"
+                                           value="/ISAPI/System/status" placeholder="/ISAPI/System/status">
+                                </div>
+                                <div class="col-12" id="proxyBodyContainer">
+                                    <label for="proxyBody" class="form-label">Body XML o JSON</label>
+                                    <textarea class="form-control font-monospace" id="proxyBody" rows="9" maxlength="262144"
+                                              placeholder="Pega aqui el cuerpo exacto que recibira la terminal"></textarea>
+                                    <div class="form-text">En GET el body se omite automaticamente.</div>
+                                </div>
+                            </div>
                         </div>
                         <div id="paginationFields" class="border rounded p-3 mb-3 d-none">
                             <div class="fw-semibold mb-2">Paginacion</div>
@@ -536,6 +577,14 @@ ob_start();
         el('paginationFields').classList.toggle('d-none', !paginated);
         el('pingFields').classList.toggle('d-none', action !== 'network_ping');
         el('activityFields').classList.toggle('d-none', action !== 'get_recent_activity');
+        el('proxyFields').classList.toggle('d-none', action !== 'test_proxy_request');
+        updateProxyBodyVisibility();
+    }
+
+    function updateProxyBodyVisibility() {
+        const isGet = el('proxyMethod').value === 'GET';
+        el('proxyBody').disabled = isGet;
+        el('proxyBodyContainer').classList.toggle('opacity-50', isGet);
     }
 
     async function request(url, options = {}) {
@@ -717,6 +766,20 @@ ob_start();
                 parameters.from = el('activityFrom').value || null;
                 parameters.to = el('activityTo').value || null;
             }
+            if (action === 'test_proxy_request') {
+                const method = el('proxyMethod').value;
+                const path = el('proxyPath').value.trim();
+                if (!path.startsWith('/ISAPI/')) {
+                    throw new Error('La ruta debe comenzar con /ISAPI/.');
+                }
+                if (method !== 'GET' && !window.confirm(`Se enviara una solicitud ${method} a ${path}. ¿Deseas continuar?`)) {
+                    return;
+                }
+                parameters.method = method;
+                parameters.path = path;
+                parameters.contentType = el('proxyContentType').value;
+                parameters.body = method === 'GET' ? null : (el('proxyBody').value || null);
+            }
             await request(endpoints.create, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
@@ -740,6 +803,7 @@ ob_start();
     });
 
     el('action').addEventListener('change', updateActionDescription);
+    el('proxyMethod').addEventListener('change', updateProxyBodyVisibility);
     el('customerId').addEventListener('change', updateTerminalOptions);
     el('agentId').addEventListener('input', updateTerminalOptions);
     el('terminalIndex').addEventListener('change', selectTerminalLabel);

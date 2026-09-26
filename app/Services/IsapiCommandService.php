@@ -3,14 +3,24 @@
 namespace App\Services;
 
 /**
- * Lista cerrada de operaciones ISAPI permitidas desde el servidor.
+ * Lista controlada de operaciones ISAPI permitidas desde el servidor.
  *
- * El servidor solo conoce comandos semanticos. El cliente de escritorio decide
- * que ruta, metodo y credenciales ISAPI usar para cada uno.
+ * Normalmente el servidor solo conoce comandos semanticos. El proxy temporal
+ * puede transportar una ruta relativa; host y credenciales siempre son locales.
  */
 class IsapiCommandService
 {
     private const DEFINITIONS = [
+        'test_proxy_request' => [
+            'label' => 'Proxy ISAPI temporal',
+            'description' => 'Envia una solicitud de prueba a una ruta relativa ISAPI mediante el desktop.',
+            'defaultParameters' => [
+                'method' => 'GET',
+                'path' => '/ISAPI/System/status',
+                'contentType' => 'application/xml',
+                'body' => null,
+            ],
+        ],
         'network_ping' => [
             'label' => 'Ping de red',
             'description' => 'Comprueba conectividad ICMP sin utilizar credenciales de la terminal.',
@@ -69,6 +79,9 @@ class IsapiCommandService
     {
         $actions = [];
         foreach (self::DEFINITIONS as $key => $definition) {
+            if ($key === 'test_proxy_request' && !$this->testProxyEnabled()) {
+                continue;
+            }
             $actions[] = [
                 'key' => $key,
                 'label' => $definition['label'],
@@ -86,6 +99,9 @@ class IsapiCommandService
         if (!isset(self::DEFINITIONS[$action])) {
             return null;
         }
+        if ($action === 'test_proxy_request' && !$this->testProxyEnabled()) {
+            return null;
+        }
 
         $definition = ['action' => $action] + self::DEFINITIONS[$action];
         $definition['parameters'] = $this->normalizeParameters($action, $parameters);
@@ -95,6 +111,10 @@ class IsapiCommandService
 
     private function normalizeParameters(string $action, array $parameters): array
     {
+        if ($action === 'test_proxy_request') {
+            return $this->normalizeTestProxyParameters($parameters);
+        }
+
         if ($action === 'network_ping') {
             return [
                 'timeoutMs' => $this->integer($parameters['timeoutMs'] ?? 2000, 250, 10000, 'timeoutMs'),
@@ -170,5 +190,69 @@ class IsapiCommandService
     {
         // Temporary desktop compatibility: its current parser expects a trailing space.
         return $value->format('Y-m-d\TH:i:sP') . ' ';
+    }
+
+    private function normalizeTestProxyParameters(array $parameters): array
+    {
+        if (!$this->testProxyEnabled()) {
+            throw new \InvalidArgumentException('El proxy ISAPI temporal esta deshabilitado.');
+        }
+
+        $method = strtoupper(trim((string) ($parameters['method'] ?? 'GET')));
+        $allowedMethods = ['GET', 'POST', 'PUT'];
+        if ((bool) config('isapi.test_proxy_allow_delete', false)) {
+            $allowedMethods[] = 'DELETE';
+        }
+        if (!in_array($method, $allowedMethods, true)) {
+            throw new \InvalidArgumentException('Metodo no permitido por el proxy temporal.');
+        }
+
+        $path = trim((string) ($parameters['path'] ?? ''));
+        if ($path === '' || mb_strlen($path) > 1000) {
+            throw new \InvalidArgumentException('La ruta relativa ISAPI es obligatoria y no puede exceder 1000 caracteres.');
+        }
+        $decodedPath = rawurldecode($path);
+        if (!str_starts_with($path, '/ISAPI/') ||
+            str_contains($decodedPath, '://') ||
+            str_contains($decodedPath, '..') ||
+            str_contains($decodedPath, '\\') ||
+            preg_match('/[\r\n\x00]/', $decodedPath)) {
+            throw new \InvalidArgumentException('La ruta debe ser relativa, comenzar con /ISAPI/ y no contener host ni segmentos inseguros.');
+        }
+        $urlParts = parse_url($path);
+        if ($urlParts === false || isset($urlParts['scheme']) || isset($urlParts['host']) ||
+            isset($urlParts['user']) || isset($urlParts['pass']) || isset($urlParts['fragment'])) {
+            throw new \InvalidArgumentException('La ruta ISAPI relativa no es valida.');
+        }
+
+        $contentType = strtolower(trim((string) ($parameters['contentType'] ?? 'application/json')));
+        $allowedContentTypes = ['application/json', 'application/xml', 'text/xml'];
+        if (!in_array($contentType, $allowedContentTypes, true)) {
+            throw new \InvalidArgumentException('contentType debe ser application/json, application/xml o text/xml.');
+        }
+
+        $body = $parameters['body'] ?? null;
+        if ($body !== null && !is_string($body)) {
+            throw new \InvalidArgumentException('El body del proxy debe ser texto JSON o XML.');
+        }
+        $maxBodyBytes = (int) config('isapi.test_proxy_max_body_bytes', 262144);
+        if ($body !== null && strlen($body) > $maxBodyBytes) {
+            throw new \InvalidArgumentException('El body excede el limite temporal de 256 KB.');
+        }
+        if ($method === 'GET') {
+            $body = null;
+        }
+
+        return [
+            'method' => $method,
+            'path' => $path,
+            'contentType' => $contentType,
+            'body' => $body !== '' ? $body : null,
+        ];
+    }
+
+    private function testProxyEnabled(): bool
+    {
+        return (bool) config('isapi.test_proxy_enabled', false);
     }
 }

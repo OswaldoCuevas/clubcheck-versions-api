@@ -63,8 +63,9 @@ El servidor puede responder:
 }
 ```
 
-La URL, ruta ISAPI, metodo, puerto y credenciales se resuelven en el cliente. No
-se reciben desde el servidor.
+La URL base, puerto y credenciales se resuelven en el cliente. No se reciben
+desde el servidor. La unica excepcion temporal es `test_proxy_request`, que
+incluye exclusivamente una ruta relativa `/ISAPI/...` para diagnostico.
 
 `terminalIndex` usa base cero y apunta directamente al arreglo local del cliente.
 Antes de ejecutar, el cliente debe validar que el indice exista. Si no existe,
@@ -121,9 +122,86 @@ fase no se deben enviar fotografias, plantillas faciales ni credenciales.
 - `access_capabilities`
 - `get_registered_members`
 - `get_recent_activity`
+- `test_proxy_request` (solo aparece con `ISAPI_TEST_PROXY_ENABLED=true`)
 
 La lista se controla en `app/Services/IsapiCommandService.php`. El cliente debe
 tener un manejador local para cada comando; el panel no acepta rutas arbitrarias.
+
+## Proxy ISAPI temporal de pruebas
+
+Esta funcion permite descubrir rutas, metodos y cuerpos admitidos por una
+terminal sin enviar al servidor su host, puerto, usuario o contrasena. Esta
+deshabilitada por defecto. Para una prueba controlada se habilita en el entorno
+del servidor:
+
+```dotenv
+ISAPI_TEST_PROXY_ENABLED=true
+ISAPI_TEST_PROXY_ALLOW_DELETE=false
+```
+
+Despues de la prueba se cambia `ISAPI_TEST_PROXY_ENABLED=false`. No requiere
+eliminar tablas ni migraciones; la accion desaparece del panel y el servidor
+deja de aceptarla.
+
+Ejemplo de la orden que recibe el desktop:
+
+```json
+{
+  "id": "uuid",
+  "action": "test_proxy_request",
+  "terminalIndex": 0,
+  "deviceId": "entrada",
+  "parameters": {
+    "method": "PUT",
+    "path": "/ISAPI/AccessControl/UserInfo/SetUp?format=json",
+    "contentType": "application/json",
+    "body": "{\"UserInfo\":{\"employeeNo\":\"1001\"}}"
+  }
+}
+```
+
+El `body` es texto intencionalmente: contiene el XML o JSON original que debe
+enviarse sin volver a serializarlo. El objeto completo de la orden si se
+serializa una sola vez para transportarlo entre ClubCheck y el desktop.
+
+Restricciones aplicadas por el servidor:
+
+- Metodos `GET`, `POST` y `PUT`; `DELETE` requiere una segunda bandera y no se
+  muestra en el panel normal.
+- Ruta obligatoria iniciando con `/ISAPI/`; se rechazan hosts, esquemas,
+  retrocesos `..`, barras invertidas y saltos de linea.
+- `Content-Type` limitado a `application/json`, `application/xml` o `text/xml`.
+- Body maximo de 256 KB; un GET se envia siempre sin body.
+- La respuesta que el desktop reporta conserva el limite general de 2 MB.
+
+El desktop debe resolver `terminals[terminalIndex]` mediante el Factory
+existente, construir la URL con la base local de esa terminal y usar el mismo
+cliente HTTP/autenticacion Digest que ya utiliza Hikvision. Antes de enviar,
+debe verificar de nuevo que la URI final conserve el mismo esquema, host y
+puerto de la terminal seleccionada. No debe seguir redirecciones hacia otro
+host, aceptar credenciales en la ruta ni registrar secretos.
+
+Respuesta recomendada del desktop:
+
+```json
+{
+  "success": true,
+  "httpStatus": 200,
+  "contentType": "application/xml",
+  "durationMs": 184,
+  "body": "<ResponseStatus>...</ResponseStatus>",
+  "metadata": {
+    "requestMethod": "PUT",
+    "requestPath": "/ISAPI/AccessControl/UserInfo/SetUp?format=json"
+  }
+}
+```
+
+Una respuesta HTTP 4xx o 5xx de la terminal debe devolverse con su codigo y
+cuerpo originales para diagnostico. Solo errores de transporte, timeout,
+validacion local o autenticacion fallida deben usar `success: false` con un
+`errorCode` estable. Ningun error del proxy debe cerrar la aplicacion ni afectar
+los flujos actuales.
 
 ## Mapa de endpoints del servidor
 

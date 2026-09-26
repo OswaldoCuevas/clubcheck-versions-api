@@ -166,7 +166,7 @@ class IsapiCommandModel extends Model
         $params[] = $limit;
 
         return $this->db->fetchAll(
-            'SELECT c.Id, c.CustomerId, c.AgentId, c.TerminalIndex, c.DeviceId, c.Action, c.Parameters,
+            'SELECT c.Id, c.CustomerId, c.AgentId, c.TerminalIndex, c.DeviceId, c.Action,
                     c.Status, c.AttemptCount,
                     c.HttpStatus, c.ResponseContentType, c.ErrorCode, c.ErrorMessage,
                     c.DurationMs, c.RequestedBy, c.ClaimedAt, c.CompletedAt,
