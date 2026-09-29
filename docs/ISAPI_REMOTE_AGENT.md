@@ -109,8 +109,9 @@ En caso de error:
 }
 ```
 
-El cuerpo tiene un limite de 2 MB y los metadatos de 64 KB. En esta primera
-fase no se deben enviar fotografias, plantillas faciales ni credenciales.
+El cuerpo tiene un limite de 2 MiB y los metadatos de 64 KiB. Solo la accion
+`get_event_picture` devuelve una fotografia solicitada explicitamente. Nunca
+se deben enviar plantillas faciales ni credenciales.
 
 ## Operaciones habilitadas
 
@@ -124,6 +125,7 @@ fase no se deben enviar fotografias, plantillas faciales ni credenciales.
 - `get_identity_terminal_config`
 - `get_registered_members`
 - `get_recent_activity`
+- `get_event_picture`
 
 La lista se controla en `app/Services/IsapiCommandService.php`. El cliente debe
 tener un manejador local para cada comando; el panel no acepta rutas arbitrarias.
@@ -340,6 +342,55 @@ Formato recomendado para socios:
 6. Refrescar el historial; pasa a `Processing` cuando el desktop la reclama.
 7. Mostrar el resultado al llegar a `Completed`, o el mensaje correspondiente
    cuando termine como `Failed` o `Expired`.
+
+## Capturas de eventos
+
+La accion `get_event_picture` reutiliza la cola y el endpoint de resultados;
+no requiere migracion SQL. El panel administrativo convierte `pictureURL` de
+un evento en su ruta relativa, conservando el sufijo `@WEB...`:
+
+```json
+{
+  "action": "get_event_picture",
+  "terminalIndex": 0,
+  "parameters": {
+    "picturePath": "/LOCALS/pic/acsLinkCap/202609_00/25_162800_30075_0.jpeg@WEB000000000063"
+  }
+}
+```
+
+El servidor y el desktop aceptan solo rutas bajo `/LOCALS/pic/acsLinkCap/`,
+con segmentos alfanumericos, guion o guion bajo, extension `jpg`, `jpeg` o
+`png` y sufijo opcional `@WEB` alfanumerico. No se admiten URLs absolutas,
+traversal, escapes porcentuales, barras inversas, consultas ni fragmentos.
+El desktop utiliza exclusivamente el host y las credenciales de la terminal
+seleccionada, realiza GET sin seguir redirecciones y no descarga mas de
+1572864 bytes (1.5 MiB). No cambia configuraciones de la terminal.
+
+Resultado exitoso en el endpoint existente:
+
+```json
+{
+  "success": true,
+  "httpStatus": 200,
+  "contentType": "image/jpeg",
+  "body": "BASE64_DE_LA_IMAGEN",
+  "metadata": { "bodyEncoding": "base64" }
+}
+```
+
+Solo se admiten JPEG y PNG. El servidor comprueba Base64 canonico, tamano,
+firma y formato de imagen contra `contentType`. El panel obtiene
+`ResponseBody`, `ResponseContentType` y `ResponseMetadata` (JSON serializado)
+en el detalle protegido por `admin_access`. El listado no descarga el cuerpo
+de las capturas. La respuesta de detalle usa `Cache-Control: no-store`.
+Las imagenes se conservan en `IsapiCommands.ResponseBody` igual que los
+demas resultados; esta actualizacion no incorpora borrado automatico.
+
+Actualizar primero el backend y luego el desktop: clientes anteriores
+responden `unsupported_command`. No se requiere actualizar el protocolo
+de heartbeat, reclamacion o estados. Probar contra una terminal real antes
+de publicar el instalador, incluyendo captura inexistente y autenticacion.
 
 ## WebSocket
 

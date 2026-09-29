@@ -138,6 +138,11 @@ ob_start();
                             <label for="readerNo" class="form-label">Numero de lector</label>
                             <input class="form-control" id="readerNo" type="number" value="1" min="1" max="255">
                         </div>
+                        <div id="pictureFields" class="border rounded p-3 mb-3 d-none">
+                            <label for="picturePath" class="form-label">Captura del evento</label>
+                            <input class="form-control" id="picturePath" maxlength="1024" placeholder="/LOCALS/pic/acsLinkCap/...jpeg@WEB...">
+                            <div class="form-text">Pega pictureURL del evento o su ruta de captura. La imagen se solicita a la terminal seleccionada mediante ClubCheck.</div>
+                        </div>
                         <div id="activityFields" class="border rounded p-3 mb-3 d-none">
                             <div class="fw-semibold mb-2">Rango de actividad</div>
                             <div class="row g-2">
@@ -230,7 +235,12 @@ ob_start();
             <div class="modal-body">
                 <div id="detailSummary" class="mb-3"></div>
                 <div id="detailError" class="alert alert-danger d-none"></div>
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <div id="eventPictures" class="mb-3 d-none"></div>
+                <div id="responseImage" class="text-center d-none mb-3">
+                    <img id="eventPicture" class="img-fluid rounded border" style="max-height: 65vh" alt="Captura del evento de la terminal">
+                    <p class="text-muted small mt-2 mb-0" id="pictureCaption"></p>
+                </div>
+                <div id="responseControls" class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                     <strong id="responseViewTitle">Respuesta</strong>
                     <div class="d-flex flex-wrap gap-2">
                         <div class="btn-group btn-group-sm" role="group" aria-label="Formato de respuesta">
@@ -266,6 +276,107 @@ ob_start();
     let currentRenderedBody = '';
     let currentResponseView = 'raw';
     let agentsCache = [];
+    let detailCommandId = null;
+    let detailPending = false;
+    let detailGeneration = 0;
+    let pictureObjectUrl = null;
+
+    function clearPicture() {
+        if (pictureObjectUrl) URL.revokeObjectURL(pictureObjectUrl);
+        pictureObjectUrl = null;
+        el('eventPicture').removeAttribute('src');
+        el('responseImage').classList.add('d-none');
+    }
+
+    function normalizePicturePath(value) {
+        let path = String(value || '').trim();
+        if (/^https?:\/\//i.test(path)) {
+            const url = new URL(path);
+            if (url.username || url.password || url.search || url.hash) throw new Error('La URL de captura no debe incluir credenciales, consultas ni fragmentos.');
+            path = url.pathname;
+        }
+        if (!/^\/LOCALS\/pic\/acsLinkCap\/[A-Za-z0-9_/-]+\.(?:jpe?g|png)(?:@WEB[A-Za-z0-9_-]+)?$/.test(path) || path.includes('//') || path.length > 1024) {
+            throw new Error('Usa una ruta de captura valida de /LOCALS/pic/acsLinkCap/ conservando el sufijo @WEB.');
+        }
+        return path;
+    }
+
+    function renderPicture(command) {
+        if (command.Status !== 'Completed') {
+            el('responseBody').textContent = ['Pending', 'Processing'].includes(command.Status)
+                ? 'Esperando la captura. ClubCheck debe estar conectado; este detalle se actualiza automaticamente.'
+                : 'No hay una imagen disponible. Consulta el estado y el mensaje de la solicitud.';
+            return;
+        }
+        let metadata = command.ResponseMetadata || {};
+        if (typeof metadata === 'string') metadata = JSON.parse(metadata);
+        const mime = command.ResponseContentType;
+        const base64 = command.ResponseBody || '';
+        if (metadata.bodyEncoding !== 'base64' || !['image/jpeg', 'image/png'].includes(mime) ||
+            !base64.length || base64.length > 2097152 || base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) {
+            throw new Error('La respuesta no contiene una imagen JPEG o PNG valida. Actualiza ClubCheck si es necesario.');
+        }
+        const binary = atob(base64);
+        const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+        const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+        const validSignature = mime === 'image/jpeg'
+            ? bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
+            : pngSignature.every((byte, index) => bytes[index] === byte);
+        if (!validSignature || bytes.length > 1572864) throw new Error('El contenido recibido no coincide con el formato de imagen indicado.');
+        pictureObjectUrl = URL.createObjectURL(new Blob([bytes], {type: mime}));
+        el('eventPicture').src = pictureObjectUrl;
+        el('pictureCaption').textContent = `Captura de la terminal [${Number(command.TerminalIndex || 0)}] · ${Math.ceil(bytes.length / 1024)} KB`;
+        el('responseImage').classList.remove('d-none');
+        el('responseBody').classList.add('d-none');
+    }
+
+    function renderEventPictures(command) {
+        const container = el('eventPictures');
+        container.replaceChildren();
+        container.classList.add('d-none');
+        if (command.Action !== 'get_recent_activity' || command.Status !== 'Completed') return;
+        let data;
+        try { data = JSON.parse(command.ResponseBody || ''); } catch (_) { return; }
+        const events = data?.AcsEvent?.InfoList || data?.items || [];
+        if (!Array.isArray(events)) return;
+        const available = events.filter(event => event && typeof event.pictureURL === 'string');
+        if (!available.length) return;
+        const title = document.createElement('div');
+        title.className = 'fw-semibold mb-2';
+        title.textContent = 'Capturas de los eventos';
+        container.appendChild(title);
+        available.forEach(event => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn btn-sm btn-outline-primary me-2 mb-2';
+            button.textContent = `Solicitar captura · ${event.serialNo ?? 'Evento'} · ${event.name || event.time || ''}`;
+            button.addEventListener('click', async () => {
+                button.disabled = true;
+                try {
+                    const result = await request(endpoints.create, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+                        body: JSON.stringify({customerId: command.CustomerId, agentId: command.AgentId,
+                            terminalIndex: Number(command.TerminalIndex || 0), deviceId: command.DeviceId,
+                            action: 'get_event_picture', parameters: {picturePath: normalizePicturePath(event.pictureURL)}})
+                    });
+                    await refresh();
+                    const id = result.command?.Id || result.command?.id;
+                    if (id) await showDetail(id);
+                    else {
+                        button.textContent = 'Captura solicitada. Consulta el historial.';
+                        alertMessage('success', 'Captura solicitada. Consulta su estado en el historial.');
+                    }
+                } catch (error) {
+                    el('detailError').textContent = error.message;
+                    el('detailError').classList.remove('d-none');
+                    button.disabled = false;
+                }
+            });
+            container.appendChild(button);
+        });
+        container.classList.remove('d-none');
+    }
 
     const el = id => document.getElementById(id);
     const escapeHtml = value => {
@@ -551,6 +662,8 @@ ob_start();
         el('pingFields').classList.toggle('d-none', action !== 'network_ping');
         el('cardReaderFields').classList.toggle('d-none', action !== 'get_card_reader_config');
         el('activityFields').classList.toggle('d-none', action !== 'get_recent_activity');
+        el('pictureFields').classList.toggle('d-none', action !== 'get_event_picture');
+        el('picturePath').required = action === 'get_event_picture';
         const pageSize = el('pageSize');
         pageSize.max = action === 'get_recent_activity' ? '30' : '100';
         if (Number(pageSize.value) > Number(pageSize.max)) pageSize.value = pageSize.max;
@@ -646,7 +759,10 @@ ob_start();
         }
     }
 
-    async function showDetail(id) {
+    async function showDetail(id, background = false) {
+        const generation = ++detailGeneration;
+        detailCommandId = id;
+        detailPending = false;
         const summaryElement = el('detailSummary');
         const errorElement = el('detailError');
         const bodyElement = el('responseBody');
@@ -657,16 +773,27 @@ ob_start();
         }
 
         try {
-            summaryElement.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Cargando...';
+            if (!background) summaryElement.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Cargando...';
             if (errorElement) {
                 errorElement.textContent = '';
                 errorElement.classList.add('d-none');
             }
+            currentBody = '';
+            currentRenderedBody = '';
             bodyElement.textContent = '';
-            detailModal.show();
+            bodyElement.classList.remove('d-none');
+            el('responseTable').classList.add('d-none');
+            el('responseTable').replaceChildren();
+            el('eventPictures').classList.add('d-none');
+            el('eventPictures').replaceChildren();
+            el('responseControls').classList.remove('d-none');
+            clearPicture();
+            if (!background) detailModal.show();
 
             const data = await request(endpoints.show.replace(':id', encodeURIComponent(id)));
+            if (generation !== detailGeneration) return;
             const command = data.command;
+            detailPending = ['Pending', 'Processing'].includes(command.Status);
             let requestParameters = {};
             try {
                 requestParameters = typeof command.Parameters === 'string'
@@ -687,6 +814,12 @@ ob_start();
                 errorElement.textContent = `${command.ErrorCode || 'error'}: ${command.ErrorMessage}`;
                 errorElement.classList.remove('d-none');
             }
+            if (command.Action === 'get_event_picture') {
+                el('responseControls').classList.add('d-none');
+                renderPicture(command);
+                return;
+            }
+            renderEventPictures(command);
             currentBody = command.ResponseBody || '';
             let defaultView = 'raw';
             if (currentBody) {
@@ -704,6 +837,7 @@ ob_start();
             }
             renderResponse(defaultView);
         } catch (error) {
+            if (generation !== detailGeneration) return;
             summaryElement.textContent = '';
             if (errorElement) {
                 errorElement.textContent = error.message;
@@ -721,6 +855,9 @@ ob_start();
         try {
             const action = el('action').value;
             const parameters = {};
+            if (action === 'get_event_picture') {
+                parameters.picturePath = normalizePicturePath(el('picturePath').value);
+            }
             if (action === 'network_ping') {
                 parameters.timeoutMs = Number(el('pingTimeoutMs').value);
                 parameters.attempts = Number(el('pingAttempts').value);
@@ -740,7 +877,7 @@ ob_start();
                 parameters.major = Number(el('activityMajor').value);
                 parameters.minor = Number(el('activityMinor').value);
             }
-            await request(endpoints.create, {
+            const created = await request(endpoints.create, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
                 body: JSON.stringify({
@@ -755,6 +892,8 @@ ob_start();
             alertMessage('success', 'Consulta creada. El cliente de escritorio la recibira en su siguiente revision.');
             el('historyCustomer').value = el('customerId').value;
             await refresh();
+            const createdId = created.command?.Id || created.command?.id;
+            if (action === 'get_event_picture' && createdId) await showDetail(createdId);
         } catch (error) {
             alertMessage('danger', error.message);
         } finally {
@@ -772,6 +911,22 @@ ob_start();
         button.addEventListener('click', () => renderResponse(button.dataset.responseView));
     });
     el('copyResponse').addEventListener('click', () => navigator.clipboard?.writeText(currentRenderedBody));
+    el('eventPicture').addEventListener('error', () => {
+        clearPicture();
+        el('detailError').textContent = 'No fue posible mostrar la imagen recibida.';
+        el('detailError').classList.remove('d-none');
+    });
+    el('detailModal').addEventListener('hidden.bs.modal', () => {
+        detailGeneration++;
+        detailCommandId = null;
+        detailPending = false;
+        clearPicture();
+        currentBody = '';
+        currentRenderedBody = '';
+    });
+    setInterval(() => {
+        if (detailCommandId && detailPending) showDetail(detailCommandId, true);
+    }, 5000);
     updateActionDescription();
     refresh();
     setInterval(refresh, 10000);
@@ -781,3 +936,4 @@ ob_start();
 $customScripts = ob_get_clean();
 include __DIR__ . '/../layouts/app.php';
 ?>
+

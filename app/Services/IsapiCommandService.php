@@ -83,6 +83,11 @@ class IsapiCommandService
                 'searchId' => null,
             ],
         ],
+        'get_event_picture' => [
+            'label' => 'Captura de evento',
+            'description' => 'Descarga una captura de acceso de la terminal seleccionada.',
+            'defaultParameters' => ['picturePath' => ''],
+        ],
     ];
 
     public function actions(): array
@@ -114,6 +119,15 @@ class IsapiCommandService
 
     private function normalizeParameters(string $action, array $parameters): array
     {
+        if ($action === 'get_event_picture') {
+            $path = $parameters['picturePath'] ?? null;
+            if (!is_string($path) || strlen($path) > 1024
+                || !preg_match('~^/LOCALS/pic/acsLinkCap/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+\.(?:jpe?g|png)(?:@WEB[A-Za-z0-9_-]+)?$~D', $path)) {
+                throw new \InvalidArgumentException('picturePath debe ser una ruta relativa de captura /LOCALS/pic/acsLinkCap/ valida.');
+            }
+            return ['picturePath' => $path];
+        }
+
         if ($action === 'network_ping') {
             return [
                 'timeoutMs' => $this->integer($parameters['timeoutMs'] ?? 2000, 250, 10000, 'timeoutMs'),

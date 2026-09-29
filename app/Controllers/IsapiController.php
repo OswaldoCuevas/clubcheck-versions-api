@@ -7,9 +7,11 @@ require_once __DIR__ . '/../Helpers/ApiHelper.php';
 require_once __DIR__ . '/../Models/IsapiCommandModel.php';
 require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
 require_once __DIR__ . '/../Services/IsapiCommandService.php';
+require_once __DIR__ . '/../Services/IsapiPictureResult.php';
 
 use ApiHelper;
 use App\Services\IsapiCommandService;
+use App\Services\IsapiPictureResult;
 use Core\Controller;
 use Models\CustomerRegistryModel;
 use Models\IsapiCommandModel;
@@ -121,6 +123,8 @@ class IsapiController extends Controller
     public function adminShow(string $id): void
     {
         $this->requirePermission('admin_access');
+        header('Cache-Control: no-store, private');
+        header('X-Content-Type-Options: nosniff');
         ApiHelper::allowedMethodsGet();
         $id = $this->uuid($id);
         $command = $this->commands->find($id);
@@ -189,7 +193,20 @@ class IsapiController extends Controller
             }
         }
 
-        $command = $this->commands->complete($id, $this->customerId(), $input);
+        $customerId = $this->customerId();
+        $existing = $this->commands->findForCustomer($id, $customerId);
+        if (!$existing) {
+            ApiHelper::respond(['error' => 'Orden no encontrada para este cliente.'], 404);
+        }
+        if ($existing['Action'] === 'get_event_picture' && !empty($input['success'])) {
+            try {
+                IsapiPictureResult::validate($input);
+            } catch (\InvalidArgumentException $e) {
+                ApiHelper::respond(['error' => $e->getMessage(), 'errorCode' => 'invalid_image_response'], 422);
+            }
+        }
+
+        $command = $this->commands->complete($id, $customerId, $input);
         if (!$command) {
             ApiHelper::respond(['error' => 'Orden no encontrada para este cliente.'], 404);
         }
