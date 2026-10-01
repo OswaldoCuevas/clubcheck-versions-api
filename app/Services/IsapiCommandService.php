@@ -11,16 +11,6 @@ namespace App\Services;
 class IsapiCommandService
 {
     private const DEFINITIONS = [
-        'test_proxy_request' => [
-            'label' => 'Proxy ISAPI temporal',
-            'description' => 'Envia una solicitud de prueba a una ruta relativa /ISAPI/... mediante el desktop.',
-            'defaultParameters' => [
-                'method' => 'GET',
-                'path' => '/ISAPI/System/status',
-                'contentType' => 'application/xml',
-                'body' => null,
-            ],
-        ],
         'network_ping' => [
             'label' => 'Ping de red',
             'description' => 'Comprueba conectividad ICMP sin utilizar credenciales de la terminal.',
@@ -68,13 +58,14 @@ class IsapiCommandService
         ],
         'get_registered_members' => [
             'label' => 'Socios registrados',
-            'description' => 'Solicita al cliente los socios registrados en la terminal.',
+            'description' => 'POST /ISAPI/AccessControl/UserInfo/Search?format=json - usuarios registrados paginados.',
             'defaultParameters' => [
                 'page' => 1,
-                'pageSize' => 50,
+                'pageSize' => 30,
                 'offset' => 0,
                 'cursor' => null,
                 'includeTotal' => true,
+                'searchId' => 'cc-users',
             ],
         ],
         'get_recent_activity' => [
@@ -104,9 +95,6 @@ class IsapiCommandService
     {
         $actions = [];
         foreach (self::DEFINITIONS as $key => $definition) {
-            if ($key === 'test_proxy_request' && !$this->testProxyEnabled()) {
-                continue;
-            }
             $actions[] = [
                 'key' => $key,
                 'label' => $definition['label'],
@@ -124,9 +112,6 @@ class IsapiCommandService
         if (!isset(self::DEFINITIONS[$action])) {
             return null;
         }
-        if ($action === 'test_proxy_request' && !$this->testProxyEnabled()) {
-            return null;
-        }
         $definition = ['action' => $action] + self::DEFINITIONS[$action];
         $definition['parameters'] = $this->normalizeParameters($action, $parameters);
 
@@ -135,10 +120,6 @@ class IsapiCommandService
 
     private function normalizeParameters(string $action, array $parameters): array
     {
-        if ($action === 'test_proxy_request') {
-            return $this->normalizeTestProxyParameters($parameters);
-        }
-
         if ($action === 'get_event_picture') {
             $path = $parameters['picturePath'] ?? null;
             if (!is_string($path) || strlen($path) > 1024
@@ -166,8 +147,8 @@ class IsapiCommandService
         }
 
         $page = $this->integer($parameters['page'] ?? 1, 1, 1000000, 'page');
-        $maxPageSize = $action === 'get_recent_activity' ? 30 : 100;
-        $defaultPageSize = $action === 'get_recent_activity' ? 30 : 50;
+        $maxPageSize = 30;
+        $defaultPageSize = 30;
         $pageSize = $this->integer($parameters['pageSize'] ?? $defaultPageSize, 1, $maxPageSize, 'pageSize');
         $cursor = isset($parameters['cursor']) ? trim((string) $parameters['cursor']) : '';
         if (mb_strlen($cursor) > 200) {
@@ -186,7 +167,9 @@ class IsapiCommandService
             ) ?? true,
         ];
 
-        if ($action === 'get_recent_activity') {
+        if ($action === 'get_registered_members') {
+            $normalized['searchId'] = 'cc-users';
+        } elseif ($action === 'get_recent_activity') {
             $to = $this->dateTime($parameters['to'] ?? null, new \DateTimeImmutable('now'));
             $from = $this->dateTime($parameters['from'] ?? null, $to->modify('-24 hours'));
             if ($from > $to) {
@@ -241,66 +224,4 @@ class IsapiCommandService
         return $value->format('Y-m-d\TH:i:sP') . ' ';
     }
 
-    private function normalizeTestProxyParameters(array $parameters): array
-    {
-        if (!$this->testProxyEnabled()) {
-            throw new \InvalidArgumentException('El proxy ISAPI temporal esta deshabilitado.');
-        }
-
-        $method = strtoupper(trim((string) ($parameters['method'] ?? 'GET')));
-        $allowedMethods = ['GET', 'POST', 'PUT'];
-        if ((bool) config('isapi.test_proxy_allow_delete', false)) {
-            $allowedMethods[] = 'DELETE';
-        }
-        if (!in_array($method, $allowedMethods, true)) {
-            throw new \InvalidArgumentException('Metodo no permitido por el proxy temporal.');
-        }
-
-        $path = trim((string) ($parameters['path'] ?? ''));
-        if ($path === '' || mb_strlen($path) > 1000) {
-            throw new \InvalidArgumentException('La ruta relativa ISAPI es obligatoria y no puede exceder 1000 caracteres.');
-        }
-        $decodedPath = rawurldecode($path);
-        if (!str_starts_with($path, '/ISAPI/') ||
-            str_contains($decodedPath, '://') ||
-            str_contains($decodedPath, '..') ||
-            str_contains($decodedPath, '\\') ||
-            preg_match('/[\r\n\x00]/', $decodedPath)) {
-            throw new \InvalidArgumentException('La ruta debe comenzar con /ISAPI/ y no contener host ni segmentos inseguros.');
-        }
-        $urlParts = parse_url($path);
-        if ($urlParts === false || isset($urlParts['scheme']) || isset($urlParts['host']) ||
-            isset($urlParts['user']) || isset($urlParts['pass']) || isset($urlParts['fragment'])) {
-            throw new \InvalidArgumentException('La ruta ISAPI relativa no es valida.');
-        }
-
-        $contentType = strtolower(trim((string) ($parameters['contentType'] ?? 'application/xml')));
-        if (!in_array($contentType, ['application/json', 'application/xml', 'text/xml'], true)) {
-            throw new \InvalidArgumentException('contentType debe ser application/json, application/xml o text/xml.');
-        }
-
-        $body = $parameters['body'] ?? null;
-        if ($body !== null && !is_string($body)) {
-            throw new \InvalidArgumentException('El body del proxy debe ser texto JSON o XML.');
-        }
-        $maxBodyBytes = (int) config('isapi.test_proxy_max_body_bytes', 262144);
-        if ($body !== null && strlen($body) > $maxBodyBytes) {
-            throw new \InvalidArgumentException('El body excede el limite temporal de 256 KB.');
-        }
-        if ($method === 'GET') {
-            $body = null;
-        }
-
-        return [
-            'method' => $method,
-            'path' => $path,
-            'contentType' => $contentType,
-            'body' => $body !== '' ? $body : null,
-        ];
-    }
-
-    private function testProxyEnabled(): bool
-    {
-        return (bool) config('isapi.test_proxy_enabled', false);
-    }
 }

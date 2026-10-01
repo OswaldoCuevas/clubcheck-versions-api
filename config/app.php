@@ -6,14 +6,6 @@ $debugValue = $_ENV['APP_DEBUG'] ?? getenv('APP_DEBUG');
 $debug = $debugValue === false || $debugValue === null || $debugValue === ''
     ? !$isProduction
     : filter_var($debugValue, FILTER_VALIDATE_BOOLEAN);
-$isapiTestProxyEnabled = filter_var(
-    $_ENV['ISAPI_TEST_PROXY_ENABLED'] ?? getenv('ISAPI_TEST_PROXY_ENABLED') ?: false,
-    FILTER_VALIDATE_BOOLEAN
-);
-$isapiTestProxyAllowDelete = filter_var(
-    $_ENV['ISAPI_TEST_PROXY_ALLOW_DELETE'] ?? getenv('ISAPI_TEST_PROXY_ALLOW_DELETE') ?: false,
-    FILTER_VALIDATE_BOOLEAN
-);
 
 return [
     'app' => [
@@ -56,12 +48,6 @@ return [
         'enable_cors' => true,
         'rate_limit' => 1000, // requests per hour
         'require_auth' => false,
-    ],
-
-    'isapi' => [
-        'test_proxy_enabled' => $isapiTestProxyEnabled,
-        'test_proxy_allow_delete' => $isapiTestProxyAllowDelete,
-        'test_proxy_max_body_bytes' => 262144,
     ],
 
     'database' => [

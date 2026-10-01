@@ -133,9 +133,16 @@ class IsapiCommandModel extends Model
 
         $success = (bool) ($result['success'] ?? false);
         $responseBody = isset($result['body']) ? (string) $result['body'] : null;
-        $metadata = isset($result['metadata']) && is_array($result['metadata'])
-            ? $this->json($result['metadata'])
+        $metadataValue = isset($result['metadata']) && is_array($result['metadata'])
+            ? $result['metadata']
             : null;
+        if (($existing['Action'] ?? '') === 'get_registered_members') {
+            $responseBody = $this->sanitizeRegisteredMembersBody($responseBody);
+            if ($metadataValue !== null) {
+                $this->removePasswords($metadataValue);
+            }
+        }
+        $metadata = $metadataValue !== null ? $this->json($metadataValue) : null;
 
         $this->db->update('IsapiCommands', [
             'CompletedAt' => date('Y-m-d H:i:s'),
@@ -262,5 +269,36 @@ class IsapiCommandModel extends Model
             throw new \InvalidArgumentException('No fue posible serializar los metadatos.');
         }
         return $json;
+    }
+
+    private function sanitizeRegisteredMembersBody(?string $body): ?string
+    {
+        if ($body === null || trim($body) === '') {
+            return $body;
+        }
+        $decoded = json_decode($body, true);
+        if (!is_array($decoded)) {
+            return $body;
+        }
+        $this->removePasswords($decoded);
+        $sanitized = json_encode(
+            $decoded,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE
+        );
+        return $sanitized !== false ? $sanitized : $body;
+    }
+
+    private function removePasswords(array &$value): void
+    {
+        foreach ($value as $key => &$item) {
+            if (is_string($key) && strtolower($key) === 'password') {
+                unset($value[$key]);
+                continue;
+            }
+            if (is_array($item)) {
+                $this->removePasswords($item);
+            }
+        }
+        unset($item);
     }
 }

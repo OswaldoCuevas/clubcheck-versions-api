@@ -126,47 +126,10 @@ se deben enviar plantillas faciales ni credenciales.
 - `get_registered_members`
 - `get_recent_activity`
 - `get_event_picture`
-- `test_proxy_request` (solo con `ISAPI_TEST_PROXY_ENABLED=true`)
 
 La lista se controla en `app/Services/IsapiCommandService.php`. El cliente debe
-tener un manejador local para cada comando. Solo el proxy temporal habilitado
-explicitamente acepta una ruta relativa controlada.
-
-### Proxy ISAPI temporal
-
-Para pruebas adicionales puede habilitarse temporalmente:
-
-```dotenv
-ISAPI_TEST_PROXY_ENABLED=true
-ISAPI_TEST_PROXY_ALLOW_DELETE=false
-```
-
-La orden `test_proxy_request` transporta exclusivamente `method`, una ruta
-relativa `/ISAPI/...`, `contentType` y un body XML/JSON como texto. El host,
-puerto y credenciales siguen resolviendose dentro del desktop. Se permiten
-`GET`, `POST` y `PUT`; `DELETE` permanece bloqueado salvo que se active su
-segunda bandera. El body esta limitado a 256 KB y las respuestas conservan el
-limite general de 2 MB.
-
-Ejemplo:
-
-```json
-{
-  "action": "test_proxy_request",
-  "terminalIndex": 0,
-  "deviceId": "entrada",
-  "parameters": {
-    "method": "GET",
-    "path": "/ISAPI/System/status",
-    "contentType": "application/xml",
-    "body": null
-  }
-}
-```
-
-Al concluir las pruebas debe configurarse
-`ISAPI_TEST_PROXY_ENABLED=false`. La accion desaparece del panel y el backend
-deja de aceptarla sin afectar los comandos semanticos.
+tener un manejador local para cada comando. El panel ya no acepta rutas ISAPI
+arbitrarias.
 
 ## Mapa de endpoints del servidor
 
@@ -190,7 +153,7 @@ Ejemplo para crear una orden desde el panel:
   "action": "get_registered_members",
   "parameters": {
     "page": 1,
-    "pageSize": 50,
+    "pageSize": 30,
     "cursor": null,
     "includeTotal": true
   }
@@ -225,10 +188,35 @@ no debe aceptar acciones desconocidas aunque llegaran por error: debe responder
 | `get_system_time` | `GET /ISAPI/System/time`. | Hora local, zona horaria y modo de sincronizacion. |
 | `get_card_reader_config` | `GET /ISAPI/AccessControl/CardReaderCfg/{readerNo}?format=json`. | Configuracion JSON original del lector indicado. |
 | `get_identity_terminal_config` | `GET /ISAPI/AccessControl/IdentityTerminal`. | Configuracion original de identificacion facial y umbrales. |
-| `get_registered_members` | Ejecutar la rutina local que pagina usuarios/personas registrados. | JSON normalizado con `items`, `total` y datos de paginación. |
+| `get_registered_members` | `POST /ISAPI/AccessControl/UserInfo/Search?format=json`. | Usuarios sin contrasenas y metadatos de paginacion. |
 | `get_recent_activity` | `POST /ISAPI/AccessControl/AcsEvent?format=json`. | Respuesta `AcsEvent` original y metadatos de paginacion. |
 
 ### Consultas ISAPI cerradas
+
+`get_registered_members` recibe `page`, `pageSize`, `offset`, `cursor`,
+`includeTotal` y `searchId`. El desktop debe ejecutar:
+
+```http
+POST /ISAPI/AccessControl/UserInfo/Search?format=json
+Content-Type: application/json
+```
+
+```json
+{
+  "UserInfoSearchCond": {
+    "searchID": "cc-users",
+    "searchResultPosition": 0,
+    "maxResults": 30
+  }
+}
+```
+
+El mapeo es `searchId -> searchID`, `offset -> searchResultPosition` y
+`pageSize -> maxResults`. El maximo por consulta es 30. La respuesta conserva
+`UserInfoSearch.UserInfo`, `numOfMatches` y `totalMatches`, pero debe eliminar
+todo campo `password` antes de reportarla. El servidor vuelve a eliminar ese
+campo como proteccion adicional antes de guardar la respuesta. `faceURL` puede
+conservarse como referencia, pero este comando no descarga fotografias.
 
 `get_system_time` y `get_identity_terminal_config` no reciben parametros. El
 desktop construye internamente sus rutas y utiliza la autenticacion local de la
