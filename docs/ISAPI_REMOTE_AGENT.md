@@ -126,9 +126,47 @@ se deben enviar plantillas faciales ni credenciales.
 - `get_registered_members`
 - `get_recent_activity`
 - `get_event_picture`
+- `test_proxy_request` (solo con `ISAPI_TEST_PROXY_ENABLED=true`)
 
 La lista se controla en `app/Services/IsapiCommandService.php`. El cliente debe
-tener un manejador local para cada comando; el panel no acepta rutas arbitrarias.
+tener un manejador local para cada comando. Solo el proxy temporal habilitado
+explicitamente acepta una ruta relativa controlada.
+
+### Proxy ISAPI temporal
+
+Para pruebas adicionales puede habilitarse temporalmente:
+
+```dotenv
+ISAPI_TEST_PROXY_ENABLED=true
+ISAPI_TEST_PROXY_ALLOW_DELETE=false
+```
+
+La orden `test_proxy_request` transporta exclusivamente `method`, una ruta
+relativa `/ISAPI/...`, `contentType` y un body XML/JSON como texto. El host,
+puerto y credenciales siguen resolviendose dentro del desktop. Se permiten
+`GET`, `POST` y `PUT`; `DELETE` permanece bloqueado salvo que se active su
+segunda bandera. El body esta limitado a 256 KB y las respuestas conservan el
+limite general de 2 MB.
+
+Ejemplo:
+
+```json
+{
+  "action": "test_proxy_request",
+  "terminalIndex": 0,
+  "deviceId": "entrada",
+  "parameters": {
+    "method": "GET",
+    "path": "/ISAPI/System/status",
+    "contentType": "application/xml",
+    "body": null
+  }
+}
+```
+
+Al concluir las pruebas debe configurarse
+`ISAPI_TEST_PROXY_ENABLED=false`. La accion desaparece del panel y el backend
+deja de aceptarla sin afectar los comandos semanticos.
 
 ## Mapa de endpoints del servidor
 
