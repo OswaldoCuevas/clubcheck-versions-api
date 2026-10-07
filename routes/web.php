@@ -69,6 +69,10 @@ $router->any('/api/customers/:customerId', 'CustomersController', 'getCustomer',
 $router->any('/api/customers/messages-sends-at-month/:customerId', 'CustomersController', 'getMessagesSendsAtMonth', ['customer_jwt']);
 
 // Desktop web/reporting API
+$router->put('/api/customers/socios/:id/imagen', 'MemberImagesController', 'put', ['customer_jwt']);
+$router->get('/api/customers/socios/:id/imagen', 'MemberImagesController', 'get', ['customer_jwt']);
+$router->get('/api/desktop/socios/:id/imagen', 'MemberImagesController', 'portalGet', ['desktop_jwt']);
+
 $router->post('/api/desktop/login', 'DesktopApiController', 'login');
 $router->get('/api/desktop/dashboard', 'DesktopApiController', 'dashboard', ['desktop_jwt']);
 $router->get('/api/desktop/users', 'DesktopApiController', 'users', ['desktop_jwt']);
