@@ -205,7 +205,7 @@ class DesktopApiController extends Controller
                 'sortBy' => $_GET['sortBy'] ?? 'fullname',
                 'sortDir' => strtolower((string) ($_GET['sortDir'] ?? 'asc')) === 'desc' ? 'desc' : 'asc',
             ],
-            'members' => $this->pagePayload($members, $total, $page, $perPage),
+            'members' => $this->pagePayload(\App\Services\MemberImageService::decorate($this->db, $customerId, $members), $total, $page, $perPage),
         ]);
     }
 
