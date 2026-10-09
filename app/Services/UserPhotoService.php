@@ -12,12 +12,14 @@ class UserPhotoService
     public const MAX_BYTES = 5242880;
     private $db;
     private string $directory;
+    private bool $protectDirectory;
 
     /** Configura persistencia privada para el proceso de sincronizacion de fotos. */
     public function __construct($db, ?string $directory = null)
     {
         $this->db = $db;
-        $this->directory = $directory ?? __DIR__ . '/../../storage/user-photos';
+        $this->protectDirectory = $directory === null;
+        $this->directory = $directory ?? __DIR__ . '/../../uploads/user-photos';
     }
 
     /** Valida campos multipart y contenido real antes de sustituir una foto del socio. */
@@ -105,8 +107,18 @@ class UserPhotoService
                 $this->db->commitTransaction();
                 return $this->confirmation($userId, $old);
             }
-            if (!is_dir($this->directory) && !@mkdir($this->directory, 0700, true) && !is_dir($this->directory)) {
+            // Igual que uploads/announcements: la carpeta se crea en la primera carga.
+            if (!is_dir($this->directory) && !@mkdir($this->directory, 0775, true) && !is_dir($this->directory)) {
                 throw new \RuntimeException('Almacenamiento no disponible');
+            }
+            if ($this->protectDirectory) {
+                $accessFile = $this->directory . '/.htaccess';
+                $accessRule = "Require all denied\n";
+                if (!is_file($accessFile)
+                    && (@file_put_contents($accessFile, $accessRule, LOCK_EX) !== strlen($accessRule)
+                        || !@chmod($accessFile, 0644))) {
+                    throw new \RuntimeException('No se pudo proteger el almacenamiento de fotografias');
+                }
             }
             $key = bin2hex(random_bytes(32));
             foreach (['original' => $image['bytes'], 'png' => $image['thumbnail']] as $suffix => $bytes) {
