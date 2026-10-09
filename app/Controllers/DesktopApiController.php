@@ -211,6 +211,7 @@ class DesktopApiController extends Controller
         ]);
     }
 
+    /** Lista membresias y agrega la foto del socio por UserId para los avatares del gimnasio autenticado. */
     public function memberships(): void
     {
         ApiHelper::respondIfOptions();
@@ -275,7 +276,7 @@ class DesktopApiController extends Controller
                 'sortBy' => $sortBy,
                 'sortDir' => $sortDir,
             ],
-            'memberships' => $this->pagePayload($rows, $total, $page, $perPage),
+            'memberships' => $this->pagePayload((new \App\Services\UserPhotoService($this->db))->attach($customerId, $rows, 'UserId'), $total, $page, $perPage),
         ]);
     }
 

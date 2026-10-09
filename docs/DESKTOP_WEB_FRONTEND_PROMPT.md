@@ -63,6 +63,8 @@ Devuelve total de socios actuales, socios nuevos en rango, grafica diaria de nue
 
 Devuelve membresias activas, por vencer y listado paginado. Soporta `status=all|active|expired|expiring`, `expiringDays`, `sortBy=expiration|endingDate|fullname` y `sortDir=asc|desc`. Cada registro trae `status` e `isExpiring` calculados con ese umbral.
 
+Cada fila de `memberships.data` conserva `UserId` del socio e incluye `photo: null` o `{ "version": 3, "updatedAt": "2026-10-09 12:00:00" }`. Para mostrar el avatar, descargar `GET /api/desktop/users/{UserId}/photo` como blob con `Authorization: Bearer <desktop_jwt>` desde el entorno configurado. Nunca usar `Id` ni `SubscriptionId` de la membresia para buscar la foto. Los metadatos y la descarga se limitan al gimnasio del JWT. Ante foto ausente, respuesta antigua sin metadatos, 401/404 o fallo de red, conservar el avatar alternativo y el reporte operativo. Una nueva `version` debe renovar la imagen; cancelar solicitudes obsoletas y liberar las URLs de objetos al sustituir o retirar el avatar. Contrato completo: `docs/USER_PHOTOS.md`.
+
 `GET /api/desktop/products`
 
 Devuelve productos bajos en stock, listado paginado sin imagen y historial paginado de entradas/salidas. Soporta `search`, `lowStock`, `historyPage`, `historyPerPage`.

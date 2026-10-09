@@ -23,11 +23,11 @@ function rejectsPhoto(callable $action, int $status): void
     throw new RuntimeException('Expected rejection ' . $status);
 }
 
-/** Ejecuta peticiones CGI con multipart real sin servidor HTTP ni acceso a datos productivos. */
-function photoCgi(string $schema, string $directory, string $method, string $token, string $body = '', string $type = ''): array
+/** Ejecuta cargas, descargas y reportes CGI con JWT real para validar fotos sin datos productivos. */
+function photoCgi(string $schema, string $directory, string $method, string $token, string $body = '', string $type = '', string $query = 'userId=user-a'): array
 {
     $env = array_merge(getenv(), ['REDIRECT_STATUS' => '1', 'REQUEST_METHOD' => $method,
-        'SCRIPT_FILENAME' => __DIR__ . '/user-photos-cgi.php', 'QUERY_STRING' => 'userId=user-a',
+        'SCRIPT_FILENAME' => __DIR__ . '/user-photos-cgi.php', 'QUERY_STRING' => $query,
         'CONTENT_TYPE' => $type, 'CONTENT_LENGTH' => (string) strlen($body),
         'HTTP_AUTHORIZATION' => $token === '' ? '' : 'Bearer ' . $token,
         'PHOTO_TEST_SCHEMA' => $schema, 'PHOTO_TEST_DIRECTORY' => $directory]);
@@ -187,6 +187,8 @@ try {
     $download = photoCgi($schema, $directory . '/storage', 'GET', $portalToken);
     checkPhoto($download['status'] === 200 && $download['body'] === $payload['thumbnail'], 'Authenticated thumbnail');
     checkPhoto(str_contains($download['headers'], 'private, no-store'), 'Protected cache headers');
+    require_once __DIR__ . '/memberships-photos.php';
+    checkMembershipPhotos($db, $service, $schema, $directory . '/storage', $portalToken, $otherPortal);
     checkPhoto(photoCgi($schema, $directory . '/storage', 'POST', $customerToken, '{}', 'application/json')['status'] === 400, 'Multipart required');
     $oldMultipart = str_replace("\r\n\r\n3\r\n", "\r\n\r\n1\r\n", $multipart);
     checkPhoto(photoCgi($schema, $directory . '/storage', 'POST', $customerToken, $oldMultipart, $type)['status'] === 409, 'API old version');

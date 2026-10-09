@@ -31,6 +31,14 @@ try {
         $controller->upload($_GET['userId'] ?? 'user-a');
     } else {
         (new App\Middleware\DesktopJwtMiddleware($jwt))->handle();
+        if (($_GET['report'] ?? '') === 'memberships') {
+            require_once __DIR__ . '/../app/Controllers/DesktopApiController.php';
+            // Reutiliza el reporte real sin ejecutar constructores que conectan a datos operativos.
+            $reflection = new ReflectionClass(Controllers\DesktopApiController::class);
+            $report = $reflection->newInstanceWithoutConstructor();
+            $reflection->getProperty('db')->setValue($report, $db);
+            $report->memberships();
+        }
         $controller->read($_GET['userId'] ?? 'user-a');
     }
 } catch (App\Exceptions\ApiException $e) {
