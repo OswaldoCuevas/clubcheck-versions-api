@@ -64,6 +64,7 @@ $router->post('/api/customers/announcements/viewed', 'AnnouncementsController', 
 $router->post('/api/customers/announcements/:id/viewed', 'AnnouncementsController', 'viewed', ['customer_jwt']);
 $router->any('/api/customers/desktop/pull', 'CustomersController', 'pullDesktop', ['customer_jwt']);
 $router->any('/api/customers/desktop/push', 'CustomersController', 'pushDesktop', ['customer_jwt']);
+$router->post('/api/customers/desktop/users/:userId/photo', 'UserPhotosController', 'upload', ['customer_jwt']);
 $router->any('/api/customers', 'CustomersController', 'patchCustomer',['customer_jwt']);
 $router->any('/api/customers/:customerId', 'CustomersController', 'getCustomer', ['customer_jwt']);
 $router->any('/api/customers/messages-sends-at-month/:customerId', 'CustomersController', 'getMessagesSendsAtMonth', ['customer_jwt']);
@@ -72,6 +73,7 @@ $router->any('/api/customers/messages-sends-at-month/:customerId', 'CustomersCon
 $router->post('/api/desktop/login', 'DesktopApiController', 'login');
 $router->get('/api/desktop/dashboard', 'DesktopApiController', 'dashboard', ['desktop_jwt']);
 $router->get('/api/desktop/users', 'DesktopApiController', 'users', ['desktop_jwt']);
+$router->get('/api/desktop/users/:userId/photo', 'UserPhotosController', 'read', ['desktop_jwt']);
 $router->get('/api/desktop/memberships', 'DesktopApiController', 'memberships', ['desktop_jwt']);
 $router->get('/api/desktop/products', 'DesktopApiController', 'products', ['desktop_jwt']);
 $router->get('/api/desktop/attendances', 'DesktopApiController', 'attendances', ['desktop_jwt']);

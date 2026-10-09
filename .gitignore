@@ -48,6 +48,9 @@ cache/
 /uploads/*
 !/uploads/.gitkeep
 /storage/uploads/
+/storage/user-photos/*
+!/storage/user-photos/.htaccess
+!/storage/user-photos/.gitkeep
 /storage/uploads/*
 !/storage/uploads/.gitkeep
 

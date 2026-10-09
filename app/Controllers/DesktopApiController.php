@@ -6,6 +6,7 @@ require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Helpers/ApiHelper.php';
 require_once __DIR__ . '/../Models/CustomerWebLoginAttemptModel.php';
 require_once __DIR__ . '/../Services/JwtService.php';
+require_once __DIR__ . '/../Services/UserPhotoService.php';
 require_once __DIR__ . '/../../utils/database.php';
 
 use ApiHelper;
@@ -164,6 +165,7 @@ class DesktopApiController extends Controller
         ]);
     }
 
+    /** Lista socios y metadatos de foto para los avatares protegidos del portal del gimnasio. */
     public function users(): void
     {
         ApiHelper::respondIfOptions();
@@ -205,7 +207,7 @@ class DesktopApiController extends Controller
                 'sortBy' => $_GET['sortBy'] ?? 'fullname',
                 'sortDir' => strtolower((string) ($_GET['sortDir'] ?? 'asc')) === 'desc' ? 'desc' : 'asc',
             ],
-            'members' => $this->pagePayload($members, $total, $page, $perPage),
+            'members' => $this->pagePayload((new \App\Services\UserPhotoService($this->db))->attach($customerId, $members), $total, $page, $perPage),
         ]);
     }
 
@@ -354,6 +356,7 @@ class DesktopApiController extends Controller
         ]);
     }
 
+    /** Consulta asistencias y fotos opcionales del mismo gimnasio para los avatares del reporte. */
     public function attendances(): void
     {
         ApiHelper::respondIfOptions();
@@ -381,7 +384,7 @@ class DesktopApiController extends Controller
         $rows = $this->db->fetchAll(
             "SELECT a.Id, a.CheckIn, a.Active, a.UserId, u.Fullname, u.Code, v.EndingDate
              FROM AttendancesDesktop a
-             LEFT JOIN UsersDesktop u ON u.Id = a.UserId
+             LEFT JOIN UsersDesktop u ON u.Id = a.UserId AND u.CustomerApiId = a.CustomerApiId
              LEFT JOIN ViewSubscriptions v ON v.UserId = a.UserId AND v.CustomerApiId = a.CustomerApiId
              WHERE a.CustomerApiId = ? AND COALESCE(a.Removed, 0) = 0 AND STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
              ORDER BY STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s') DESC
@@ -393,7 +396,7 @@ class DesktopApiController extends Controller
              FROM (
                 SELECT a.UserId, DATE(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s')) AS AttendanceDate
                 FROM AttendancesDesktop a
-                LEFT JOIN UsersDesktop u ON u.Id = a.UserId
+                LEFT JOIN UsersDesktop u ON u.Id = a.UserId AND u.CustomerApiId = a.CustomerApiId
                 WHERE a.CustomerApiId = ? AND COALESCE(a.Removed, 0) = 0 AND STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
                 {$memberSearchWhere}
                 GROUP BY a.UserId, DATE(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s'))
@@ -412,7 +415,7 @@ class DesktopApiController extends Controller
                     SUM(CASE WHEN a.Active = 0 THEN 1 ELSE 0 END) AS deniedAttempts,
                     MAX(STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s')) AS lastAttemptAt
              FROM AttendancesDesktop a
-             LEFT JOIN UsersDesktop u ON u.Id = a.UserId
+             LEFT JOIN UsersDesktop u ON u.Id = a.UserId AND u.CustomerApiId = a.CustomerApiId
              LEFT JOIN ViewSubscriptions v ON v.UserId = a.UserId AND v.CustomerApiId = a.CustomerApiId
              WHERE a.CustomerApiId = ? AND COALESCE(a.Removed, 0) = 0 AND STR_TO_DATE(a.CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?
              {$memberSearchWhere}
@@ -446,8 +449,8 @@ class DesktopApiController extends Controller
                 'search' => $memberSearch,
             ],
             'summary' => $this->attendanceSummary($customerId, $from, $to),
-            'attendances' => $this->pagePayload($rows, $total, $page, $perPage),
-            'memberAccess' => $this->pagePayload($memberRows, $memberTotal, $memberPage, $memberPerPage),
+            'attendances' => $this->pagePayload((new \App\Services\UserPhotoService($this->db))->attach($customerId, $rows, 'UserId'), $total, $page, $perPage),
+            'memberAccess' => $this->pagePayload((new \App\Services\UserPhotoService($this->db))->attach($customerId, $memberRows, 'UserId'), $memberTotal, $memberPage, $memberPerPage),
         ]);
     }
 
