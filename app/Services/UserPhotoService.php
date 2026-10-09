@@ -57,26 +57,21 @@ class UserPhotoService
         if (!$image) {
             throw new ApiException('Imagen corrupta', 415);
         }
+        $ratio = min(1, 256 / $info[0], 256 / $info[1]);
+        $width = max(1, (int) round($info[0] * $ratio));
+        $height = max(1, (int) round($info[1] * $ratio));
+        $thumb = imagecreatetruecolor($width, $height);
+        imagealphablending($thumb, false);
+        imagesavealpha($thumb, true);
+        imagecopyresampled($thumb, $image, 0, 0, 0, 0, $width, $height, $info[0], $info[1]);
+        ob_start();
         try {
-            $ratio = min(1, 256 / $info[0], 256 / $info[1]);
-            $width = max(1, (int) round($info[0] * $ratio));
-            $height = max(1, (int) round($info[1] * $ratio));
-            $thumb = imagecreatetruecolor($width, $height);
-            imagealphablending($thumb, false);
-            imagesavealpha($thumb, true);
-            imagecopyresampled($thumb, $image, 0, 0, 0, 0, $width, $height, $info[0], $info[1]);
-            ob_start();
-            try {
-                if (!imagepng($thumb)) {
-                    throw new \RuntimeException('No se pudo generar miniatura');
-                }
-                $thumbnail = ob_get_contents();
-            } finally {
-                ob_end_clean();
-                imagedestroy($thumb);
+            if (!imagepng($thumb)) {
+                throw new \RuntimeException('No se pudo generar miniatura');
             }
+            $thumbnail = ob_get_contents();
         } finally {
-            imagedestroy($image);
+            ob_end_clean();
         }
         return ['version' => (int) $version, 'sha256' => $hash, 'mime' => $info['mime'],
             'size' => $size, 'bytes' => $bytes, 'thumbnail' => $thumbnail];
