@@ -24,10 +24,15 @@ Todas las rutas siguientes son `GET` con middleware `desktop_jwt`. Usar `Authori
 | Email | string o null | Correo sincronizado |
 | CreatedOn | string o null | Fecha local `YYYY-MM-DD HH:mm:ss` |
 | photo | objeto o null | `{ "version": 3, "updatedAt": "2026-10-09 12:00:00" }` |
+| currentSubscription | objeto o null | Membresía seleccionada por vencimiento calendario válido; mismos campos y tipos que el historial de membresías |
 
 `photo.version` es un número entero positivo y `updatedAt` una cadena generada por el servicio existente de fotos (UTC), no una marca de sincronización del socio. Se preservan vacíos y nulos almacenados. No se entregan huellas, rutas locales, claves de almacenamiento, hash de imágenes, datos de gimnasio, búsqueda interna ni estados `Sync`/`Removed`.
 
 Requiere las migraciones existentes: `008_new_desktops.sql` (Email) y `016_create_user_photos_desktop.sql` (fotos). Esta tarea no añade migraciones.
+
+`currentSubscription` se consulta directamente en `SubscriptionsDesktop`, entre registros no eliminados del socio y del gimnasio del JWT. Se elige la mayor fecha calendario local de **EndingDate** (primeros 10 caracteres normalizados), con mayor `Id` en empate; la hora no desempata, conservando el criterio de ViewSubscriptions. Se validan año 1000–9999, mes y día real del calendario, incluidos años bisiestos; valores vacíos, nulos, no interpretables o imposibles no son candidatos. No se exige StartDate, ni se excluyen inicios futuros. La selección es independiente del orden, filtros y paginación del historial y no depende de la fecha actual.
+
+Sin candidato con vencimiento válido se devuelve `currentSubscription: null`. Esto puede significar ausencia de membresías o registros con vencimiento desconocido: el frontend debe distinguirlos mediante `total` del historial **sin filtros**, no por una página vacía. Los errores de carga son un estado separado. El detalle no acepta filtros ni paginación del historial.
 
 ## Historiales
 
@@ -57,10 +62,18 @@ Membresías: se consulta **SubscriptionsDesktop**, no ViewSubscriptions. Cada el
 | Id, UserId | string |
 | StartDate, EndingDate | string o null |
 | SubscriptionPeriodId | string o null |
+| SubscriptionPeriodName | string o null |
+| SubscriptionPeriodDays | number entero o null |
 | Payment | number o null |
 | Warning, Finished, Registered | boolean o null |
 
-Se aplica a StartDate/EndingDate la normalización existente de ViewSubscriptions: quitar comas, sustituir `;` por `:`, quitar espacios exteriores y convertir vacío en null. Filtrado y orden por los primeros 10 caracteres de **StartDate** convertidos con `%Y-%m-%d`, descendente, luego `Id` descendente. Se incluyen membresías anteriores y finalizadas si no están eliminadas. No se infiere estado de vigencia ni nombre del período. Sin filtros, las fechas inválidas/nulas se mantienen al final del orden; con filtros se excluyen las fechas no interpretables. Lo mismo aplica a CheckIn inválido en asistencias.
+Se aplica a StartDate/EndingDate la normalización existente de ViewSubscriptions: quitar comas, sustituir `;` por `:`, quitar espacios exteriores y convertir vacío en null. Filtrado y orden por los primeros 10 caracteres de **StartDate** convertidos con `%Y-%m-%d`, descendente, luego `Id` descendente. Se incluyen membresías anteriores y finalizadas si no están eliminadas. No se infiere estado de vigencia. Sin filtros, las fechas inválidas/nulas se mantienen al final del orden; con filtros se excluyen las fechas no interpretables. Lo mismo aplica a CheckIn inválido en asistencias.
+
+El periodo se resuelve mediante `LEFT JOIN SubscriptionPeriodDesktop` por `SubscriptionPeriodId`, restringido al mismo `CustomerApiId` y `IsDeleted = 0`. Periodos ausentes, eliminados o ajenos producen `SubscriptionPeriodName: null` y `SubscriptionPeriodDays: null`, conservando la membresía y su ID de periodo original. No se exige `Active = 1`; un periodo inactivo no equivale a eliminado. Nombre y duración reflejan el catálogo sincronizado actual, no una copia histórica. Si faltan, mostrar «Periodo no disponible»; el ID no es una descripción.
+
+`Payment` procede exclusivamente de la membresía: en persistencia es `DECIMAL(10,2)` nullable y mysqli lo lee como texto decimal; el servicio lo convierte a `float` PHP para entregarlo como **number JSON o null**. Por ejemplo, `"123.45"` almacenado se entrega como `123.45`, `"0.00"` como `0` y SQL NULL como `null`. Se conserva el importe, incluido cero; no se sustituye por `SubscriptionPeriodDesktop.Price`. El formato monetario del frontend debe mantener dos decimales, ya que JSON no conserva ceros finales. Estos tipos y reglas son iguales en historial y `currentSubscription`.
+
+Regla del modal para ambas secciones: usar solo la fecha calendario local válida de **EndingDate**, sin exigir inicio ni conversión implícita a UTC. Mostrar **Activa** si es estrictamente posterior a hoy, **Vencida** si es igual o anterior a hoy, y **Vigencia no disponible** si falta o es inválida. La comparación estricta es propia del modal; no cambia la vigencia inclusiva del escritorio ni los reportes existentes. Mostrar Payment debajo de vigencia, diferenciando `0` de importe ausente.
 
 ## Estadísticas
 
@@ -122,5 +135,9 @@ Las rutas de listas, reportes, sincronización y miniaturas no cambian. Cuando s
 `php -d xdebug.mode=off tests/user-photos.php` incluye `tests/desktop-user-profile.php`. Usa el harness CGI, middleware desktop JWT, controladores/servicios reales, SQL de MySQL y tablas de schema.sql en un esquema efímero `clubcheck_photo_test_*`. Los originales se almacenan exclusivamente bajo `tests/.photo-test-*`; esquema y archivos se limpian al finalizar. Requiere MySQL local `localhost:3306`, root sin contraseña, GD y php-cgi en PATH, igual que las pruebas existentes. Nunca carga credenciales productivas.
 
 Cubre autenticación, aislamiento en cada consulta/variante, identificadores manipulados, socio eliminado, campos permitidos, membresías anteriores, paginación estable, filtros inclusivos/parciales, normalización, todos los intentos frente al último intento diario, empate por Id, límites de fecha, series vacías y originales PNG/JPEG con cabeceras privadas. También conserva las pruebas existentes de sincronización, miniaturas y reportes de membresías.
+
+La ampliación cubre periodo disponible/ausente/eliminado/ajeno tanto en resumen como en historial, importe cero/decimal/null frente a precio de catálogo distinto, mayor EndingDate y mayor Id con horas distintas en empate calendario, inicio ausente o futuro, independencia de filtros/paginación, vencimientos vacíos/nulos/imposibles, fecha bisiesta válida y exclusión de registros eliminados o de otro gimnasio. Los cambios de nulabilidad necesarios para esos datos de prueba ocurren solo en tablas efímeras.
+
+Validación de esta fase (2026-10-09): `php -d xdebug.mode=off tests/user-photos.php` completó con código 0, incluyendo el flujo CGI de detalle/historial, las nuevas verificaciones y todas las regresiones existentes. `php -d xdebug.mode=off -l` pasó en el servicio y la prueba modificados; `git diff --check` pasó. No hubo bloqueo de PHP/CGI/MySQL.
 
 La validación visual y Angular–API queda para la tarea frontend dependiente: ese repositorio no forma parte de este directorio. No se accedió a otros repositorios, producción ni hardware.

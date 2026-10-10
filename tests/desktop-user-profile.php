@@ -29,6 +29,12 @@ function checkUserProfile(PhotoTestDatabase $db, App\Services\UserPhotoService $
     $initial = file_get_contents(__DIR__ . '/../database/schema.sql');
     preg_match('/CREATE TABLE `AttendancesDesktop` \(.*?ENGINE=InnoDB[^;]*;/s', $initial, $match);
     $db->query($match[0]);
+    preg_match('/CREATE TABLE `SubscriptionPeriodDesktop` \(.*?ENGINE=InnoDB[^;]*;/s', $initial, $match);
+    $db->query($match[0]);
+    $db->query("INSERT INTO SubscriptionPeriodDesktop (Id, CustomerApiId, Name, Days, Price, CreatedOn, IsDeleted) VALUES
+        ('period-a', 'gym-a', 'Mensual', 30, 999.99, '2026-01-01', 0),
+        ('period-deleted', 'gym-a', 'Eliminado', 60, 888.88, '2026-01-01', 1),
+        ('period-b', 'gym-b', 'Privado otro gimnasio', 90, 777.77, '2026-01-01', 0)");
     $db->query("INSERT INTO AttendancesDesktop (Id, CustomerApiId, UserId, CheckIn, Active, Removed) VALUES
         ('a-01', 'gym-a', 'user-a', '2026-01-01 00:00:00', 1, 0),
         ('a-02', 'gym-a', 'user-a', '2026-01-01 22:00:00', 0, 0),
@@ -64,10 +70,10 @@ function checkUserProfile(PhotoTestDatabase $db, App\Services\UserPhotoService $
         }
     }
     $user = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', 'profile=user')['body'], true);
-    checkPhoto(array_keys($user) === ['Id', 'Fullname', 'PhoneNumber', 'PhoneNumberEmergency', 'Gender', 'BirthDate', 'Code', 'Email', 'CreatedOn', 'photo'], 'General fields allowlist');
+    checkPhoto(array_keys($user) === ['Id', 'Fullname', 'PhoneNumber', 'PhoneNumberEmergency', 'Gender', 'BirthDate', 'Code', 'Email', 'CreatedOn', 'photo', 'currentSubscription'], 'General fields allowlist');
     checkPhoto($user['Id'] === 'user-a' && $user['Email'] === null && $user['photo']['version'] === 3, 'User identity and photo contract');
     $noPhoto = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', 'profile=user&userId=user-none')['body'], true);
-    checkPhoto($noPhoto['photo'] === null, 'Absent photo metadata explicit null');
+    checkPhoto($noPhoto['photo'] === null && $noPhoto['currentSubscription'] === null, 'Absent photo and membership explicit null');
 
     $history = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', 'profile=attendances&pageSize=2&page=2')['body'], true);
     checkPhoto($history === ['items' => [
@@ -90,6 +96,7 @@ function checkUserProfile(PhotoTestDatabase $db, App\Services\UserPhotoService $
     foreach (['page=0', 'pageSize=101', 'page[]=1', 'page=1.5', 'from=2026-02-30', 'from=2026-01-03&to=2026-01-01', 'to[]=2026-01-01'] as $invalid) {
         checkPhoto(photoCgi($schema, $directory, 'GET', $token, '', '', 'profile=attendances&' . $invalid)['status'] === 422, 'Invalid filter ' . $invalid);
     }
+    checkCurrentSubscriptionContract($db, $schema, $directory, $token);
     checkPhoto(photoCgi($schema, $directory, 'GET', $token, '', '', 'profile=statistics')['status'] === 422, 'Statistics require range');
     $stats = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', 'profile=statistics&from=2026-01-01&to=2026-01-03')['body'], true);
     checkPhoto($stats['summary'] === ['totalAttempts' => 5, 'allowedAttempts' => 3, 'deniedAttempts' => 2, 'daysWithAllowedAccess' => 3], 'All attempts independent from latest daily attempts');
@@ -141,4 +148,79 @@ function checkUserProfile(PhotoTestDatabase $db, App\Services\UserPhotoService $
         $db->query("UPDATE UsersDesktop SET Removed=0 WHERE Id='user-a'");
     }
     echo "Profile CGI: JWT/isolation, allowlist, histories/pagination, normalized dates, latest-attempt statistics, empty ranges, PNG/JPEG originals and removed members passed.\n";
+}
+
+/** Valida resumen independiente, fechas calendario e importes/periodos sin tocar datos fuera del esquema temporal. */
+function checkCurrentSubscriptionContract(PhotoTestDatabase $db, string $schema, string $directory, string $token): void
+{
+    $db->query("INSERT INTO UsersDesktop (Id, CustomerApiId, Fullname, PhoneNumber, BirthDate) VALUES
+        ('user-contract', 'gym-a', 'Temporary contract', '000', '2000-01-01')");
+    $db->query('ALTER TABLE SubscriptionsDesktop MODIFY StartDate VARCHAR(50) NULL, MODIFY EndingDate VARCHAR(50) NULL');
+    $db->query("INSERT INTO SubscriptionsDesktop
+        (Id, CustomerApiId, UserId, StartDate, EndingDate, SubscriptionPeriodId, Payment, Removed) VALUES
+        ('contract-01', 'gym-a', 'user-contract', '2032-01-01', ' 2030-01-31, 23;59;59 ', 'period-a', 123.45, 0),
+        ('contract-02', 'gym-a', 'user-contract', NULL, '2030-01-31', 'period-a', 0, 0),
+        ('contract-03', 'gym-a', 'user-contract', '2026-01-01', '2026-02-01', 'period-deleted', NULL, 0),
+        ('contract-04', 'gym-a', 'user-contract', '2026-01-02', '2026-02-02', 'period-missing', 12.34, 0),
+        ('contract-05', 'gym-a', 'user-contract', '2026-01-03', '2026-02-03', 'period-b', 5.67, 0),
+        ('contract-removed', 'gym-a', 'user-contract', '', '2099-01-01', 'period-a', 1, 1),
+        ('contract-foreign', 'gym-b', 'user-contract', '', '2099-01-01', 'period-b', 2, 0),
+        ('contract-bad-01', 'gym-a', 'user-contract', '', '9999-02-30', NULL, 3, 0),
+        ('contract-bad-02', 'gym-a', 'user-contract', '', '9999-00-31', NULL, 3, 0),
+        ('contract-bad-03', 'gym-a', 'user-contract', '', '9999-01-00', NULL, 3, 0),
+        ('contract-bad-04', 'gym-a', 'user-contract', '', 'not-a-date', NULL, 3, 0),
+        ('contract-bad-05', 'gym-a', 'user-contract', '', '', NULL, 3, 0),
+        ('contract-bad-06', 'gym-a', 'user-contract', '', NULL, NULL, 3, 0),
+        ('contract-bad-07', 'gym-a', 'user-contract', '', '0000-01-01', NULL, 3, 0)");
+    $query = 'profile=user&userId=user-contract';
+    $detail = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query)['body'], true, 512, JSON_THROW_ON_ERROR);
+    $current = $detail['currentSubscription'];
+    checkPhoto($current['Id'] === 'contract-02' && $current['StartDate'] === null
+        && $current['EndingDate'] === '2030-01-31' && $current['Payment'] === 0
+        && $current['SubscriptionPeriodName'] === 'Mensual' && $current['SubscriptionPeriodDays'] === 30,
+        'Current uses calendar EndingDate then Id, missing start and zero payment');
+    checkPhoto(array_keys($current) === ['Id', 'UserId', 'StartDate', 'EndingDate', 'SubscriptionPeriodId', 'Payment',
+        'Warning', 'Finished', 'Registered', 'SubscriptionPeriodName', 'SubscriptionPeriodDays'], 'Current membership allowlist');
+    $historyQuery = 'profile=subscriptions&userId=user-contract';
+    $history = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $historyQuery)['body'], true, 512, JSON_THROW_ON_ERROR);
+    checkPhoto($history['total'] === 12 && count($history['items']) === 12, 'Missing/deleted/foreign periods do not hide memberships');
+    $rows = array_column($history['items'], null, 'Id');
+    checkPhoto($rows['contract-02'] === $current && $rows['contract-01']['Payment'] === 123.45
+        && $rows['contract-01']['EndingDate'] === '2030-01-31 23:59:59', 'Shared summary/history normalization and decimal payment from record');
+    foreach (['contract-03', 'contract-04', 'contract-05', 'contract-bad-01'] as $id) {
+        checkPhoto($rows[$id]['SubscriptionPeriodName'] === null && $rows[$id]['SubscriptionPeriodDays'] === null,
+            'Unavailable period remains explicit null ' . $id);
+    }
+    checkPhoto($rows['contract-03']['Payment'] === null && $rows['contract-04']['Payment'] === 12.34,
+        'Absent amount differs from zero and catalog price');
+    $page = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $historyQuery . '&pageSize=1')['body'], true);
+    $filtered = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $historyQuery . '&from=2026-01-01&to=2026-01-03&pageSize=1&page=2')['body'], true);
+    $again = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&from=2026-01-01&to=2026-01-03&pageSize=1&page=2')['body'], true);
+    checkPhoto($page['items'][0]['Id'] === 'contract-01' && $filtered['total'] === 3
+        && $again['currentSubscription'] === $current, 'Detail independent from history order, filtering and pagination');
+    $db->query("UPDATE SubscriptionsDesktop SET Removed=1 WHERE Id='contract-02'");
+    $future = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query)['body'], true);
+    checkPhoto($future['currentSubscription']['Id'] === 'contract-01'
+        && $future['currentSubscription']['StartDate'] === '2032-01-01'
+        && $future['currentSubscription']['Payment'] === 123.45, 'Future start still eligible');
+    foreach (['contract-01' => 'contract-05', 'contract-05' => 'contract-04',
+        'contract-04' => 'contract-03', 'contract-03' => null] as $id => $expected) {
+        $db->update('SubscriptionsDesktop', ['Removed' => 1], 'Id = ?', [$id]);
+        $result = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query)['body'], true);
+        checkPhoto($result['currentSubscription'] === ($expected === null ? null : $rows[$expected]),
+            'Current selection preserves full history contract after removal ' . $id);
+        if ($result['currentSubscription'] !== null) {
+            checkPhoto($result['currentSubscription']['SubscriptionPeriodName'] === null
+                && $result['currentSubscription']['SubscriptionPeriodDays'] === null, 'Current survives unavailable period');
+        }
+    }
+    checkPhoto($result['currentSubscription'] === null, 'Only invalid, removed or foreign endings yield null current');
+    $unknown = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $historyQuery)['body'], true);
+    checkPhoto($unknown['total'] === 7, 'Unknown expiration records distinguishable from no memberships');
+    $db->insert('SubscriptionsDesktop', ['Id' => 'contract-leap', 'CustomerApiId' => 'gym-a', 'UserId' => 'user-contract',
+        'StartDate' => '', 'EndingDate' => ' 2032-02-29, 00;00;00 ', 'Payment' => 0]);
+    $leap = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query)['body'], true);
+    checkPhoto($leap['currentSubscription']['Id'] === 'contract-leap'
+        && $leap['currentSubscription']['EndingDate'] === '2032-02-29 00:00:00', 'Valid leap calendar date accepted');
+    echo "Current subscription CGI: period isolation, missing catalogs, numeric payment, calendar validity, tie break and independent pagination passed.\n";
 }
