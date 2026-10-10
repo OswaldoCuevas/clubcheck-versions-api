@@ -189,6 +189,8 @@ try {
     checkPhoto(str_contains($download['headers'], 'private, no-store'), 'Protected cache headers');
     require_once __DIR__ . '/memberships-photos.php';
     checkMembershipPhotos($db, $service, $schema, $directory . '/storage', $portalToken, $otherPortal);
+    require_once __DIR__ . '/desktop-user-profile.php';
+    checkUserProfile($db, $service, $schema, $directory . '/storage', $portalToken, $otherPortal);
     checkPhoto(photoCgi($schema, $directory . '/storage', 'POST', $customerToken, '{}', 'application/json')['status'] === 400, 'Multipart required');
     $oldMultipart = str_replace("\r\n\r\n3\r\n", "\r\n\r\n1\r\n", $multipart);
     checkPhoto(photoCgi($schema, $directory . '/storage', 'POST', $customerToken, $oldMultipart, $type)['status'] === 409, 'API old version');

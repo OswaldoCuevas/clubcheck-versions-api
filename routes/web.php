@@ -73,6 +73,11 @@ $router->any('/api/customers/messages-sends-at-month/:customerId', 'CustomersCon
 $router->post('/api/desktop/login', 'DesktopApiController', 'login');
 $router->get('/api/desktop/dashboard', 'DesktopApiController', 'dashboard', ['desktop_jwt']);
 $router->get('/api/desktop/users', 'DesktopApiController', 'users', ['desktop_jwt']);
+$router->get('/api/desktop/users/:userId', 'DesktopUserProfileController', 'user', ['desktop_jwt']);
+$router->get('/api/desktop/users/:userId/attendances', 'DesktopUserProfileController', 'attendances', ['desktop_jwt']);
+$router->get('/api/desktop/users/:userId/subscriptions', 'DesktopUserProfileController', 'subscriptions', ['desktop_jwt']);
+$router->get('/api/desktop/users/:userId/statistics', 'DesktopUserProfileController', 'statistics', ['desktop_jwt']);
+$router->get('/api/desktop/users/:userId/photo/original', 'UserPhotosController', 'readOriginal', ['desktop_jwt']);
 $router->get('/api/desktop/users/:userId/photo', 'UserPhotosController', 'read', ['desktop_jwt']);
 $router->get('/api/desktop/memberships', 'DesktopApiController', 'memberships', ['desktop_jwt']);
 $router->get('/api/desktop/products', 'DesktopApiController', 'products', ['desktop_jwt']);

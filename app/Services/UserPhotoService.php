@@ -172,6 +172,21 @@ class UserPhotoService
         return $bytes;
     }
 
+    /** Lee la foto original solo del socio vigente del gimnasio autenticado, sin exponer su almacenamiento. */
+    public function original(string $customerId, string $userId): array
+    {
+        $row = $this->db->fetchOne('SELECT p.StorageKey, p.Mime FROM UserPhotosDesktop p JOIN UsersDesktop u ON u.Id = p.UserId AND u.CustomerApiId = p.CustomerApiId WHERE p.UserId = ? AND p.CustomerApiId = ? AND COALESCE(u.Removed, 0) = 0', [$userId, $customerId]);
+        if (!$row || !preg_match('/^[a-f0-9]{64}$/D', $row['StorageKey'])
+            || !in_array($row['Mime'], ['image/jpeg', 'image/png'], true)) {
+            throw new ApiException('Fotografia no accesible', 404);
+        }
+        $bytes = @file_get_contents($this->directory . '/' . $row['StorageKey'] . '.original');
+        if ($bytes === false) {
+            throw new ApiException('Fotografia no accesible', 404);
+        }
+        return ['bytes' => $bytes, 'mime' => $row['Mime']];
+    }
+
     /** Agrega metadatos opcionales en un lote de reportes o pull sin exponer almacenamiento. */
     public function attach(string $customerId, array $rows, string $idColumn = 'Id'): array
     {

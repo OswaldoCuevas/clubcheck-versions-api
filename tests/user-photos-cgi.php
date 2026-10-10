@@ -31,6 +31,19 @@ try {
         $controller->upload($_GET['userId'] ?? 'user-a');
     } else {
         (new App\Middleware\DesktopJwtMiddleware($jwt))->handle();
+        if (isset($_GET['profile'])) {
+            require_once __DIR__ . '/../app/Controllers/DesktopUserProfileController.php';
+            $profile = new Controllers\DesktopUserProfileController(new App\Services\DesktopUserProfileService($db));
+            $action = $_GET['profile'];
+            if (!in_array($action, ['user', 'attendances', 'subscriptions', 'statistics'], true)) {
+                throw new App\Exceptions\ApiException('Consulta no soportada', 404);
+            }
+            $profile->$action($_GET['userId'] ?? 'user-a');
+        }
+        if (($_GET['variant'] ?? '') === 'original') {
+            $controller->readOriginal($_GET['userId'] ?? 'user-a');
+            exit;
+        }
         if (($_GET['report'] ?? '') === 'memberships') {
             require_once __DIR__ . '/../app/Controllers/DesktopApiController.php';
             // Reutiliza el reporte real sin ejecutar constructores que conectan a datos operativos.

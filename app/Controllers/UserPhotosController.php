@@ -51,6 +51,21 @@ class UserPhotosController
         echo json_encode($result, JSON_UNESCAPED_UNICODE);
     }
 
+    /** Entrega el original protegido para la ficha; conserva MIME y evita cache compartida y tokens en URLs. */
+    public function readOriginal(string $userId): void
+    {
+        $customerId = DesktopJwtMiddleware::getCurrentCustomerId();
+        if (!$customerId) {
+            throw new ApiException('Autenticacion requerida', 401);
+        }
+        $image = ($this->service ?? new UserPhotoService(new \Database()))->original($customerId, $userId);
+        header('Content-Type: ' . $image['mime']);
+        header('Content-Length: ' . strlen($image['bytes']));
+        header('Cache-Control: private, no-store');
+        header('X-Content-Type-Options: nosniff');
+        echo $image['bytes'];
+    }
+
     /** Entrega miniatura protegida al portal; evita cache compartida y tokens en URLs. */
     public function read(string $userId): void
     {
