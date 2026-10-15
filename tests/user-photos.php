@@ -160,6 +160,7 @@ try {
     };
     checkPhoto($model->push('gym-a', [['Id' => 'user-a', 'Fullname' => 'Updated', 'photo' => null]])[0]['success'], 'Legacy push');
     checkPhoto($model->pull('gym-a')[0]['photo']['version'] === 2, 'Pull preserves server photo');
+    checkPhoto(!array_key_exists('photo', $model->pullWithoutPhotos('gym-a')[0]), 'Admin pull skips photo metadata');
     checkPhoto(!$model->push('gym-b', [['Id' => 'user-a', 'Fullname' => 'Forbidden']])[0]['success'], 'Cross gym push rejected');
     checkPhoto($db->fetchOne("SELECT CustomerApiId FROM UsersDesktop WHERE Id='user-a'")['CustomerApiId'] === 'gym-a', 'Ownership preserved');
     checkPhoto($service->attach('gym-a', [['UserId' => 'user-a'], ['UserId' => 'user-b']], 'UserId')[1]['photo'] === null, 'Attendance metadata isolation');

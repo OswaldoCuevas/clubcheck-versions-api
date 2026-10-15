@@ -49,6 +49,12 @@ class UsersDesktopModel extends BaseDesktopSyncModel
         return (new \App\Services\UserPhotoService($this->db))->attach($customerApiId, parent::pull($customerApiId, $includeRemoved));
     }
 
+    /** Obtiene las filas crudas para el visor administrativo, sin consultar metadatos de fotografias. */
+    public function pullWithoutPhotos(string $customerApiId, bool $includeRemoved = false): array
+    {
+        return parent::pull($customerApiId, $includeRemoved);
+    }
+
     /** Sincroniza socios sin permitir transferir su pertenencia ni modificar fotos mediante el push generico. */
     public function push(string $customerApiId, array $records): array
     {

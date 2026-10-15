@@ -104,7 +104,9 @@ ob_start();
                                 </div>
                                 <div class="col-md-6 text-end">
                                     <input type="text" class="form-control form-control-sm d-inline-block" 
-                                           id="searchInput" placeholder="Buscar en la tabla..." 
+                                           id="searchInput"
+                                           placeholder="<?= $tableKey === 'users' ? 'Filtrar por nombre de socio...' : 'Buscar en la tabla...' ?>"
+                                           aria-label="<?= $tableKey === 'users' ? 'Filtrar por nombre de socio' : 'Buscar en la tabla' ?>"
                                            style="max-width: 300px;">
                                 </div>
                             </div>
@@ -128,7 +130,12 @@ ob_start();
                                     </thead>
                                     <tbody>
                                         <?php foreach ($records as $index => $record): ?>
-                                            <tr>
+                                            <?php
+                                            $memberName = $tableKey === 'users'
+                                                ? trim((string) ($record['Fullname'] ?? '') . ' ' . (string) ($record['FullnameSearch'] ?? ''))
+                                                : '';
+                                            ?>
+                                            <tr<?= $tableKey === 'users' ? ' data-member-name="' . htmlspecialchars($memberName, ENT_QUOTES, 'UTF-8') . '"' : '' ?>>
                                                 <td class="text-muted"><?= $index + 1 ?></td>
                                                 <?php foreach ($record as $key => $value): ?>
                                                     <td>
@@ -151,12 +158,14 @@ ob_start();
                                                             } else {
                                                                 echo htmlspecialchars($value);
                                                             }
-                                                        } elseif (strlen($value) > 100) {
+                                                        } elseif (is_array($value) || is_object($value)) {
+                                                            echo htmlspecialchars(json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                                                        } elseif (strlen((string) $value) > 100) {
                                                             // Truncar valores largos
-                                                            echo '<span title="' . htmlspecialchars($value) . '">' 
-                                                                 . htmlspecialchars(substr($value, 0, 100)) . '...</span>';
+                                                            echo '<span title="' . htmlspecialchars((string) $value) . '">'
+                                                                 . htmlspecialchars(substr((string) $value, 0, 100)) . '...</span>';
                                                         } else {
-                                                            echo htmlspecialchars($value);
+                                                            echo htmlspecialchars((string) $value);
                                                         }
                                                         ?>
                                                     </td>
@@ -282,12 +291,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Búsqueda en la tabla
     searchInput?.addEventListener('input', function() {
-        const searchTerm = this.value.toLowerCase();
+        const normalizeSearch = value => value
+            .toLocaleLowerCase('es')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+        const searchTerm = normalizeSearch(this.value.trim());
         const table = document.getElementById('dataTable');
         const rows = table?.querySelectorAll('tbody tr');
 
         rows?.forEach(function(row) {
-            const text = row.textContent.toLowerCase();
+            const searchableValue = tableKey === 'users'
+                ? (row.dataset.memberName || '')
+                : row.textContent;
+            const text = normalizeSearch(searchableValue);
             if (text.includes(searchTerm)) {
                 row.style.display = '';
             } else {

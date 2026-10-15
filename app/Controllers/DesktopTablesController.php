@@ -345,6 +345,19 @@ class DesktopTablesController extends Controller
         ];
     }
 
+    /** Obtiene filas para el visor sin enriquecer usuarios con metadatos de fotografias. */
+    private function pullTableRecords(string $tableKey, string $customerApiId, bool $includeRemoved = true): array
+    {
+        $modelClass = $this->desktopTables[$tableKey]['model'];
+        $model = new $modelClass();
+
+        if ($model instanceof UsersDesktopModel) {
+            return $model->pullWithoutPhotos($customerApiId, $includeRemoved);
+        }
+
+        return $model->pull($customerApiId, $includeRemoved);
+    }
+
     /**
      * Muestra la vista principal con listado de tablas desktop
      */
@@ -394,12 +407,8 @@ class DesktopTablesController extends Controller
         $selectedCustomer = null;
         
         if (!empty($customerApiId)) {
-            // Instanciar el modelo correspondiente
-            $modelClass = $tableInfo['model'];
-            $model = new $modelClass();
-            
-            // Obtener los datos usando el método pull
-            $records = $model->pull($customerApiId, true);
+            // Omitir metadatos de fotos solo en este visor administrativo.
+            $records = $this->pullTableRecords($tableKey, $customerApiId);
             
             // Buscar información del cliente seleccionado
             foreach ($customers as $customer) {
@@ -452,12 +461,8 @@ class DesktopTablesController extends Controller
         $tableInfo = $this->desktopTables[$tableKey];
         
         try {
-            // Instanciar el modelo correspondiente
-            $modelClass = $tableInfo['model'];
-            $model = new $modelClass();
-            
-            // Obtener los datos
-            $records = $model->pull($customerApiId, true);
+            // La exportacion usa exactamente las mismas filas que el visor.
+            $records = $this->pullTableRecords($tableKey, $customerApiId);
             
             $this->json([
                 'success' => true,
