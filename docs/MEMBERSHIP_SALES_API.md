@@ -2,7 +2,7 @@
 
 `GET /api/desktop/membership-sales?page=1&pageSize=25`
 
-Usa `desktop_jwt`, igual que `/api/desktop/memberships`: `Authorization: Bearer <token>` (también los encabezados alternativos existentes). El gimnasio se obtiene exclusivamente del JWT; no admite seleccionar otro gimnasio. Es una consulta sin filtros temporales: devuelve todo el historial sincronizado, incluidas cancelaciones. No cambia el reporte `/api/desktop/memberships`, `ViewSubscriptions`, esquema ni sincronización.
+Usa `desktop_jwt`, igual que `/api/desktop/memberships`: `Authorization: Bearer <token>` (también los encabezados alternativos existentes). El gimnasio se obtiene exclusivamente del JWT; no admite seleccionar otro gimnasio. Sin parámetros de período devuelve todo el historial sincronizado, incluidas cancelaciones; el portal puede enviar el período general vigente. No cambia el reporte `/api/desktop/memberships`, `ViewSubscriptions`, esquema ni sincronización.
 
 ## Petición y paginación
 
@@ -13,6 +13,8 @@ Usa `desktop_jwt`, igual que `/api/desktop/memberships`: `Authorization: Bearer 
 | search | cadena vacía | Texto; coincidencia parcial en `Fullname`, `PlanName` histórico o `Folio` |
 | sortBy | paymentDate | `memberName`, `planName` o `paymentDate` |
 | sortDir | desc | `asc` o `desc` (minúsculas) |
+| range | sin filtro temporal | `today`, `week`, `fifteen`, `month`, `custom`; alias `15`, `15days`, `30`, `30days` |
+| from, to | sin fechas | Fechas locales `YYYY-MM-DD`, ambas obligatorias para `custom` |
 
 Parámetros inválidos producen 422; no se truncan ni convierten silenciosamente. Orden predeterminado: `SaleTicketDesktop.SaleDate DESC, SaleTicketItemDesktop.Id DESC`. Los tres órdenes usan siempre el identificador de partida descendente como desempate. `memberName` usa `UsersDesktop.Fullname`; `planName` usa `NULLIF(TRIM(SaleTicketItemDesktop.ProductName), '')`, exactamente el nombre histórico mostrado; `paymentDate` usa `SaleTicketDesktop.SaleDate`. Los nulos siguen el orden de MySQL: primero en ascendente y al final en descendente. Cada partida con `SubscriptionId` no vacío aparece una vez, aunque haya más ventas del mismo socio. Se conservan bajas lógicas de partida, ticket, membresía, socio y vendedor para mantener el historial. Los catálogos actuales no sustituyen el plan vendido. Páginas fuera del rango devuelven `items: []` y mantienen el total; sin resultados `totalPages` es 0. La paginación por desplazamiento no es una instantánea entre peticiones: nuevas sincronizaciones pueden desplazar las páginas.
 
@@ -22,7 +24,7 @@ Ejemplo de integración (conservar los criterios al paginar y reiniciar `page=1`
 
 `GET /api/desktop/membership-sales?page=1&pageSize=10&search=2020-01-01&sortBy=planName&sortDir=asc`
 
-La respuesta conserva `items` y `pagination` en la raíz y los campos `PlanName`, `StartDate`, `AmountPaid`; no agrega `total` en la raíz ni modifica los nombres para adaptarlos al consumidor.
+La respuesta añade `summary` y `byPlan` y conserva `items` y `pagination` en la raíz y los campos `PlanName`, `StartDate`, `AmountPaid`; no agrega `total` en la raíz ni modifica los nombres para adaptarlos al consumidor.
 
 ```json
 {
@@ -51,11 +53,53 @@ La respuesta conserva `items` y `pagination` en la raíz y los campos `PlanName`
       "CancellationReason": null
     }
   ],
-  "pagination": {"page": 1, "pageSize": 25, "total": 1, "totalPages": 1}
+  "pagination": {"page": 1, "pageSize": 25, "total": 1, "totalPages": 1},
+  "summary": {"soldCount": 1, "incomeTotal": 88, "knownIncomeTotal": 88, "unknownAmountCount": 0},
+  "byPlan": [{"subscriptionPeriodId": "period-1", "planName": "Mensual actual", "soldCount": 1}]
 }
 ```
 
 El ejemplo de días restantes supone fecha local del servidor 2026-10-20. Los nombres de campos distinguen mayúsculas/minúsculas; `items`, `pagination` y `photo` siguen exactamente el ejemplo.
+
+## Período general e indicadores
+
+`GET /api/desktop/membership-sales?range=custom&from=2026-10-01&to=2026-10-20&page=1&pageSize=10&search=Mensual`
+
+El período filtra `SaleTicketDesktop.SaleDate` (la misma fecha de pago de las tarjetas), desde las 00:00:00 de `from` hasta las 23:59:59.999999 de `to`, incluidos ambos días. Usa la zona local configurada en el backend, igual que los reportes generales, sin conversión UTC. Las ventanas `today`, `week`, `fifteen` y `month` incluyen hoy y los anteriores 0, 6, 14 y 29 días respectivamente: **month son los últimos 30 días, no el mes calendario**. Se normalizan espacios y mayúsculas de `range`. Sin `range/from/to` no hay filtro temporal ni nuevo valor predeterminado. Enviar `from/to` sin `range` equivale a `custom`. En ventanas predefinidas las fechas válidas no sustituyen la ventana; cualquier fecha enviada se valida igualmente.
+
+Fechas imposibles, formatos distintos de `YYYY-MM-DD`, valores no escalares, límites invertidos, un rango no permitido o fechas incompletas de `custom` producen 422 (`API_ERROR`). Una partida sin ticket/fecha válida permanece visible sin período, pero no puede coincidir con un período.
+
+Período y búsqueda se aplican al mismo conjunto antes de generar listado, resumen y grupos. Orden y paginación afectan únicamente a `items`; incluso una página vacía fuera del rango conserva los agregados del conjunto filtrado. `pagination.total` incluye canceladas y estados desconocidos del historial y puede superar `summary.soldCount`.
+
+| Campo | Regla y tipo JSON |
+| --- | --- |
+| summary.soldCount | integer; una unidad por partida con ticket del gimnasio, `Active = 1` y `CancelledOn IS NULL`. No suma `Quantity`. |
+| summary.incomeTotal | number o null; suma de `AmountPaid` de las partidas contabilizadas. Null si al menos una tiene importe desconocido. |
+| summary.knownIncomeTotal | number; suma únicamente los importes conocidos de las partidas contabilizadas. |
+| summary.unknownAmountCount | integer; número de partidas contabilizadas cuyo `AmountPaid` es null. |
+| byPlan[].subscriptionPeriodId | string o null; `SubscriptionsDesktop.SubscriptionPeriodId`, conservado aunque el catálogo no exista en el gimnasio. |
+| byPlan[].planName | string; nombre actual de `SubscriptionPeriodDesktop` del mismo gimnasio. «Plan no disponible» si falta el catálogo/nombre y «Sin plan identificado» si falta el identificador o la relación de membresía. |
+| byPlan[].soldCount | integer; cantidad de partidas contabilizadas para ese identificador. |
+
+La suma de `byPlan[].soldCount` coincide con `summary.soldCount`. Los grupos se ordenan por cantidad descendente e identificador ascendente. Dos identificadores distintos siguen siendo grupos distintos aunque compartan nombre. El nombre del catálogo actual **no es una instantánea histórica**; `items[].PlanName` conserva el nombre histórico y no se reemplaza por el catálogo.
+
+Canceladas y estados desconocidos permanecen en las tarjetas; no incrementan ningún agregado. Se conserva la conciliación histórica de cada partida (incluidos productos del ticket para verificarlo); ni los productos, ni el cambio, ni el total repetido del ticket se suman al ingreso de membresías. Conciliación y sumas se calculan con DECIMAL en MySQL, convirtiendo a número JSON solo al serializar, como `AmountPaid` existente. Un importe cero cuenta como conocido. Conjunto vacío o solo canceladas: `summary` contiene cuatro ceros y `byPlan: []`.
+
+Ejemplo de ingreso incompleto:
+
+```json
+{
+  "summary": {"soldCount": 6, "incomeTotal": null, "knownIncomeTotal": 1, "unknownAmountCount": 1},
+  "byPlan": [
+    {"subscriptionPeriodId": null, "planName": "Sin plan identificado", "soldCount": 2},
+    {"subscriptionPeriodId": "period-1", "planName": "Mensual actual", "soldCount": 2},
+    {"subscriptionPeriodId": "missing-1", "planName": "Plan no disponible", "soldCount": 1},
+    {"subscriptionPeriodId": "missing-2", "planName": "Plan no disponible", "soldCount": 1}
+  ]
+}
+```
+
+El portal debe mostrar ingreso parcial (`knownIncomeTotal`) y los importes pendientes cuando `incomeTotal` sea null. Debe enviar el período general vigente, conservarlo al limpiar filtros y reiniciar página al cambiar período/búsqueda; no debe calcular indicadores desde la página visible. La API se puede actualizar antes del consumidor porque los parámetros y propiedades nuevos son aditivos. No requiere migraciones ni cambios del escritorio/sincronización.
 
 ## Campos, ausencia y fuentes
 
@@ -122,3 +166,14 @@ Resultados de esta ampliación (2026-10-20; sustituyen el bloqueo MySQL de la fa
 - **Pendiente para Johanna/orquestador:** conectar el portal real y validar sus controles, tarjetas y estados antes de aceptar el flujo completo API–portal. Solo se modificó el backend asignado; no se accedió al repositorio del portal ni al escritorio. No se desplegó ni se modificaron datos reales. Los parámetros nuevos son opcionales y el backend puede prepararse antes de actualizar el consumidor.
 
 Repositorio de trabajo: `C:\laragon\www\clubcheck` (backend asignado). Rama existente: `orchestrator/implementation-15`; sin commits, push, merge ni PR. El contrato anterior es el material de integración para el portal; no se enviaron mensajes externos.
+
+## Validación de fase 3 (2026-10-20)
+
+Archivos de esta ampliación: `app/Services/MembershipSalesService.php`, `tests/membership-sales-unit.php`, `tests/membership-sales.php` y este contrato. Los métodos nuevos/modificados incluyen comentarios de propósito y regla de negocio. Se conserva la ruta, middleware y controlador existentes.
+
+- **Pasó:** `php -d xdebug.mode=off tests/membership-sales-unit.php`. Valida serialización, parámetros enlazados compartidos, ventanas y alias generales, bisiesto, formato estricto y 422, además de regresiones del contrato y JWT. El fixture simula proyecciones SQL; las reglas de conciliación y agregados SQL se verifican en la suite siguiente.
+- **Pasó:** `php -d xdebug.mode=off tests/user-photos.php`, con MySQL local y controlador/middleware CGI reales, exclusivamente en esquema y archivos temporales eliminados por la suite. Incluye períodos locales personalizados con ambos extremos y ventanas móviles, 422, suma decimal 0.10 + 0.20 + 0.30 + 0.40 = 1, cero/desconocidos, `Quantity = 7`, estados `Active = 0/null/2` y `CancelledOn`, catálogos ausentes/ajenos, búsqueda, agregados independientes de página/orden, conciliación de ticket mixto y múltiples membresías sin repetir totales. Conserva regresiones de membresías por socio, ficha y fotografías protegidas.
+- **Pasó:** lint PHP de los tres archivos PHP modificados y `git diff --check`.
+- **Pendiente de integración con Johanna/orquestador:** ejecutar el portal contra este backend y comprobar período compartido, indicadores, gráfica y estados visuales. Este repositorio contiene únicamente el backend; no se accedió a otros proyectos ni se usó red. La API real se verificó por CGI, sin servidor HTTP ni portal. No se declara aprobada la integración visual API–portal.
+
+Rama conservada: `orchestrator/implementation-15`. Sin commits nuevos, push, merge, PR, despliegue ni cambios de datos reales.

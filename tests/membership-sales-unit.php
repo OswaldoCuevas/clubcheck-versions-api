@@ -15,19 +15,22 @@ class MembershipSalesFixtureDatabase
     public array $calls = [];
     public array $rows = [];
 
-    /** Entrega conteo controlado para comprobar metadatos y paginas sin resultados. */
+    /** Entrega resumen controlado para comprobar serializacion del ingreso incompleto y metadatos de pagina. */
     public function fetchOne(string $sql, array $params): array
     {
         $this->calls[] = [$sql, $params];
-        return ['total' => 5];
+        return ['total' => 5, 'soldCount' => 3, 'knownIncomeTotal' => '88.00', 'unknownAmountCount' => 2];
     }
 
-    /** Simula exclusivamente filas SQL y metadatos de foto para probar serializacion y consultas por lote. */
+    /** Simula proyecciones SQL de tarjetas, grupos y fotos para probar serializacion y consultas por lote. */
     public function fetchAll(string $sql, array $params): array
     {
         $this->calls[] = [$sql, $params];
         if (str_contains($sql, 'FROM UserPhotosDesktop')) {
             return [['UserId' => 'member', 'Version' => '3', 'UpdatedAt' => '2026-01-01 00:00:00']];
+        }
+        if (str_contains($sql, 'GROUP BY')) {
+            return [['subscriptionPeriodId' => null, 'planName' => 'Sin plan identificado', 'soldCount' => '3']];
         }
         return $this->rows;
     }
@@ -37,16 +40,20 @@ $db = new MembershipSalesFixtureDatabase();
 $base = ['SaleTicketItemId' => 'item', 'SaleTicketId' => 'ticket', 'SubscriptionId' => 'subscription',
     'PlanName' => 'Plan historico', 'Folio' => 'F-1', 'PaymentDate' => '2026-01-02 10:30:00',
     'PaymentMethod' => 'Efectivo', 'PaymentReference' => null, 'SellerId' => null, 'SellerName' => null,
-    'IsCancelled' => '0', 'CancelledOn' => null, 'CancellationReason' => null,
+    'AmountPaid' => '88.00', 'IsCancelled' => '0', 'CancelledOn' => null, 'CancellationReason' => null,
     'UserId' => 'member', 'Fullname' => 'Socio', 'StartDate' => '2026-01-01, 10;00;00',
     'EndingDate' => '2032-02-29, 00;00;00', 'LineTotal' => '88.00', 'TotalAmount' => '138.00',
     'PaidAmount' => '200.00', 'ChangeAmount' => '62.00', 'ItemsTotal' => '138.00'];
 $db->rows = [$base,
-    array_replace($base, ['IsCancelled' => '1', 'LineTotal' => '0.00', 'TotalAmount' => '0.00', 'PaidAmount' => '0.00', 'ChangeAmount' => '0.00', 'ItemsTotal' => '0.00']),
-    array_replace($base, ['TotalAmount' => '120.00', 'PaidAmount' => '120.00', 'ChangeAmount' => '0.00', 'EndingDate' => '2026-02-30']),
-    array_replace($base, ['PaidAmount' => '50.00', 'ChangeAmount' => '0.00', 'StartDate' => null, 'EndingDate' => null]),
-    array_replace($base, ['UserId' => null, 'PaymentDate' => null, 'IsCancelled' => null, 'TotalAmount' => null]),
+    array_replace($base, ['AmountPaid' => '0.00', 'IsCancelled' => '1', 'LineTotal' => '0.00', 'TotalAmount' => '0.00', 'PaidAmount' => '0.00', 'ChangeAmount' => '0.00', 'ItemsTotal' => '0.00']),
+    array_replace($base, ['AmountPaid' => null, 'TotalAmount' => '120.00', 'PaidAmount' => '120.00', 'ChangeAmount' => '0.00', 'EndingDate' => '2026-02-30']),
+    array_replace($base, ['AmountPaid' => null, 'PaidAmount' => '50.00', 'ChangeAmount' => '0.00', 'StartDate' => null, 'EndingDate' => null]),
+    array_replace($base, ['AmountPaid' => null, 'UserId' => null, 'PaymentDate' => null, 'IsCancelled' => null, 'TotalAmount' => null]),
 ];
+foreach ($db->rows as &$row) {
+    foreach (['LineTotal', 'TotalAmount', 'ItemsTotal', 'PaidAmount', 'ChangeAmount'] as $field) { unset($row[$field]); }
+}
+unset($row);
 $service = new App\Services\MembershipSalesService($db);
 $result = $service->listing('gym-a', ['page' => '2', 'pageSize' => '2']);
 $items = $result['items'];
@@ -58,9 +65,9 @@ checkSalesUnit($items[3]['AmountPaid'] === null && $items[3]['StartDate'] === nu
 checkSalesUnit($items[4]['AmountPaid'] === null && $items[4]['photo'] === null && $items[4]['IsCancelled'] === null, 'Unknown values remain null');
 checkSalesUnit($items[0]['StartDate'] === '2026-01-01 10:00:00' && $items[0]['PaymentDate'] === $base['PaymentDate']
     && $items[0]['DaysRemaining'] === (int) (new DateTimeImmutable('today'))->diff(new DateTimeImmutable('2032-02-29'))->format('%r%a'), 'Local dates and leap day');
-checkSalesUnit($items[0]['photo']['version'] === 3 && count($db->calls) === 3, 'One count, one page and one batch photo query');
+checkSalesUnit($items[0]['photo']['version'] === 3 && count($db->calls) === 4, 'Summary, page, plans and one batch photo query');
 checkSalesUnit($db->calls[0][1] === ['gym-a'] && $db->calls[1][1] === ['gym-a', 2, 2]
-    && $db->calls[2][1] === ['gym-a', 'member'], 'Bound gym, limits and deduplicated photo identities');
+    && $db->calls[2][1] === ['gym-a'] && $db->calls[3][1] === ['gym-a', 'member'], 'Bound gym, limits and deduplicated photo identities');
 foreach (['LineTotal', 'TotalAmount', 'ItemsTotal', 'PaidAmount', 'ChangeAmount'] as $privateField) {
     checkSalesUnit(!array_key_exists($privateField, $items[0]), 'Ticket calculation detail omitted: ' . $privateField);
 }
@@ -88,7 +95,7 @@ foreach (['memberName' => 'u.Fullname', 'planName' => "NULLIF(TRIM(i.ProductName
         $countFrom = substr($count[0], strpos($count[0], 'FROM SaleTicketItemDesktop i'));
         $listingFrom = substr($listing[0], strpos($listing[0], 'FROM SaleTicketItemDesktop i'));
         checkSalesUnit(str_starts_with($listingFrom, substr($countFrom, 0, strpos($countFrom, ' WHERE '))), 'Count and listing share scoped relationships');
-        $where = substr($count[0], strpos($count[0], ' WHERE '));
+        $where = substr($count[0], strrpos($count[0], ' WHERE '));
         checkSalesUnit(str_contains($listing[0], $where) && substr_count($where, "LIKE ? ESCAPE '!'") === 3, 'Count and listing share all search conditions');
         checkSalesUnit(str_contains($listing[0], 'ORDER BY ' . $column . ' ' . strtoupper($direction) . ', i.Id DESC LIMIT ? OFFSET ?'), 'Allowed ordering and deterministic tie break');
     }
@@ -122,3 +129,28 @@ foreach (['' => 'TOKEN_MISSING', 'Bearer invalid' => 'TOKEN_INVALID',
 $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $jwt->createToken(['customerId' => 'gym-a', 'name' => 'Temporary gym']);
 checkSalesUnit($middleware->handle() && App\Middleware\DesktopJwtMiddleware::getCurrentCustomerId() === 'gym-a', 'Real middleware accepts signed gym identity');
 echo "Membership sales unit: amounts, null/zero, dates, cancellation, parameters, search bindings/shared filters, six orders, pagination, batched photos, route and real JWT middleware passed (fixture DB; SQL/CGI not executed).\n";
+
+checkSalesUnit($result['summary'] === ['soldCount' => 3, 'incomeTotal' => null, 'knownIncomeTotal' => 88.0, 'unknownAmountCount' => 2]
+    && $result['byPlan'][0]['soldCount'] === 3, 'Aggregate serialization preserves unknown income and integer counts');
+foreach (['today' => 1, 'week' => 7, 'fifteen' => 15, '15' => 15, '15days' => 15, 'month' => 30, '30' => 30, '30days' => 30] as $range => $days) {
+    $db->calls = [];
+    $service->listing('gym-a', ['range' => (string) $range]);
+    $today = new DateTimeImmutable('today');
+    $expected = ['gym-a', $today->modify('-' . ($days - 1) . ' days')->format('Y-m-d H:i:s'), $today->format('Y-m-d 23:59:59.999999')];
+    checkSalesUnit($db->calls[0][1] === $expected && $db->calls[2][1] === $expected, 'General rolling local range: ' . $range);
+}
+$db->calls = [];
+$service->listing('gym-a', ['range' => 'custom', 'from' => '2024-02-29', 'to' => '2024-02-29']);
+checkSalesUnit($db->calls[0][1] === ['gym-a', '2024-02-29 00:00:00', '2024-02-29 23:59:59.999999'], 'Leap day and inclusive microsecond boundary');
+foreach ([['range' => []], ['range' => 'custom', 'from' => "2026-01-01\0", 'to' => '2026-01-02'], ['range' => 'year'], ['range' => ''], ['range' => 'custom'],
+    ['from' => '2026-02-30', 'to' => '2026-03-01'], ['from' => 'tomorrow', 'to' => '2026-03-01'],
+    ['from' => '2026-01-02', 'to' => '2026-01-01'], ['range' => 'month', 'from' => []],
+    ['range' => 'custom', 'from' => '2026-01-01 10:00:00', 'to' => '2026-01-02']] as $invalid) {
+    try {
+        $service->listing('gym-a', $invalid);
+        throw new RuntimeException('Expected invalid period');
+    } catch (App\Exceptions\ApiException $e) {
+        checkSalesUnit($e->getStatusCode() === 422, 'Invalid period status');
+    }
+}
+echo "Membership sales period and aggregate serialization/bindings passed (fixture DB).\n";

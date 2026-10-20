@@ -48,6 +48,7 @@ function checkMembershipSales(PhotoTestDatabase $db, App\Services\UserPhotoServi
     $response = photoCgi($schema, $directory, 'GET', $token, '', '', $query);
     checkPhoto($response['status'] === 200, 'Sales endpoint succeeds: ' . $response['body']);
     $result = json_decode($response['body'], true, 512, JSON_THROW_ON_ERROR);
+    checkPhoto($result['summary'] === ['soldCount' => 4, 'incomeTotal' => null, 'knownIncomeTotal' => 176, 'unknownAmountCount' => 2], 'Mixed ticket summary excludes products, change and cancelled sale');
     $rows = array_column($result['items'], null, 'SaleTicketItemId');
     checkPhoto(array_keys($rows) === ['sales-5', 'sales-4', 'sales-3', 'sales-2', 'sales-1'], 'Stable descending order, repeated user and gym isolation');
     checkPhoto($rows['sales-1']['AmountPaid'] === 88 && $rows['sales-1']['AmountSource'] === 'LineTotal', 'Mixed ticket, line discount, tax and cash change');
@@ -91,6 +92,8 @@ function checkMembershipSales(PhotoTestDatabase $db, App\Services\UserPhotoServi
             'ProductName' => 'Plan vendido', 'UnitPrice' => 50, 'Quantity' => 1,
             'LineSubtotal' => 50, 'LineDiscount' => 50 - $amount, 'LineTotal' => $amount]);
     }
+    $ticketSummary = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&search=MULTIPLE')['body'], true);
+    checkPhoto($ticketSummary['summary'] === ['soldCount' => 2, 'incomeTotal' => 80, 'knownIncomeTotal' => 80, 'unknownAmountCount' => 0], 'Multiple memberships sum their amounts without repeating ticket total');
     $multiple = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query)['body'], true)['items'];
     checkPhoto(array_column(array_slice($multiple, 0, 2), 'SaleTicketItemId') === ['multi-b', 'multi-a']
         && array_column(array_slice($multiple, 0, 2), 'AmountPaid') === [50, 30], 'Multiple memberships in same ticket keep their own persisted discounted amounts');
@@ -153,5 +156,82 @@ function checkMembershipSales(PhotoTestDatabase $db, App\Services\UserPhotoServi
     require_once __DIR__ . '/../app/Services/MembershipSalesService.php';
     $noSales = (new App\Services\MembershipSalesService($db))->listing('gym-with-no-sales', []);
     checkPhoto($noSales['items'] === [] && $noSales['pagination']['totalPages'] === 0, 'Gym without sales');
+    checkMembershipSalesAggregates($db, $schema, $directory, $token, $otherToken);
     echo "Membership sales CGI: JWT, gym/relationship/photo isolation, cancellation, amounts, zero/null, dates, global/literal search, six orders with ties, filtered counts, validation and pagination passed.\n";
+}
+
+/** Prueba periodo/agregados con API CGI real y datos efimeros; comprueba conteo por partida y conciliacion decimal. */
+function checkMembershipSalesAggregates(PhotoTestDatabase $db, string $schema, string $directory, string $token, string $otherToken): void
+{
+    foreach (['agg-plan' => ['gym-a', 'Mensual actual'], 'agg-foreign' => ['gym-b', 'PRIVATE PLAN']] as $id => [$gym, $name]) {
+        $db->insert('SubscriptionPeriodDesktop', ['Id' => $id, 'CustomerApiId' => $gym, 'Name' => $name, 'CreatedOn' => '2026-01-01']);
+    }
+    foreach (['agg-sub' => 'agg-plan', 'agg-missing' => 'not-synced', 'agg-other' => 'agg-foreign', 'agg-none' => null] as $id => $planId) {
+        $db->insert('SubscriptionsDesktop', ['Id' => $id, 'CustomerApiId' => 'gym-a', 'UserId' => 'user-a', 'SubscriptionPeriodId' => $planId]);
+    }
+    // Incluye ambos extremos del dia, cantidad > 1, cero, desconocidos, cancelaciones y relaciones incompletas.
+    $fixtures = [
+        'agg-start' => ['2040-02-01 00:00:00', 'agg-sub', '0.10', 1, null, true],
+        'agg-end' => ['2040-02-02 23:59:59', 'agg-sub', '0.20', 1, null, true],
+        'agg-missing' => ['2040-02-02 12:00:00', 'agg-missing', '0.30', 1, null, true],
+        'agg-foreign' => ['2040-02-02 12:00:00', 'agg-other', '0.40', 1, null, true],
+        'agg-none' => ['2040-02-02 12:00:00', 'agg-none', '0.00', 1, null, true],
+        'agg-unknown' => ['2040-02-02 12:00:00', 'agg-none', '1.00', 1, null, false],
+        'agg-cancel' => ['2040-02-02 12:00:00', 'agg-sub', '100.00', 0, null, true],
+        'agg-cancel-date' => ['2040-02-02 12:00:00', 'agg-sub', '100.00', 1, '2040-02-02 12:00:01', true],
+        'agg-state' => ['2040-02-02 12:00:00', 'agg-sub', '100.00', null, null, true],
+        'agg-state-other' => ['2040-02-02 12:00:00', 'agg-sub', '100.00', 2, null, true],
+        'agg-before' => ['2040-01-31 23:59:59', 'agg-sub', '100.00', 1, null, true],
+        'agg-after' => ['2040-02-03 00:00:00', 'agg-sub', '100.00', 1, null, true],
+    ];
+    foreach ($fixtures as $id => [$date, $subscription, $amount, $active, $cancelled, $paid]) {
+        $db->insert('SaleTicketDesktop', ['Id' => $id, 'CustomerApiId' => 'gym-a', 'Folio' => $id, 'SaleDate' => $date,
+            'SubtotalAmount' => $amount, 'TotalAmount' => $amount, 'PaidAmount' => $paid ? $amount : '0.00',
+            'PaymentMethod' => 'Efectivo', 'Active' => $active, 'CancelledOn' => $cancelled]);
+        $db->insert('SaleTicketItemDesktop', ['Id' => $id, 'CustomerApiId' => 'gym-a', 'SaleTicketId' => $id,
+            'SubscriptionId' => $subscription, 'ProductName' => 'Historico AGGREGATES', 'Quantity' => 7,
+            'UnitPrice' => $amount, 'LineSubtotal' => $amount, 'LineTotal' => $amount]);
+    }
+    $query = 'report=membership-sales&range=custom&from=2040-02-01&to=2040-02-02&search=AGGREGATES';
+    $response = photoCgi($schema, $directory, 'GET', $token, '', '', $query);
+    checkPhoto($response['status'] === 200, 'Period/aggregates HTTP success: ' . $response['body']);
+    $result = json_decode($response['body'], true, 512, JSON_THROW_ON_ERROR);
+    $expected = ['soldCount' => 6, 'incomeTotal' => null, 'knownIncomeTotal' => 1, 'unknownAmountCount' => 1];
+    checkPhoto($result['summary'] === $expected && $result['pagination']['total'] === 10, 'Decimal sum, unknown income, cancellation and Quantity ignored');
+    $plans = array_column($result['byPlan'], null, 'subscriptionPeriodId');
+    checkPhoto(count($plans) === 4 && $plans['agg-plan'] === ['subscriptionPeriodId' => 'agg-plan', 'planName' => 'Mensual actual', 'soldCount' => 2]
+        && $plans['not-synced']['planName'] === 'Plan no disponible' && $plans['not-synced']['soldCount'] === 1
+        && $plans['agg-foreign']['planName'] === 'Plan no disponible' && $plans['agg-foreign']['soldCount'] === 1
+        && $plans['']['planName'] === 'Sin plan identificado' && $plans['']['soldCount'] === 2, 'Current catalog, missing ID/catalog and foreign catalog isolation');
+    checkPhoto(array_sum(array_column($result['byPlan'], 'soldCount')) === $result['summary']['soldCount'], 'Plan counts reconcile');
+    $rows = array_column($result['items'], null, 'SaleTicketItemId');
+    checkPhoto(isset($rows['agg-start'], $rows['agg-end'], $rows['agg-cancel']) && !isset($rows['agg-before'], $rows['agg-after'])
+        && $rows['agg-none']['AmountPaid'] === 0 && $rows['agg-unknown']['AmountPaid'] === null
+        && $rows['agg-start']['PlanName'] === 'Historico AGGREGATES' && $rows['agg-state']['IsCancelled'] === null, 'Inclusive local boundaries, history and zero/null unchanged');
+    foreach (['page=2&pageSize=2', 'page=99', 'sortBy=planName&sortDir=asc', 'sortBy=memberName&sortDir=desc'] as $variation) {
+        $changed = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&' . $variation)['body'], true);
+        checkPhoto($changed['summary'] === $expected && $changed['byPlan'] === $result['byPlan'], 'Global aggregates independent of ' . $variation);
+    }
+    $known = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&search=agg-start')['body'], true);
+    checkPhoto($known['summary'] === ['soldCount' => 1, 'incomeTotal' => 0.1, 'knownIncomeTotal' => 0.1, 'unknownAmountCount' => 0]
+        && count($known['byPlan']) === 1, 'Search applies before summary/grouping');
+    $noSales = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&from=2041-01-01&to=2041-01-02')['body'], true);
+    checkPhoto($noSales['summary'] === ['soldCount' => 0, 'incomeTotal' => 0, 'knownIncomeTotal' => 0, 'unknownAmountCount' => 0]
+        && $noSales['byPlan'] === [] && $noSales['items'] === [], 'Empty filtered set returns zero');
+    $foreign = json_decode(photoCgi($schema, $directory, 'GET', $otherToken, '', '', $query . '&customerApiId=gym-a')['body'], true);
+    checkPhoto($foreign['summary']['soldCount'] === 0 && $foreign['byPlan'] === [], 'Aggregate JWT isolation');
+    foreach (['range[]=custom', 'range=year', 'range=custom', 'range=custom&from=2040-02-30&to=2040-03-01',
+        'range=custom&from=2040-02-02&to=2040-02-01', 'range=custom&from[]=2040-02-01&to=2040-02-02',
+        'range=custom&from=tomorrow&to=2040-02-02', 'range=month&from=invalid'] as $invalid) {
+        checkPhoto(photoCgi($schema, $directory, 'GET', $token, '', '', 'report=membership-sales&' . $invalid)['status'] === 422, 'Period validation: ' . $invalid);
+    }
+    // El contrato general usa ventanas moviles; no cambia month a mes calendario.
+    foreach (['today' => 1, 'week' => 7, 'fifteen' => 15, 'month' => 30] as $range => $days) {
+        $today = new DateTimeImmutable('today');
+        $db->update('SaleTicketDesktop', ['SaleDate' => $today->modify('-' . ($days - 1) . ' days')->format('Y-m-d 00:00:00')], 'Id = ?', ['agg-start']);
+        $db->update('SaleTicketDesktop', ['SaleDate' => $today->modify('-' . $days . ' days')->format('Y-m-d 23:59:59')], 'Id = ?', ['agg-end']);
+        $rolling = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', 'report=membership-sales&search=AGGREGATES&range=' . $range)['body'], true);
+        checkPhoto(array_column($rolling['items'], 'SaleTicketItemId') === ['agg-start'] && $rolling['summary']['incomeTotal'] === 0.1, 'Rolling boundary in real API: ' . $range);
+    }
+    echo "Membership sales aggregates CGI: local/inclusive/rolling periods, 422, decimal totals, unknowns, confirmed state, Quantity, catalogs, JWT isolation and page/order independence passed.\n";
 }

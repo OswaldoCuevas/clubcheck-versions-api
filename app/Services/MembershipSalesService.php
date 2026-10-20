@@ -47,9 +47,62 @@ class MembershipSalesService
         return $value;
     }
 
-    /** Consulta el historial del gimnasio, filtrando y ordenando antes de paginar sin excluir cancelaciones/bajas. */
+    /** Resuelve el periodo general local para ventas; sin parametros conserva el historial completo. */
+    private function period(array $query): ?array
+    {
+        if (!array_key_exists('range', $query) && !array_key_exists('from', $query) && !array_key_exists('to', $query)) {
+            return null;
+        }
+        $range = $query['range'] ?? 'custom';
+        if (!is_string($range)) {
+            throw new ApiException('range debe ser texto', 422);
+        }
+        $range = strtolower(trim($range));
+        $dates = [];
+        foreach (['from', 'to'] as $key) {
+            if (array_key_exists($key, $query)) {
+                $value = $query[$key];
+                $date = is_string($value) && preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/D', $value) ? \DateTimeImmutable::createFromFormat('!Y-m-d', $value) : false;
+                if (!$date || $date->format('Y-m-d') !== $value || $value < '1000-01-01') {
+                    throw new ApiException("{$key} debe ser una fecha valida YYYY-MM-DD", 422);
+                }
+                $dates[$key] = $date;
+            }
+        }
+        if (isset($dates['from'], $dates['to']) && $dates['from'] > $dates['to']) {
+            throw new ApiException('from no puede ser mayor que to', 422);
+        }
+        if ($range === 'custom') {
+            if (count($dates) !== 2) {
+                throw new ApiException('from y to son obligatorios para range=custom', 422);
+            }
+            return [$dates['from']->format('Y-m-d 00:00:00'), $dates['to']->format('Y-m-d 23:59:59.999999')];
+        }
+        $days = ['today' => 1, 'week' => 7, 'fifteen' => 15, '15' => 15, '15days' => 15,
+            'month' => 30, '30' => 30, '30days' => 30];
+        if (!isset($days[$range])) {
+            throw new ApiException('range debe ser today, week, fifteen, month o custom', 422);
+        }
+        $today = new \DateTimeImmutable('today');
+        return [$today->modify('-' . ($days[$range] - 1) . ' days')->format('Y-m-d H:i:s'),
+            $today->format('Y-m-d 23:59:59.999999')];
+    }
+
+    /** Comparte conciliacion DECIMAL entre tarjetas e indicadores; nunca reparte totales ni abonos del ticket. */
+    private function amountExpression(): string
+    {
+        return "CASE WHEN i.LineTotal IS NOT NULL AND t.TotalAmount IS NOT NULL
+            AND t.PaidAmount IS NOT NULL AND t.ChangeAmount IS NOT NULL
+            AND ABS((SELECT SUM(li.LineTotal) FROM SaleTicketItemDesktop li
+                WHERE li.SaleTicketId = t.Id AND li.CustomerApiId = i.CustomerApiId) - t.TotalAmount) < 0.005
+            AND ABS(t.PaidAmount - t.ChangeAmount - t.TotalAmount) < 0.005
+            THEN i.LineTotal ELSE NULL END";
+    }
+
+    /** Consulta historial y agregados del gimnasio; periodo/busqueda afectan todo y orden/pagina solo las tarjetas. */
     public function listing(string $customerId, array $query): array
     {
+        $period = $this->period($query);
         $page = $this->pageNumber($query, 'page', 1, 1000000);
         $pageSize = $this->pageNumber($query, 'pageSize', 25, 100);
         $columns = ['memberName' => 'u.Fullname', 'planName' => "NULLIF(TRIM(i.ProductName), '')", 'paymentDate' => 't.SaleDate'];
@@ -73,7 +126,23 @@ class MembershipSalesService
             $where .= " AND (u.Fullname LIKE ? ESCAPE '!' OR NULLIF(TRIM(i.ProductName), '') LIKE ? ESCAPE '!' OR t.Folio LIKE ? ESCAPE '!')";
             array_push($params, $pattern, $pattern, $pattern);
         }
-        $total = (int) $this->db->fetchOne("SELECT COUNT(*) AS total {$from} WHERE {$where}", $params)['total'];
+        if ($period !== null) {
+            // Incluye todas las fracciones del ultimo dia local, incluso en el limite DATETIME 9999-12-31.
+            $where .= ' AND t.SaleDate >= ? AND t.SaleDate <= ?';
+            array_push($params, ...$period);
+        }
+        $amount = $this->amountExpression();
+        $confirmed = 't.Active = 1 AND t.CancelledOn IS NULL';
+        $totals = $this->db->fetchOne("SELECT COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN {$confirmed} THEN 1 ELSE 0 END), 0) AS soldCount,
+                COALESCE(SUM(CASE WHEN {$confirmed} THEN {$amount} ELSE 0 END), 0) AS knownIncomeTotal,
+                COALESCE(SUM(CASE WHEN {$confirmed} AND ({$amount}) IS NULL THEN 1 ELSE 0 END), 0) AS unknownAmountCount
+             {$from} WHERE {$where}", $params);
+        $total = (int) $totals['total'];
+        $unknown = (int) $totals['unknownAmountCount'];
+        $summary = ['soldCount' => (int) $totals['soldCount'],
+            'incomeTotal' => $unknown > 0 ? null : (float) $totals['knownIncomeTotal'],
+            'knownIncomeTotal' => (float) $totals['knownIncomeTotal'], 'unknownAmountCount' => $unknown];
         $order = $columns[$sortBy] . ' ' . strtoupper($sortDir) . ', i.Id DESC';
         $rows = $this->db->fetchAll(
             "SELECT i.Id AS SaleTicketItemId, i.SaleTicketId, i.SubscriptionId,
@@ -84,9 +153,7 @@ class MembershipSalesService
                     WHEN t.Active = 1 THEN 0 ELSE NULL END AS IsCancelled,
                 t.CancelledOn, t.CancellationReason,
                 u.Id AS UserId, u.Fullname, s.StartDate, s.EndingDate,
-                i.LineTotal, t.TotalAmount, t.PaidAmount, t.ChangeAmount,
-                (SELECT SUM(li.LineTotal) FROM SaleTicketItemDesktop li
-                    WHERE li.SaleTicketId = t.Id AND li.CustomerApiId = i.CustomerApiId) AS ItemsTotal
+                {$amount} AS AmountPaid
              {$from}
              LEFT JOIN AdministratorsDesktop a ON a.CustomerApiId = i.CustomerApiId AND a.Id = (
                 SELECT seller.Id FROM AdministratorsDesktop seller WHERE seller.CustomerApiId = i.CustomerApiId
@@ -104,18 +171,27 @@ class MembershipSalesService
             $row['DaysRemaining'] = $row['EndingDate'] === null ? null
                 : (int) $today->diff(new \DateTimeImmutable(substr($row['EndingDate'], 0, 10)))->format('%r%a');
             $row['IsCancelled'] = $row['IsCancelled'] === null ? null : (bool) $row['IsCancelled'];
-            // LineTotal ya contiene descuentos/impuestos de partida, como los reportes de ingresos.
-            // Solo se llama pagado si el ticket concilia: no inventar distribuciones de descuentos globales o abonos.
-            $known = $row['LineTotal'] !== null && $row['TotalAmount'] !== null && $row['ItemsTotal'] !== null
-                && $row['PaidAmount'] !== null && $row['ChangeAmount'] !== null
-                && abs((float) $row['ItemsTotal'] - (float) $row['TotalAmount']) < 0.005
-                && abs((float) $row['PaidAmount'] - (float) $row['ChangeAmount'] - (float) $row['TotalAmount']) < 0.005;
-            $row['AmountPaid'] = $known ? (float) $row['LineTotal'] : null;
-            $row['AmountSource'] = $known ? 'LineTotal' : null;
-            unset($row['LineTotal'], $row['TotalAmount'], $row['PaidAmount'], $row['ChangeAmount'], $row['ItemsTotal']);
+            $row['AmountPaid'] = $row['AmountPaid'] === null ? null : (float) $row['AmountPaid'];
+            $row['AmountSource'] = $row['AmountPaid'] === null ? null : 'LineTotal';
         }
         unset($row);
+        // El identificador se conserva aun sin catalogo local; nunca se une un plan de otro gimnasio.
+        $planId = "NULLIF(TRIM(s.SubscriptionPeriodId), '')";
+        $byPlan = $this->db->fetchAll("SELECT {$planId} AS subscriptionPeriodId,
+                CASE WHEN {$planId} IS NULL THEN 'Sin plan identificado'
+                    ELSE COALESCE(NULLIF(TRIM(p.Name), ''), 'Plan no disponible') END AS planName,
+                COUNT(*) AS soldCount
+             {$from}
+             LEFT JOIN SubscriptionPeriodDesktop p ON p.Id = s.SubscriptionPeriodId AND p.CustomerApiId = i.CustomerApiId
+             WHERE {$where} AND {$confirmed}
+             GROUP BY {$planId}, planName
+             ORDER BY soldCount DESC, subscriptionPeriodId ASC", $params);
+        foreach ($byPlan as &$plan) {
+            $plan['soldCount'] = (int) $plan['soldCount'];
+        }
+        unset($plan);
         return [
+            'summary' => $summary, 'byPlan' => $byPlan,
             'items' => (new UserPhotoService($this->db))->attach($customerId, $rows, 'UserId'),
             'pagination' => ['page' => $page, 'pageSize' => $pageSize, 'total' => $total,
                 'totalPages' => (int) ceil($total / $pageSize)],
