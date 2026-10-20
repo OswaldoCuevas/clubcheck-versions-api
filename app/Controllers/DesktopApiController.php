@@ -7,6 +7,7 @@ require_once __DIR__ . '/../Helpers/ApiHelper.php';
 require_once __DIR__ . '/../Models/CustomerWebLoginAttemptModel.php';
 require_once __DIR__ . '/../Services/JwtService.php';
 require_once __DIR__ . '/../Services/UserPhotoService.php';
+require_once __DIR__ . '/../Services/MembershipSalesService.php';
 require_once __DIR__ . '/../../utils/database.php';
 
 use ApiHelper;
@@ -278,6 +279,14 @@ class DesktopApiController extends Controller
             ],
             'memberships' => $this->pagePayload((new \App\Services\UserPhotoService($this->db))->attach($customerId, $rows, 'UserId'), $total, $page, $perPage),
         ]);
+    }
+
+    /** Entrega el historial paginado de partidas de membresia del gimnasio autenticado, incluidas canceladas. */
+    public function membershipSales(): void
+    {
+        ApiHelper::respondIfOptions();
+        ApiHelper::allowedMethodsGet();
+        ApiHelper::respond((new \App\Services\MembershipSalesService($this->db))->listing($this->customerId(), $_GET));
     }
 
     public function products(): void

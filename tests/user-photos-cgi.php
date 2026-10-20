@@ -9,10 +9,10 @@ require_once __DIR__ . '/../app/Controllers/UserPhotosController.php';
 
 class PhotoCgiDatabase extends Database
 {
-    /** Restringe la conexion del harness a la BD temporal explicitamente identificada. */
+    /** Restringe el harness a la BD temporal y al puerto de pruebas, sin cargar configuracion operativa. */
     public function __construct(string $schema)
     {
-        mysqli::__construct('localhost', 'root', '', $schema, 3306);
+        mysqli::__construct('localhost', 'root', '', $schema, (int) (getenv('PHOTO_TEST_PORT') ?: 3306));
         $this->set_charset('utf8mb4');
     }
 }
@@ -44,12 +44,15 @@ try {
             $controller->readOriginal($_GET['userId'] ?? 'user-a');
             exit;
         }
-        if (($_GET['report'] ?? '') === 'memberships') {
+        if (in_array($_GET['report'] ?? '', ['memberships', 'membership-sales'], true)) {
             require_once __DIR__ . '/../app/Controllers/DesktopApiController.php';
             // Reutiliza el reporte real sin ejecutar constructores que conectan a datos operativos.
             $reflection = new ReflectionClass(Controllers\DesktopApiController::class);
             $report = $reflection->newInstanceWithoutConstructor();
             $reflection->getProperty('db')->setValue($report, $db);
+            if ($_GET['report'] === 'membership-sales') {
+                $report->membershipSales();
+            }
             $report->memberships();
         }
         $controller->read($_GET['userId'] ?? 'user-a');

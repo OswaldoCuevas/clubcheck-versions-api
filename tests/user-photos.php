@@ -51,10 +51,10 @@ class PhotoTestDatabase extends Database
     public bool $failWrite = false;
     public bool $loseCommitResponse = false;
 
-    /** Conecta exclusivamente al esquema efimero creado por esta prueba local. */
+    /** Conecta al esquema efimero; permite un puerto MySQL aislado para pruebas sin servidor operativo. */
     public function __construct(string $name = '')
     {
-        mysqli::__construct('localhost', 'root', '', $name, 3306);
+        mysqli::__construct('localhost', 'root', '', $name, (int) (getenv('PHOTO_TEST_PORT') ?: 3306));
         $this->set_charset('utf8mb4');
     }
 
@@ -192,6 +192,8 @@ try {
     checkMembershipPhotos($db, $service, $schema, $directory . '/storage', $portalToken, $otherPortal);
     require_once __DIR__ . '/desktop-user-profile.php';
     checkUserProfile($db, $service, $schema, $directory . '/storage', $portalToken, $otherPortal);
+    require_once __DIR__ . '/membership-sales.php';
+    checkMembershipSales($db, $service, $schema, $directory . '/storage', $portalToken, $otherPortal);
     checkPhoto(photoCgi($schema, $directory . '/storage', 'POST', $customerToken, '{}', 'application/json')['status'] === 400, 'Multipart required');
     $oldMultipart = str_replace("\r\n\r\n3\r\n", "\r\n\r\n1\r\n", $multipart);
     checkPhoto(photoCgi($schema, $directory . '/storage', 'POST', $customerToken, $oldMultipart, $type)['status'] === 409, 'API old version');

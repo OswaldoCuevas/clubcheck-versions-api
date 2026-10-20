@@ -80,6 +80,7 @@ $router->get('/api/desktop/users/:userId/statistics', 'DesktopUserProfileControl
 $router->get('/api/desktop/users/:userId/photo/original', 'UserPhotosController', 'readOriginal', ['desktop_jwt']);
 $router->get('/api/desktop/users/:userId/photo', 'UserPhotosController', 'read', ['desktop_jwt']);
 $router->get('/api/desktop/memberships', 'DesktopApiController', 'memberships', ['desktop_jwt']);
+$router->get('/api/desktop/membership-sales', 'DesktopApiController', 'membershipSales', ['desktop_jwt']);
 $router->get('/api/desktop/products', 'DesktopApiController', 'products', ['desktop_jwt']);
 $router->get('/api/desktop/attendances', 'DesktopApiController', 'attendances', ['desktop_jwt']);
 $router->get('/api/desktop/sales', 'DesktopApiController', 'sales', ['desktop_jwt']);
