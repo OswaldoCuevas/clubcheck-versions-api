@@ -64,7 +64,9 @@ checkSalesUnit($db->calls[0][1] === ['gym-a'] && $db->calls[1][1] === ['gym-a', 
 foreach (['LineTotal', 'TotalAmount', 'ItemsTotal', 'PaidAmount', 'ChangeAmount'] as $privateField) {
     checkSalesUnit(!array_key_exists($privateField, $items[0]), 'Ticket calculation detail omitted: ' . $privateField);
 }
-foreach (['page' => [0, -1, '1.5', [], true, '1000001', '9999999999999999999999'], 'pageSize' => ['101', 'abc', '', null]] as $key => $values) {
+foreach (['page' => [0, -1, '1.5', [], true, '1000001', '9999999999999999999999'], 'pageSize' => ['101', 'abc', '', null],
+    'search' => [[], true, 123], 'sortBy' => ['', 'Fullname', 'paymentDate DESC; DROP TABLE UsersDesktop', [], 1],
+    'sortDir' => ['', 'ASC', 'desc, i.Id', [], false]] as $key => $values) {
     foreach ($values as $value) {
         if ($value === null) { continue; } // Ausencia/null usa el valor predeterminado.
         try {
@@ -76,6 +78,25 @@ foreach (['page' => [0, -1, '1.5', [], true, '1000001', '9999999999999999999999'
     }
 }
 $db->rows = [];
+foreach (['memberName' => 'u.Fullname', 'planName' => "NULLIF(TRIM(i.ProductName), '')", 'paymentDate' => 't.SaleDate'] as $sortBy => $column) {
+    foreach (['asc', 'desc'] as $direction) {
+        $db->calls = [];
+        $service->listing('gym-a', ['page' => '3', 'pageSize' => '2', 'search' => "  50%_! O'Brien  ", 'sortBy' => $sortBy, 'sortDir' => $direction]);
+        [$count, $listing] = $db->calls;
+        $bound = ['gym-a', "%50!%!_!! O'Brien%", "%50!%!_!! O'Brien%", "%50!%!_!! O'Brien%"];
+        checkSalesUnit($count[1] === $bound && $listing[1] === array_merge($bound, [2, 4]), 'Literal search and gym bound before pagination');
+        $countFrom = substr($count[0], strpos($count[0], 'FROM SaleTicketItemDesktop i'));
+        $listingFrom = substr($listing[0], strpos($listing[0], 'FROM SaleTicketItemDesktop i'));
+        checkSalesUnit(str_starts_with($listingFrom, substr($countFrom, 0, strpos($countFrom, ' WHERE '))), 'Count and listing share scoped relationships');
+        $where = substr($count[0], strpos($count[0], ' WHERE '));
+        checkSalesUnit(str_contains($listing[0], $where) && substr_count($where, "LIKE ? ESCAPE '!'") === 3, 'Count and listing share all search conditions');
+        checkSalesUnit(str_contains($listing[0], 'ORDER BY ' . $column . ' ' . strtoupper($direction) . ', i.Id DESC LIMIT ? OFFSET ?'), 'Allowed ordering and deterministic tie break');
+    }
+}
+$db->calls = [];
+$service->listing('gym-a', ['search' => "  \t "]);
+checkSalesUnit($db->calls[0][1] === ['gym-a'] && !str_contains($db->calls[0][0], 'LIKE')
+    && str_contains($db->calls[1][0], 'ORDER BY t.SaleDate DESC, i.Id DESC'), 'Blank search preserves default query');
 $empty = $service->listing('gym-a', []);
 checkSalesUnit($empty['items'] === [] && $empty['pagination'] === ['page' => 1, 'pageSize' => 25, 'total' => 5, 'totalPages' => 1], 'Defaults and empty page');
 $router = require __DIR__ . '/../routes/web.php';
@@ -100,4 +121,4 @@ foreach (['' => 'TOKEN_MISSING', 'Bearer invalid' => 'TOKEN_INVALID',
 }
 $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $jwt->createToken(['customerId' => 'gym-a', 'name' => 'Temporary gym']);
 checkSalesUnit($middleware->handle() && App\Middleware\DesktopJwtMiddleware::getCurrentCustomerId() === 'gym-a', 'Real middleware accepts signed gym identity');
-echo "Membership sales unit: amounts, null/zero, dates, cancellation, parameters, pagination, batched photos, route and real JWT middleware passed (fixture DB; SQL/CGI not executed).\n";
+echo "Membership sales unit: amounts, null/zero, dates, cancellation, parameters, search bindings/shared filters, six orders, pagination, batched photos, route and real JWT middleware passed (fixture DB; SQL/CGI not executed).\n";

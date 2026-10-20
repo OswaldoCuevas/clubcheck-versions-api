@@ -16,8 +16,8 @@ function checkMembershipSales(PhotoTestDatabase $db, App\Services\UserPhotoServi
     $routes = $reflection->getProperty('routes')->getValue($router);
     $route = array_values(array_filter($routes, fn(array $route): bool => $route['uri'] === '/api/desktop/membership-sales'))[0];
     checkPhoto($route['method'] === 'GET' && $route['action'] === 'membershipSales' && $route['middleware'] === ['desktop_jwt'], 'Sales route and middleware');
-    $db->insert('AdministratorsDesktop', ['Id' => 'sales-admin', 'CustomerApiId' => 'gym-a', 'Username' => 'Historical seller', 'Removed' => 1]);
-    $db->insert('AdministratorsDesktop', ['Id' => 'sales-foreign', 'CustomerApiId' => 'gym-b', 'Username' => 'PRIVATE']);
+    $db->insert('AdministratorsDesktop', ['Id' => 'sales-admin', 'CustomerApiId' => 'gym-a', 'Username' => 'Historical seller', 'Password' => 'test-only', 'Removed' => 1]);
+    $db->insert('AdministratorsDesktop', ['Id' => 'sales-foreign', 'CustomerApiId' => 'gym-b', 'Username' => 'PRIVATE', 'Password' => 'test-only']);
     foreach (['sales-current' => 0, 'sales-removed' => 1] as $id => $removed) {
         $db->insert('SubscriptionsDesktop', ['Id' => $id, 'CustomerApiId' => 'gym-a', 'UserId' => 'user-a',
             'StartDate' => '2026-01-01, 10;00;00', 'EndingDate' => '2032-02-29, 00;00;00', 'Removed' => $removed, 'Payment' => 999]);
@@ -61,7 +61,8 @@ function checkMembershipSales(PhotoTestDatabase $db, App\Services\UserPhotoServi
     checkPhoto(array_column($page['items'], 'SaleTicketItemId') === ['sales-3', 'sales-2'] && $page['pagination'] === ['page' => 2, 'pageSize' => 2, 'total' => 5, 'totalPages' => 3], 'Sales pagination');
     $empty = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&page=100')['body'], true);
     checkPhoto($empty['items'] === [] && $empty['pagination']['total'] === 5, 'Empty page retains count');
-    foreach (['page=0', 'page=-1', 'page=1.5', 'page[]=1', 'page=9999999999999999999999', 'pageSize=101', 'pageSize=abc'] as $invalid) {
+    foreach (['page=0', 'page=-1', 'page=1.5', 'page[]=1', 'page=9999999999999999999999', 'pageSize=101', 'pageSize=abc',
+        'search[]=x', 'sortBy=Fullname', 'sortBy[]=planName', 'sortBy=paymentDate%3BDROP', 'sortDir=ASC', 'sortDir=', 'sortDir[]=desc'] as $invalid) {
         $rejected = photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&' . $invalid);
         checkPhoto($rejected['status'] === 422 && json_decode($rejected['body'], true)['error_code'] === 'API_ERROR', 'Invalid sales parameter ' . $invalid);
     }
@@ -93,8 +94,64 @@ function checkMembershipSales(PhotoTestDatabase $db, App\Services\UserPhotoServi
     $multiple = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query)['body'], true)['items'];
     checkPhoto(array_column(array_slice($multiple, 0, 2), 'SaleTicketItemId') === ['multi-b', 'multi-a']
         && array_column(array_slice($multiple, 0, 2), 'AmountPaid') === [50, 30], 'Multiple memberships in same ticket keep their own persisted discounted amounts');
+    // Doce partidas anteriores a la primera pagina: cada fuente de busqueda debe consultar todo el historial.
+    $expected = [];
+    for ($number = 1; $number <= 12; $number++) {
+        $id = sprintf('criteria-%02d', $number);
+        $member = 'Socio global ' . ($number % 2 === 0 ? 'Ana' : 'Zoe');
+        $plan = 'Plan historico 2020-01-01 ' . ($number % 3 === 0 ? 'Anual' : 'Mensual');
+        $date = '2020-01-' . ($number % 2 === 0 ? '01' : '02') . ' 10:00:00';
+        $db->insert('UsersDesktop', ['Id' => $id, 'CustomerApiId' => 'gym-a', 'Fullname' => $member, 'PhoneNumber' => '000', 'BirthDate' => '2000-01-01']);
+        $db->insert('SubscriptionsDesktop', ['Id' => $id, 'CustomerApiId' => 'gym-a', 'UserId' => $id,
+            'StartDate' => '2020-01-01', 'EndingDate' => '2020-02-01']);
+        $db->insert('SaleTicketDesktop', ['Id' => $id, 'CustomerApiId' => 'gym-a', 'Folio' => 'GLOBAL-' . $id,
+            'SaleDate' => $date, 'SubtotalAmount' => 0, 'TotalAmount' => 0, 'PaidAmount' => 0,
+            'PaymentMethod' => 'Efectivo', 'Active' => $number === 1 ? 0 : 1]);
+        $db->insert('SaleTicketItemDesktop', ['Id' => $id, 'CustomerApiId' => 'gym-a', 'SaleTicketId' => $id,
+            'SubscriptionId' => $id, 'ProductName' => $plan, 'UnitPrice' => 0, 'Quantity' => 1, 'LineSubtotal' => 0, 'LineTotal' => 0]);
+        $expected[] = ['SaleTicketItemId' => $id, 'memberName' => $member, 'planName' => $plan, 'paymentDate' => $date];
+    }
+    foreach (['Socio global', 'historico 2020-01-01', 'GLOBAL-criteria'] as $search) {
+        $found = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&' . http_build_query([
+            'search' => $search, 'pageSize' => 10, 'page' => 2]))['body'], true);
+        checkPhoto(count($found['items']) === 2 && $found['pagination'] === ['page' => 2, 'pageSize' => 10, 'total' => 12, 'totalPages' => 2], 'Global search beyond first page: ' . $search);
+    }
+    foreach (['memberName', 'planName', 'paymentDate'] as $sortBy) {
+        foreach (['asc', 'desc'] as $sortDir) {
+            $ordered = $expected;
+            // Oraculo independiente: valor visible en la direccion solicitada e identificador descendente en empates.
+            usort($ordered, function (array $left, array $right) use ($sortBy, $sortDir): int {
+                $primary = strcmp($left[$sortBy], $right[$sortBy]);
+                return ($sortDir === 'asc' ? $primary : -$primary) ?: strcmp($right['SaleTicketItemId'], $left['SaleTicketItemId']);
+            });
+            $actualIds = [];
+            foreach ([1, 2, 3] as $pageNumber) {
+                $sorted = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&' . http_build_query([
+                    'search' => 'GLOBAL-criteria', 'sortBy' => $sortBy, 'sortDir' => $sortDir, 'pageSize' => 5, 'page' => $pageNumber]))['body'], true);
+                checkPhoto($sorted['pagination']['total'] === 12 && $sorted['pagination']['totalPages'] === 3, 'Filtered count without duplicates');
+                $actualIds = array_merge($actualIds, array_column($sorted['items'], 'SaleTicketItemId'));
+            }
+            checkPhoto($actualIds === array_column($ordered, 'SaleTicketItemId'), 'Global SQL order and stable ties: ' . $sortBy . ' ' . $sortDir);
+        }
+    }
+    foreach (['no-such-plan', "' OR 1=1 --", '%', '_', '!', 'PRIVATE'] as $search) {
+        $none = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&' . http_build_query(['search' => $search]))['body'], true);
+        checkPhoto($none['items'] === [] && $none['pagination']['total'] === 0 && $none['pagination']['totalPages'] === 0, 'Literal search/no matches: ' . $search);
+    }
+    $db->update('SaleTicketItemDesktop', ['ProductName' => "Plan 50%_! O'Brien"], 'Id = ?', ['criteria-01']);
+    $literal = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&' . http_build_query(['search' => "  50%_! O'Brien  "]))['body'], true);
+    checkPhoto(array_column($literal['items'], 'SaleTicketItemId') === ['criteria-01'] && $literal['items'][0]['IsCancelled'] === true
+        && $literal['items'][0]['AmountPaid'] === 0 && $literal['items'][0]['DaysRemaining'] < 0, 'Literal wildcards, apostrophe, trimmed search, cancelled zero and expired days');
+    $foreign = json_decode(photoCgi($schema, $directory, 'GET', $otherToken, '', '', $query . '&search=GLOBAL-criteria&customerApiId=gym-a')['body'], true);
+    checkPhoto($foreign['items'] === [] && $foreign['pagination']['total'] === 0, 'Search cannot escape JWT gym');
+    $all = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&search=%20%20')['body'], true);
+    checkPhoto($all['pagination']['total'] === 19, 'Whitespace search does not restrict results');
+    foreach (['memberName' => 'Fullname', 'planName' => 'PlanName', 'paymentDate' => 'PaymentDate'] as $sortBy => $field) {
+        $nullFirst = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&sortBy=' . $sortBy . '&sortDir=asc')['body'], true);
+        checkPhoto($nullFirst['items'][0]['SaleTicketItemId'] === 'sales-5' && $nullFirst['items'][0][$field] === null, 'SQL null order retains incomplete sale: ' . $sortBy);
+    }
     require_once __DIR__ . '/../app/Services/MembershipSalesService.php';
     $noSales = (new App\Services\MembershipSalesService($db))->listing('gym-with-no-sales', []);
     checkPhoto($noSales['items'] === [] && $noSales['pagination']['totalPages'] === 0, 'Gym without sales');
-    echo "Membership sales CGI: JWT, gym/relationship/photo isolation, repeated sales, cancellation, discounts, mixed tickets, cash change, zero/null, dates, ordering and pagination passed.\n";
+    echo "Membership sales CGI: JWT, gym/relationship/photo isolation, cancellation, amounts, zero/null, dates, global/literal search, six orders with ties, filtered counts, validation and pagination passed.\n";
 }

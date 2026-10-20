@@ -37,13 +37,44 @@ class MembershipSalesService
         return $date && $date->format('Y-m-d') === $day && $day >= '1000-01-01' ? $value : null;
     }
 
-    /** Consulta una partida por venta, conserva cancelaciones/bajas y limita cada relacion al gimnasio del JWT. */
+    /** Valida el orden del historial contra opciones publicas para impedir columnas o direcciones SQL arbitrarias. */
+    private function sortOption(array $query, string $key, string $default, array $allowed): string
+    {
+        $value = $query[$key] ?? $default;
+        if (!is_string($value) || !in_array($value, $allowed, true)) {
+            throw new ApiException("{$key} debe ser uno de: " . implode(', ', $allowed), 422);
+        }
+        return $value;
+    }
+
+    /** Consulta el historial del gimnasio, filtrando y ordenando antes de paginar sin excluir cancelaciones/bajas. */
     public function listing(string $customerId, array $query): array
     {
         $page = $this->pageNumber($query, 'page', 1, 1000000);
         $pageSize = $this->pageNumber($query, 'pageSize', 25, 100);
+        $columns = ['memberName' => 'u.Fullname', 'planName' => "NULLIF(TRIM(i.ProductName), '')", 'paymentDate' => 't.SaleDate'];
+        $sortBy = $this->sortOption($query, 'sortBy', 'paymentDate', array_keys($columns));
+        $sortDir = $this->sortOption($query, 'sortDir', 'desc', ['asc', 'desc']);
+        $search = $query['search'] ?? '';
+        if (!is_string($search)) {
+            throw new ApiException('search debe ser texto', 422);
+        }
+        $search = trim($search);
+        // Las mismas relaciones y condiciones garantizan totales del conjunto filtrado, aun con relaciones ausentes.
+        $from = 'FROM SaleTicketItemDesktop i
+             LEFT JOIN SaleTicketDesktop t ON t.Id = i.SaleTicketId AND t.CustomerApiId = i.CustomerApiId
+             LEFT JOIN SubscriptionsDesktop s ON s.Id = i.SubscriptionId AND s.CustomerApiId = i.CustomerApiId
+             LEFT JOIN UsersDesktop u ON u.Id = s.UserId AND u.CustomerApiId = i.CustomerApiId';
         $where = "i.CustomerApiId = ? AND NULLIF(TRIM(i.SubscriptionId), '') IS NOT NULL";
-        $total = (int) $this->db->fetchOne("SELECT COUNT(*) AS total FROM SaleTicketItemDesktop i WHERE {$where}", [$customerId])['total'];
+        $params = [$customerId];
+        if ($search !== '') {
+            // La coincidencia parcial es literal: %, _ y el escape no se interpretan como comodines del usuario.
+            $pattern = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search) . '%';
+            $where .= " AND (u.Fullname LIKE ? ESCAPE '!' OR NULLIF(TRIM(i.ProductName), '') LIKE ? ESCAPE '!' OR t.Folio LIKE ? ESCAPE '!')";
+            array_push($params, $pattern, $pattern, $pattern);
+        }
+        $total = (int) $this->db->fetchOne("SELECT COUNT(*) AS total {$from} WHERE {$where}", $params)['total'];
+        $order = $columns[$sortBy] . ' ' . strtoupper($sortDir) . ', i.Id DESC';
         $rows = $this->db->fetchAll(
             "SELECT i.Id AS SaleTicketItemId, i.SaleTicketId, i.SubscriptionId,
                 NULLIF(TRIM(i.ProductName), '') AS PlanName,
@@ -56,17 +87,14 @@ class MembershipSalesService
                 i.LineTotal, t.TotalAmount, t.PaidAmount, t.ChangeAmount,
                 (SELECT SUM(li.LineTotal) FROM SaleTicketItemDesktop li
                     WHERE li.SaleTicketId = t.Id AND li.CustomerApiId = i.CustomerApiId) AS ItemsTotal
-             FROM SaleTicketItemDesktop i
-             LEFT JOIN SaleTicketDesktop t ON t.Id = i.SaleTicketId AND t.CustomerApiId = i.CustomerApiId
-             LEFT JOIN SubscriptionsDesktop s ON s.Id = i.SubscriptionId AND s.CustomerApiId = i.CustomerApiId
-             LEFT JOIN UsersDesktop u ON u.Id = s.UserId AND u.CustomerApiId = i.CustomerApiId
+             {$from}
              LEFT JOIN AdministratorsDesktop a ON a.CustomerApiId = i.CustomerApiId AND a.Id = (
                 SELECT seller.Id FROM AdministratorsDesktop seller WHERE seller.CustomerApiId = i.CustomerApiId
                     AND (seller.Id = t.CreatedBy OR seller.Username = t.CreatedBy)
                 ORDER BY (seller.Id = t.CreatedBy) DESC, seller.Id DESC LIMIT 1)
              WHERE {$where}
-             ORDER BY t.SaleDate DESC, i.Id DESC LIMIT ? OFFSET ?",
-            [$customerId, $pageSize, ($page - 1) * $pageSize]
+             ORDER BY {$order} LIMIT ? OFFSET ?",
+            array_merge($params, [$pageSize, ($page - 1) * $pageSize])
         );
         $today = new \DateTimeImmutable('today');
         foreach ($rows as &$row) {

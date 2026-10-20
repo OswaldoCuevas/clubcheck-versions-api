@@ -10,8 +10,19 @@ Usa `desktop_jwt`, igual que `/api/desktop/memberships`: `Authorization: Bearer 
 | --- | --- | --- |
 | page | 1 | Entero decimal positivo, máximo 1000000 |
 | pageSize | 25 | Entero decimal positivo, máximo 100 |
+| search | cadena vacía | Texto; coincidencia parcial en `Fullname`, `PlanName` histórico o `Folio` |
+| sortBy | paymentDate | `memberName`, `planName` o `paymentDate` |
+| sortDir | desc | `asc` o `desc` (minúsculas) |
 
-Parámetros inválidos producen 422; no se truncan ni convierten silenciosamente. Orden fijo: `SaleTicketDesktop.SaleDate DESC, SaleTicketItemDesktop.Id DESC`; las partidas sin ticket del gimnasio quedan al final. Cada partida con `SubscriptionId` no vacío aparece una vez, aunque haya más ventas del mismo socio. Se conservan bajas lógicas de partida, ticket, membresía, socio y vendedor para mantener el historial. Los catálogos actuales no sustituyen el plan vendido. Páginas fuera del rango devuelven `items: []` y mantienen el total; sin resultados `totalPages` es 0. La paginación por desplazamiento no es una instantánea entre peticiones: nuevas sincronizaciones pueden desplazar las páginas.
+Parámetros inválidos producen 422; no se truncan ni convierten silenciosamente. Orden predeterminado: `SaleTicketDesktop.SaleDate DESC, SaleTicketItemDesktop.Id DESC`. Los tres órdenes usan siempre el identificador de partida descendente como desempate. `memberName` usa `UsersDesktop.Fullname`; `planName` usa `NULLIF(TRIM(SaleTicketItemDesktop.ProductName), '')`, exactamente el nombre histórico mostrado; `paymentDate` usa `SaleTicketDesktop.SaleDate`. Los nulos siguen el orden de MySQL: primero en ascendente y al final en descendente. Cada partida con `SubscriptionId` no vacío aparece una vez, aunque haya más ventas del mismo socio. Se conservan bajas lógicas de partida, ticket, membresía, socio y vendedor para mantener el historial. Los catálogos actuales no sustituyen el plan vendido. Páginas fuera del rango devuelven `items: []` y mantienen el total; sin resultados `totalPages` es 0. La paginación por desplazamiento no es una instantánea entre peticiones: nuevas sincronizaciones pueden desplazar las páginas.
+
+La búsqueda se recorta en sus extremos; vacía o con espacios no restringe resultados. `%`, `_`, `!` y apóstrofes se buscan literalmente, con parámetros enlazados y escape explícito de LIKE. Mayúsculas y acentos siguen la colación de las columnas de la base. Se aplican búsqueda y orden antes de `LIMIT/OFFSET`, con las mismas relaciones y filtros en conteo y consulta: `pagination.total` y `totalPages` corresponden al historial filtrado del gimnasio del JWT. Las opciones de orden se validan contra una lista permitida; no se interpolan nombres arbitrarios. Ausencia o null usa los valores predeterminados, como la paginación existente; arrays y tipos incompatibles producen 422.
+
+Ejemplo de integración (conservar los criterios al paginar y reiniciar `page=1` cuando cambien):
+
+`GET /api/desktop/membership-sales?page=1&pageSize=10&search=2020-01-01&sortBy=planName&sortDir=asc`
+
+La respuesta conserva `items` y `pagination` en la raíz y los campos `PlanName`, `StartDate`, `AmountPaid`; no agrega `total` en la raíz ni modifica los nombres para adaptarlos al consumidor.
 
 ```json
 {
@@ -102,11 +113,12 @@ php -d xdebug.mode=off tests/user-photos.php
 
 La segunda suite usa MySQL local con root sin contraseña y crea/elimina únicamente un esquema aleatorio `clubcheck_photo_test_*`. `PHOTO_TEST_PORT` permite elegir un servidor de pruebas aislado (predeterminado 3306); jamás usar un servidor productivo. Ejecuta regresiones del reporte actual, ficha del socio, fotos y el nuevo historial con CGI y JWT reales. La nueva cobertura SQL está en `tests/membership-sales.php`: rutas, paginación estable, varias ventas del mismo socio, canceladas y bajas, mixtos/descuentos/cambio, cero, nulos, relaciones incompletas/ajenas, fechas inválidas, metadatos y descarga de fotos.
 
-Resultados de esta ejecución (2026-10-20):
+Resultados de esta ampliación (2026-10-20; sustituyen el bloqueo MySQL de la fase anterior):
 
-- **Pasó:** prueba unitaria con persistencia simulada; importes, conciliación, null/cero, cancelación, fechas locales/bisiestas, paginación y validación, foto por lote, registro de ruta y middleware JWT real (ausente, inválido, tipo incorrecto y token firmado válido).
+- **Pasó:** prueba unitaria con persistencia simulada; importes, conciliación, null/cero, cancelación, fechas locales/bisiestas, paginación y validación, foto por lote, registro de ruta y middleware JWT real. Incluye búsqueda enlazada literal, relaciones/filtros compartidos y los seis órdenes permitidos.
 - **Pasó:** `php -l` en todos los PHP nuevos/modificados; `git diff --check`.
-- **Bloqueado:** suite MySQL/CGI. Falló conexión local al puerto 3306. Se inicializó una instancia efímera dentro del repositorio en 33379, pero su arranque falló en InnoDB con `Can't create UNDO tablespace ... already exists` / `Data Dictionary initialization failed`. Se retiraron sus archivos temporales. No se validó ejecución SQL ni regresiones integradas; la prueba unitaria no sustituye esa validación.
-- **Pendiente para Johanna/orquestador:** ejecutar suite en MySQL funcional y conectar el portal real antes de aceptar el flujo completo. Esta tarea solo modifica el backend asignado. Preparar este backend antes de consumir el endpoint desde el portal; no se desplegó ni se modificaron datos reales.
+- **Pasó:** `php -d xdebug.mode=off tests/user-photos.php` con MySQL local funcional y CGI real en esquema temporal eliminado por la suite. Verifica búsquedas por socio, plan histórico con fecha y folio fuera de la primera página (12 coincidencias, página de tamaño 10), los tres órdenes en ambas direcciones a través de tres páginas, empates estables, totales sin duplicados, búsqueda vacía/sin coincidencias, caracteres literales/inyección, 422, JWT y relaciones/fotos aisladas. Conserva canceladas, cero, nulos y días negativos. Se corrigió el fixture previo de administradores para incluir `Password`, obligatorio en el esquema actual; no cambia datos operativos.
+- **Pasó:** regresiones de reporte de membresías, membresía vigente, ficha del socio y fotografías (carga multipart, descarga protegida, reintentos, conflictos, fallos de persistencia, limpieza y bajas) en la misma suite.
+- **Pendiente para Johanna/orquestador:** conectar el portal real y validar sus controles, tarjetas y estados antes de aceptar el flujo completo API–portal. Solo se modificó el backend asignado; no se accedió al repositorio del portal ni al escritorio. No se desplegó ni se modificaron datos reales. Los parámetros nuevos son opcionales y el backend puede prepararse antes de actualizar el consumidor.
 
 Repositorio de trabajo: `C:\laragon\www\clubcheck` (backend asignado). Rama existente: `orchestrator/implementation-15`; sin commits, push, merge ni PR. El contrato anterior es el material de integración para el portal; no se enviaron mensajes externos.
