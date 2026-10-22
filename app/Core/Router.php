@@ -20,6 +20,7 @@ class Router
         'customer_jwt' => \App\Middleware\CustomerJwtMiddleware::class,
         'desktop_jwt' => \App\Middleware\DesktopJwtMiddleware::class,
         'push_client_jwt' => \App\Middleware\PushClientJwtMiddleware::class,
+        'members_jwt' => \App\Middleware\MembersJwtMiddleware::class,
     ];
 
     /**
@@ -88,6 +89,7 @@ class Router
         ];
     }
 
+    /** Resuelve rutas sin registrar URI de identidad/invitaciones del proceso members. */
     public function resolve()
     {
         // Obtener método HTTP real, soportando method spoofing
@@ -95,7 +97,9 @@ class Router
         $requestUri = $this->getRequestUri();
 
         // Debug
-        error_log("Router Debug - Method: $requestMethod, URI: $requestUri");
+        if (!preg_match('#^/api/(members|member-management)(/|$)#', $requestUri)) {
+            error_log("Router Debug - Method: $requestMethod, URI: $requestUri");
+        }
 
         $this->routeParams = [];
 

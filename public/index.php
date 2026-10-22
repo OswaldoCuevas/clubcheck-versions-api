@@ -18,8 +18,23 @@ if (file_exists($envLoaderPath)) {
 // Incluir sistema de configuración
 require_once __DIR__ . '/../config/bootstrap.php';
 
+/** Configura CORS del flujo members por entorno y conserva el contrato de los clientes existentes. */
 function sendCorsHeaders(): void
 {
+    $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
+    if (preg_match('#/api/(members|member-management)(/|$)#', $requestPath)) {
+        $origins = array_filter(array_map('trim', explode(',', (string) getenv('MEMBERS_CORS_ORIGINS'))));
+        $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+        if (in_array($origin, $origins, true)) {
+            header('Access-Control-Allow-Origin: ' . $origin);
+        }
+        header('Vary: Origin');
+        header('Access-Control-Allow-Methods: GET, POST, PATCH, OPTIONS');
+        header('Access-Control-Allow-Headers: Content-Type, Authorization, RequestId, Request-Id, X-Request-Id');
+        header('Cache-Control: no-store');
+        header('Referrer-Policy: no-referrer');
+        return;
+    }
     header('Access-Control-Allow-Origin: *');
     header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
     header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-Access-Token, X-Customer-JWT, X-Desktop-JWT, X-Device-Name, X-Client-Version, X-HTTP-Method-Override');
@@ -90,6 +105,8 @@ try {
 
     if (!$isPublicRoute) {
         $apiPrefixes = [
+            '/api/members/',
+            '/api/member-management/',
             '/public/assets',
             '/assets',
             '/api/customers/sessions',

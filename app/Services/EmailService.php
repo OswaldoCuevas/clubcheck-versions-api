@@ -118,6 +118,36 @@ class EmailService
 
     // ==================== MÉTODOS DE ENVÍO ====================
 
+    /** Envía confirmación members usando SMTP existente sin persistir el secreto en Body, logs o historial. */
+    public function sendMemberVerification(string $email, string $url): bool
+    {
+        if (!$this->isConfigured()) {
+            return false;
+        }
+        try {
+            $mailer = $this->getMailer();
+            $mailer->clearAllRecipients();
+            $mailer->clearReplyTos();
+            $mailer->clearAttachments();
+            $mailer->SMTPDebug = 0;
+            $mailer->addAddress($email);
+            $mailer->Subject = 'Confirma tu cuenta ClubCheck';
+            $mailer->Body = '<p>Confirma tu correo para acceder a tu cuenta de socios. El enlace vence en 24 horas.</p><p><a href="'
+                . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '">Confirmar correo</a></p>';
+            $mailer->AltBody = 'Confirma tu cuenta ClubCheck: ' . $url;
+            return $mailer->send();
+        } catch (\Throwable $e) {
+            // No registrar excepciones SMTP: pueden contener destinatario, contenido o credenciales.
+            return false;
+        } finally {
+            if ($this->mailer !== null) {
+                $this->mailer->Body = '';
+                $this->mailer->AltBody = '';
+                $this->mailer->clearAllRecipients();
+            }
+        }
+    }
+
     /**
      * Envía un correo electrónico genérico
      */

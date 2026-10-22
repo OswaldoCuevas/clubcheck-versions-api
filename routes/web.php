@@ -269,4 +269,20 @@ $router->get('/api/email/history/:email', 'EmailController', 'history', ['custom
 $router->get('/api/email/stats', 'EmailController', 'stats', ['customer_jwt']);
 $router->post('/api/email/cleanup', 'EmailController', 'cleanup', ['customer_jwt']);
 
+// Cuentas globales members: autorización propia dentro del adaptador, independiente del login administrativo.
+$router->post('/api/members/register', 'MembersController', 'register');
+$router->post('/api/members/verify-email', 'MembersController', 'verifyEmail');
+$router->post('/api/members/resend-verification', 'MembersController', 'resendVerification');
+$router->post('/api/members/login', 'MembersController', 'login');
+$router->post('/api/members/logout', 'MembersController', 'logout');
+$router->get('/api/members/me', 'MembersController', 'me');
+$router->get('/api/members/links', 'MembersController', 'links');
+$router->post('/api/members/context', 'MembersController', 'context');
+$router->post('/api/members/invitation-context', 'MembersController', 'invitationContext');
+$router->post('/api/members/links', 'MembersController', 'redeem');
+$router->post('/api/member-management/operator-session', 'MembersController', 'operatorSession');
+$router->post('/api/member-management/invitations', 'MembersController', 'issue');
+$router->get('/api/member-management/accounts', 'MembersController', 'accounts');
+$router->patch('/api/member-management/links/:LinkId', 'MembersController', 'disable');
+
 return $router;

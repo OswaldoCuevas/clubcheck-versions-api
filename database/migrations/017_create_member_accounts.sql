@@ -1,0 +1,66 @@
+-- Aditiva: no modifica las tablas sincronizadas ni asigna permisos implícitos.
+CREATE TABLE IF NOT EXISTS MemberAccounts (
+ Id CHAR(36) PRIMARY KEY, Name VARCHAR(150) NOT NULL,
+ Email VARCHAR(254) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ PasswordHash VARCHAR(255) NOT NULL, EmailConfirmedAt DATETIME NULL,
+ PendingInvitationContextId CHAR(36) NULL,
+ Active TINYINT NOT NULL DEFAULT 1, IsDeleted TINYINT NOT NULL DEFAULT 0,
+ CreatedAt DATETIME NOT NULL, UpdatedAt DATETIME NOT NULL, CreatedBy CHAR(36) NULL, UpdatedBy CHAR(36) NULL,
+ UNIQUE KEY UqMemberEmail (Email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS MemberAccountLinks (
+ Id CHAR(36) PRIMARY KEY, MemberAccountId CHAR(36) NOT NULL,
+ UserId VARCHAR(36) NOT NULL, CustomerApiId VARCHAR(64) NOT NULL,
+ Active TINYINT NOT NULL DEFAULT 1, IsDeleted TINYINT NOT NULL DEFAULT 0,
+ CreatedAt DATETIME NOT NULL, UpdatedAt DATETIME NOT NULL, CreatedBy CHAR(36) NULL, UpdatedBy CHAR(36) NULL,
+ UNIQUE KEY UqMemberOwner (CustomerApiId, UserId), KEY IxMemberLinks (MemberAccountId),
+ FOREIGN KEY (MemberAccountId) REFERENCES MemberAccounts(Id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS MemberLinkInvitations (
+ Id CHAR(36) PRIMARY KEY, UserId VARCHAR(36) NOT NULL, CustomerApiId VARCHAR(64) NOT NULL,
+ RequestId VARCHAR(64) NOT NULL, SecretHash CHAR(64) NOT NULL, CodeHash CHAR(64) NOT NULL,
+ ExpiresAt DATETIME NOT NULL, ConsumedAt DATETIME NULL, MemberAccountId CHAR(36) NULL,
+ Active TINYINT NOT NULL DEFAULT 1, IsDeleted TINYINT NOT NULL DEFAULT 0,
+ CreatedAt DATETIME NOT NULL, UpdatedAt DATETIME NOT NULL, CreatedBy CHAR(36) NULL, UpdatedBy CHAR(36) NULL,
+ UNIQUE KEY UqMemberRequest (CustomerApiId, RequestId), UNIQUE KEY UqMemberSecret (SecretHash),
+ UNIQUE KEY UqMemberCode (CodeHash), KEY IxMemberInvitationUser (CustomerApiId, UserId)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS MemberInvitationContexts (
+ Id CHAR(36) PRIMARY KEY, InvitationId CHAR(36) NOT NULL, MemberAccountId CHAR(36) NULL,
+ Active TINYINT NOT NULL DEFAULT 1, IsDeleted TINYINT NOT NULL DEFAULT 0,
+ CreatedAt DATETIME NOT NULL, UpdatedAt DATETIME NOT NULL, CreatedBy CHAR(36) NULL, UpdatedBy CHAR(36) NULL,
+ FOREIGN KEY (InvitationId) REFERENCES MemberLinkInvitations(Id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS MemberEmailVerifications (
+ Id CHAR(36) PRIMARY KEY, MemberAccountId CHAR(36) NOT NULL, TokenHash CHAR(64) NOT NULL,
+ ExpiresAt DATETIME NOT NULL, ConsumedAt DATETIME NULL,
+ Active TINYINT NOT NULL DEFAULT 1, IsDeleted TINYINT NOT NULL DEFAULT 0,
+ CreatedAt DATETIME NOT NULL, UpdatedAt DATETIME NOT NULL, CreatedBy CHAR(36) NULL, UpdatedBy CHAR(36) NULL,
+ UNIQUE KEY UqMemberVerification (TokenHash), KEY IxMemberVerificationAccount (MemberAccountId),
+ FOREIGN KEY (MemberAccountId) REFERENCES MemberAccounts(Id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS MemberSessions (
+ Id CHAR(36) PRIMARY KEY, MemberAccountId CHAR(36) NOT NULL, ExpiresAt DATETIME NOT NULL,
+ Active TINYINT NOT NULL DEFAULT 1, IsDeleted TINYINT NOT NULL DEFAULT 0,
+ CreatedAt DATETIME NOT NULL, UpdatedAt DATETIME NOT NULL, CreatedBy CHAR(36) NULL, UpdatedBy CHAR(36) NULL,
+ KEY IxMemberSessionAccount (MemberAccountId), FOREIGN KEY (MemberAccountId) REFERENCES MemberAccounts(Id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS MemberRateLimits (
+ Id CHAR(36) PRIMARY KEY, BucketHash CHAR(64) NOT NULL, Attempts INT NOT NULL DEFAULT 0, ExpiresAt DATETIME NOT NULL,
+ Active TINYINT NOT NULL DEFAULT 1, IsDeleted TINYINT NOT NULL DEFAULT 0,
+ CreatedAt DATETIME NOT NULL, UpdatedAt DATETIME NOT NULL, CreatedBy CHAR(36) NULL, UpdatedBy CHAR(36) NULL,
+ UNIQUE KEY UqMemberRateBucket (BucketHash)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS MemberOperatorPermissions (
+ Id CHAR(36) PRIMARY KEY, AdministratorId VARCHAR(36) NOT NULL, CustomerApiId VARCHAR(64) NOT NULL,
+ Permission VARCHAR(80) NOT NULL,
+ Active TINYINT NOT NULL DEFAULT 1, IsDeleted TINYINT NOT NULL DEFAULT 0,
+ CreatedAt DATETIME NOT NULL, UpdatedAt DATETIME NOT NULL, CreatedBy CHAR(36) NULL, UpdatedBy CHAR(36) NULL,
+ UNIQUE KEY UqMemberOperatorPermission (CustomerApiId, AdministratorId, Permission)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS MemberOperatorSessions (
+ Id CHAR(36) PRIMARY KEY, AdministratorId VARCHAR(36) NOT NULL, CustomerApiId VARCHAR(64) NOT NULL, ExpiresAt DATETIME NOT NULL,
+ Active TINYINT NOT NULL DEFAULT 1, IsDeleted TINYINT NOT NULL DEFAULT 0,
+ CreatedAt DATETIME NOT NULL, UpdatedAt DATETIME NOT NULL, CreatedBy CHAR(36) NULL, UpdatedBy CHAR(36) NULL,
+ KEY IxMemberOperatorSession (AdministratorId, CustomerApiId)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
