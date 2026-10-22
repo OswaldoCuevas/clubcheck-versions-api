@@ -14,8 +14,8 @@ function testEnvironment(string $schema): void
     $values = ['XDEBUG_MODE' => 'off', 'APP_MODE' => 'DEV', 'APP_DEBUG' => 'false', 'DEV_DB_HOST' => '127.0.0.1', 'DEV_DB_PORT' => '3306',
         'DEV_DB_DATABASE' => $schema, 'DEV_DB_USERNAME' => getenv('MEMBERS_TEST_DB_USER') ?: 'root',
         'DEV_DB_PASSWORD' => getenv('MEMBERS_TEST_DB_PASSWORD') ?: '', 'MEMBERS_JWT_SECRET' => str_repeat('members-test-', 4),
-        'MEMBERS_INVITATION_KEY' => str_repeat('invite-test-', 4), 'MEMBERS_WEB_URL' => 'https://members.example.test',
-        'JWT_SECRET_KEY' => str_repeat('administrative-test-', 3), 'MEMBERS_CORS_ORIGINS' => 'https://members.example.test',
+        'MEMBERS_INVITATION_KEY' => str_repeat('invite-test-', 4), 'MEMBERS_WEB_URL' => 'https://localhost:8100',
+        'JWT_SECRET_KEY' => str_repeat('administrative-test-', 3), 'MEMBERS_CORS_ORIGINS' => 'https://localhost:8100',
         'MAIL_HOST' => '', 'MAIL_USER' => '', 'MAIL_PASSWORD' => '', 'MAIL_FROM_ADDRESS' => ''];
     foreach ($values as $k => $v) { putenv($k . '=' . $v); $_ENV[$k] = $v; }
     $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
