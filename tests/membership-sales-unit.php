@@ -85,7 +85,7 @@ foreach (['page' => [0, -1, '1.5', [], true, '1000001', '9999999999999999999999'
     }
 }
 $db->rows = [];
-foreach (['memberName' => 'u.Fullname', 'planName' => "NULLIF(TRIM(i.ProductName), '')", 'paymentDate' => 't.SaleDate'] as $sortBy => $column) {
+foreach (['memberName' => 'u.Fullname', 'planName' => "NULLIF(TRIM(p.Name), '')", 'paymentDate' => 't.SaleDate'] as $sortBy => $column) {
     foreach (['asc', 'desc'] as $direction) {
         $db->calls = [];
         $service->listing('gym-a', ['page' => '3', 'pageSize' => '2', 'search' => "  50%_! O'Brien  ", 'sortBy' => $sortBy, 'sortDir' => $direction]);
@@ -97,6 +97,9 @@ foreach (['memberName' => 'u.Fullname', 'planName' => "NULLIF(TRIM(i.ProductName
         checkSalesUnit(str_starts_with($listingFrom, substr($countFrom, 0, strpos($countFrom, ' WHERE '))), 'Count and listing share scoped relationships');
         $where = substr($count[0], strrpos($count[0], ' WHERE '));
         checkSalesUnit(str_contains($listing[0], $where) && substr_count($where, "LIKE ? ESCAPE '!'") === 3, 'Count and listing share all search conditions');
+        checkSalesUnit(str_contains($listing[0], "NULLIF(TRIM(p.Name), '') AS PlanName")
+            && str_contains($listing[0], 'LEFT JOIN SubscriptionPeriodDesktop p ON p.Id = s.SubscriptionPeriodId')
+            && !str_contains($listing[0], "NULLIF(TRIM(i.ProductName), '') AS PlanName"), 'Plan name comes from the related subscription period');
         checkSalesUnit(str_contains($listing[0], 'ORDER BY ' . $column . ' ' . strtoupper($direction) . ', i.Id DESC LIMIT ? OFFSET ?'), 'Allowed ordering and deterministic tie break');
     }
 }

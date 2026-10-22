@@ -20,7 +20,8 @@ function checkMembershipSales(PhotoTestDatabase $db, App\Services\UserPhotoServi
     $db->insert('AdministratorsDesktop', ['Id' => 'sales-foreign', 'CustomerApiId' => 'gym-b', 'Username' => 'PRIVATE', 'Password' => 'test-only']);
     foreach (['sales-current' => 0, 'sales-removed' => 1] as $id => $removed) {
         $db->insert('SubscriptionsDesktop', ['Id' => $id, 'CustomerApiId' => 'gym-a', 'UserId' => 'user-a',
-            'StartDate' => '2026-01-01, 10;00;00', 'EndingDate' => '2032-02-29, 00;00;00', 'Removed' => $removed, 'Payment' => 999]);
+            'StartDate' => '2026-01-01, 10;00;00', 'EndingDate' => '2032-02-29, 00;00;00',
+            'SubscriptionPeriodId' => $removed ? 'period-deleted' : 'period-a', 'Removed' => $removed, 'Payment' => 999]);
     }
     // Ticket mixto: membresia 100-20+8=88 y otro concepto 50; recibido 200 y cambio 62.
     $tickets = [
@@ -57,7 +58,9 @@ function checkMembershipSales(PhotoTestDatabase $db, App\Services\UserPhotoServi
     checkPhoto($rows['sales-1']['SellerName'] === 'Historical seller' && $rows['sales-5']['SellerName'] === null && $rows['sales-5']['SellerId'] === null, 'Historical seller by username and foreign relationship isolation');
     checkPhoto($rows['sales-1']['PaymentDate'] === '2026-01-02 10:30:00' && $rows['sales-1']['StartDate'] === '2026-01-01 10:00:00'
         && $rows['sales-1']['DaysRemaining'] === (int) (new DateTimeImmutable('today'))->diff(new DateTimeImmutable('2032-02-29'))->format('%r%a'), 'Local dates and days remaining');
-    checkPhoto($rows['sales-1']['PlanName'] === 'Plan historico' && $rows['sales-1']['PaymentReference'] === null && $rows['sales-1']['photo']['version'] === 3, 'Historical plan, optional reference and photo');
+    checkPhoto($rows['sales-1']['PlanName'] === 'Mensual' && $rows['sales-2']['PlanName'] === 'Eliminado'
+        && $rows['sales-1']['PaymentReference'] === null && $rows['sales-1']['photo']['version'] === 3,
+        'Related period name, logically deleted period, optional reference and photo');
     $page = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&page=2&pageSize=2')['body'], true);
     checkPhoto(array_column($page['items'], 'SaleTicketItemId') === ['sales-3', 'sales-2'] && $page['pagination'] === ['page' => 2, 'pageSize' => 2, 'total' => 5, 'totalPages' => 3], 'Sales pagination');
     $empty = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&page=100')['body'], true);
@@ -103,10 +106,12 @@ function checkMembershipSales(PhotoTestDatabase $db, App\Services\UserPhotoServi
         $id = sprintf('criteria-%02d', $number);
         $member = 'Socio global ' . ($number % 2 === 0 ? 'Ana' : 'Zoe');
         $plan = 'Plan historico 2020-01-01 ' . ($number % 3 === 0 ? 'Anual' : 'Mensual');
+        $periodId = 'period-' . $id;
         $date = '2020-01-' . ($number % 2 === 0 ? '01' : '02') . ' 10:00:00';
         $db->insert('UsersDesktop', ['Id' => $id, 'CustomerApiId' => 'gym-a', 'Fullname' => $member, 'PhoneNumber' => '000', 'BirthDate' => '2000-01-01']);
+        $db->insert('SubscriptionPeriodDesktop', ['Id' => $periodId, 'CustomerApiId' => 'gym-a', 'Name' => $plan, 'CreatedOn' => '2020-01-01']);
         $db->insert('SubscriptionsDesktop', ['Id' => $id, 'CustomerApiId' => 'gym-a', 'UserId' => $id,
-            'StartDate' => '2020-01-01', 'EndingDate' => '2020-02-01']);
+            'StartDate' => '2020-01-01', 'EndingDate' => '2020-02-01', 'SubscriptionPeriodId' => $periodId]);
         $db->insert('SaleTicketDesktop', ['Id' => $id, 'CustomerApiId' => 'gym-a', 'Folio' => 'GLOBAL-' . $id,
             'SaleDate' => $date, 'SubtotalAmount' => 0, 'TotalAmount' => 0, 'PaidAmount' => 0,
             'PaymentMethod' => 'Efectivo', 'Active' => $number === 1 ? 0 : 1]);
@@ -141,7 +146,7 @@ function checkMembershipSales(PhotoTestDatabase $db, App\Services\UserPhotoServi
         $none = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&' . http_build_query(['search' => $search]))['body'], true);
         checkPhoto($none['items'] === [] && $none['pagination']['total'] === 0 && $none['pagination']['totalPages'] === 0, 'Literal search/no matches: ' . $search);
     }
-    $db->update('SaleTicketItemDesktop', ['ProductName' => "Plan 50%_! O'Brien"], 'Id = ?', ['criteria-01']);
+    $db->update('SubscriptionPeriodDesktop', ['Name' => "Plan 50%_! O'Brien"], 'Id = ?', ['period-criteria-01']);
     $literal = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&' . http_build_query(['search' => "  50%_! O'Brien  "]))['body'], true);
     checkPhoto(array_column($literal['items'], 'SaleTicketItemId') === ['criteria-01'] && $literal['items'][0]['IsCancelled'] === true
         && $literal['items'][0]['AmountPaid'] === 0 && $literal['items'][0]['DaysRemaining'] < 0, 'Literal wildcards, apostrophe, trimmed search, cancelled zero and expired days');
@@ -192,7 +197,7 @@ function checkMembershipSalesAggregates(PhotoTestDatabase $db, string $schema, s
             'SubscriptionId' => $subscription, 'ProductName' => 'Historico AGGREGATES', 'Quantity' => 7,
             'UnitPrice' => $amount, 'LineSubtotal' => $amount, 'LineTotal' => $amount]);
     }
-    $query = 'report=membership-sales&range=custom&from=2040-02-01&to=2040-02-02&search=AGGREGATES';
+    $query = 'report=membership-sales&range=custom&from=2040-02-01&to=2040-02-02&search=agg-';
     $response = photoCgi($schema, $directory, 'GET', $token, '', '', $query);
     checkPhoto($response['status'] === 200, 'Period/aggregates HTTP success: ' . $response['body']);
     $result = json_decode($response['body'], true, 512, JSON_THROW_ON_ERROR);
@@ -207,7 +212,8 @@ function checkMembershipSalesAggregates(PhotoTestDatabase $db, string $schema, s
     $rows = array_column($result['items'], null, 'SaleTicketItemId');
     checkPhoto(isset($rows['agg-start'], $rows['agg-end'], $rows['agg-cancel']) && !isset($rows['agg-before'], $rows['agg-after'])
         && $rows['agg-none']['AmountPaid'] === 0 && $rows['agg-unknown']['AmountPaid'] === null
-        && $rows['agg-start']['PlanName'] === 'Historico AGGREGATES' && $rows['agg-state']['IsCancelled'] === null, 'Inclusive local boundaries, history and zero/null unchanged');
+        && $rows['agg-start']['PlanName'] === 'Mensual actual' && $rows['agg-missing']['PlanName'] === null
+        && $rows['agg-state']['IsCancelled'] === null, 'Inclusive local boundaries, related period names and zero/null unchanged');
     foreach (['page=2&pageSize=2', 'page=99', 'sortBy=planName&sortDir=asc', 'sortBy=memberName&sortDir=desc'] as $variation) {
         $changed = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', $query . '&' . $variation)['body'], true);
         checkPhoto($changed['summary'] === $expected && $changed['byPlan'] === $result['byPlan'], 'Global aggregates independent of ' . $variation);
@@ -230,7 +236,7 @@ function checkMembershipSalesAggregates(PhotoTestDatabase $db, string $schema, s
         $today = new DateTimeImmutable('today');
         $db->update('SaleTicketDesktop', ['SaleDate' => $today->modify('-' . ($days - 1) . ' days')->format('Y-m-d 00:00:00')], 'Id = ?', ['agg-start']);
         $db->update('SaleTicketDesktop', ['SaleDate' => $today->modify('-' . $days . ' days')->format('Y-m-d 23:59:59')], 'Id = ?', ['agg-end']);
-        $rolling = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', 'report=membership-sales&search=AGGREGATES&range=' . $range)['body'], true);
+        $rolling = json_decode(photoCgi($schema, $directory, 'GET', $token, '', '', 'report=membership-sales&search=agg-&range=' . $range)['body'], true);
         checkPhoto(array_column($rolling['items'], 'SaleTicketItemId') === ['agg-start'] && $rolling['summary']['incomeTotal'] === 0.1, 'Rolling boundary in real API: ' . $range);
     }
     echo "Membership sales aggregates CGI: local/inclusive/rolling periods, 422, decimal totals, unknowns, confirmed state, Quantity, catalogs, JWT isolation and page/order independence passed.\n";

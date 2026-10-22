@@ -10,13 +10,13 @@ Usa `desktop_jwt`, igual que `/api/desktop/memberships`: `Authorization: Bearer 
 | --- | --- | --- |
 | page | 1 | Entero decimal positivo, máximo 1000000 |
 | pageSize | 25 | Entero decimal positivo, máximo 100 |
-| search | cadena vacía | Texto; coincidencia parcial en `Fullname`, `PlanName` histórico o `Folio` |
+| search | cadena vacía | Texto; coincidencia parcial en `Fullname`, nombre del periodo de membresía o `Folio` |
 | sortBy | paymentDate | `memberName`, `planName` o `paymentDate` |
 | sortDir | desc | `asc` o `desc` (minúsculas) |
 | range | sin filtro temporal | `today`, `week`, `fifteen`, `month`, `custom`; alias `15`, `15days`, `30`, `30days` |
 | from, to | sin fechas | Fechas locales `YYYY-MM-DD`, ambas obligatorias para `custom` |
 
-Parámetros inválidos producen 422; no se truncan ni convierten silenciosamente. Orden predeterminado: `SaleTicketDesktop.SaleDate DESC, SaleTicketItemDesktop.Id DESC`. Los tres órdenes usan siempre el identificador de partida descendente como desempate. `memberName` usa `UsersDesktop.Fullname`; `planName` usa `NULLIF(TRIM(SaleTicketItemDesktop.ProductName), '')`, exactamente el nombre histórico mostrado; `paymentDate` usa `SaleTicketDesktop.SaleDate`. Los nulos siguen el orden de MySQL: primero en ascendente y al final en descendente. Cada partida con `SubscriptionId` no vacío aparece una vez, aunque haya más ventas del mismo socio. Se conservan bajas lógicas de partida, ticket, membresía, socio y vendedor para mantener el historial. Los catálogos actuales no sustituyen el plan vendido. Páginas fuera del rango devuelven `items: []` y mantienen el total; sin resultados `totalPages` es 0. La paginación por desplazamiento no es una instantánea entre peticiones: nuevas sincronizaciones pueden desplazar las páginas.
+Parámetros inválidos producen 422; no se truncan ni convierten silenciosamente. Orden predeterminado: `SaleTicketDesktop.SaleDate DESC, SaleTicketItemDesktop.Id DESC`. Los tres órdenes usan siempre el identificador de partida descendente como desempate. `memberName` usa `UsersDesktop.Fullname`; `planName` usa `SubscriptionPeriodDesktop.Name` mediante `SaleTicketItemDesktop.SubscriptionId → SubscriptionsDesktop.SubscriptionPeriodId`; `paymentDate` usa `SaleTicketDesktop.SaleDate`. Los nulos siguen el orden de MySQL: primero en ascendente y al final en descendente. Cada partida con `SubscriptionId` no vacío aparece una vez, aunque haya más ventas del mismo socio. Se conservan bajas lógicas de partida, ticket, membresía, socio, periodo y vendedor para mantener el historial. Páginas fuera del rango devuelven `items: []` y mantienen el total; sin resultados `totalPages` es 0. La paginación por desplazamiento no es una instantánea entre peticiones: nuevas sincronizaciones pueden desplazar las páginas.
 
 La búsqueda se recorta en sus extremos; vacía o con espacios no restringe resultados. `%`, `_`, `!` y apóstrofes se buscan literalmente, con parámetros enlazados y escape explícito de LIKE. Mayúsculas y acentos siguen la colación de las columnas de la base. Se aplican búsqueda y orden antes de `LIMIT/OFFSET`, con las mismas relaciones y filtros en conteo y consulta: `pagination.total` y `totalPages` corresponden al historial filtrado del gimnasio del JWT. Las opciones de orden se validan contra una lista permitida; no se interpolan nombres arbitrarios. Ausencia o null usa los valores predeterminados, como la paginación existente; arrays y tipos incompatibles producen 422.
 
@@ -33,7 +33,7 @@ La respuesta añade `summary` y `byPlan` y conserva `items` y `pagination` en la
       "SaleTicketItemId": "item-1",
       "SaleTicketId": "ticket-1",
       "SubscriptionId": "subscription-1",
-      "PlanName": "Mensual histórico",
+      "PlanName": "Mensual",
       "Folio": "V-001",
       "UserId": "user-1",
       "Fullname": "Socio de ejemplo",
@@ -81,7 +81,7 @@ Período y búsqueda se aplican al mismo conjunto antes de generar listado, resu
 | byPlan[].planName | string; nombre actual de `SubscriptionPeriodDesktop` del mismo gimnasio. «Plan no disponible» si falta el catálogo/nombre y «Sin plan identificado» si falta el identificador o la relación de membresía. |
 | byPlan[].soldCount | integer; cantidad de partidas contabilizadas para ese identificador. |
 
-La suma de `byPlan[].soldCount` coincide con `summary.soldCount`. Los grupos se ordenan por cantidad descendente e identificador ascendente. Dos identificadores distintos siguen siendo grupos distintos aunque compartan nombre. El nombre del catálogo actual **no es una instantánea histórica**; `items[].PlanName` conserva el nombre histórico y no se reemplaza por el catálogo.
+La suma de `byPlan[].soldCount` coincide con `summary.soldCount`. Los grupos se ordenan por cantidad descendente e identificador ascendente. Dos identificadores distintos siguen siendo grupos distintos aunque compartan nombre. `items[].PlanName` y `byPlan[].planName` se obtienen del mismo periodo relacionado.
 
 Canceladas y estados desconocidos permanecen en las tarjetas; no incrementan ningún agregado. Se conserva la conciliación histórica de cada partida (incluidos productos del ticket para verificarlo); ni los productos, ni el cambio, ni el total repetido del ticket se suman al ingreso de membresías. Conciliación y sumas se calculan con DECIMAL en MySQL, convirtiendo a número JSON solo al serializar, como `AmountPaid` existente. Un importe cero cuenta como conocido. Conjunto vacío o solo canceladas: `summary` contiene cuatro ceros y `byPlan: []`.
 
@@ -106,7 +106,7 @@ El portal debe mostrar ingreso parcial (`knownIncomeTotal`) y los importes pendi
 | Campos | Tipo JSON y fuente |
 | --- | --- |
 | SaleTicketItemId, SaleTicketId, SubscriptionId | string; identificadores persistidos en la partida, aun si falta la relación |
-| PlanName | string o null; `SaleTicketItemDesktop.ProductName`, nombre histórico, sin recurrir al nombre/precio actual del catálogo |
+| PlanName | string o null; `SubscriptionPeriodDesktop.Name`, resuelto mediante la membresía de la partida y restringido al mismo gimnasio |
 | Folio | string o null; ticket relacionado |
 | UserId, Fullname | string o null; membresía y socio relacionados dentro del mismo gimnasio |
 | photo | objeto `{version: number, updatedAt: string}` o null; contrato existente de `UserPhotoService` |
@@ -122,7 +122,7 @@ El portal debe mostrar ingreso parcial (`knownIncomeTotal`) y los importes pendi
 
 La cancelación es independiente de la vigencia: mostrar **Cancelada** aunque `DaysRemaining` sea positivo. No representar un valor null como cero ni como falso. Una fecha local sin zona no debe interpretarse implícitamente como UTC en el portal.
 
-Todas las relaciones se restringen por `CustomerApiId`. Una relación ausente o perteneciente a otro gimnasio no oculta la partida y sus datos enriquecidos son null. Si `SubscriptionId` ya fue eliminado físicamente y quedó SQL NULL, no se puede identificar la partida como membresía; no se adivina a partir del nombre. Si falta el nombre histórico, `PlanName` es null: el esquema no contiene otra instantánea verificable del plan vendido.
+Todas las relaciones se restringen por `CustomerApiId`. Una relación ausente o perteneciente a otro gimnasio no oculta la partida y sus datos enriquecidos son null. Si falta la membresía, `SubscriptionPeriodId`, el periodo relacionado o su nombre, `PlanName` es null; nunca se sustituye con `SaleTicketItemDesktop.ProductName`.
 
 ## Regla del importe y descuentos
 
@@ -161,7 +161,7 @@ Resultados de esta ampliación (2026-10-20; sustituyen el bloqueo MySQL de la fa
 
 - **Pasó:** prueba unitaria con persistencia simulada; importes, conciliación, null/cero, cancelación, fechas locales/bisiestas, paginación y validación, foto por lote, registro de ruta y middleware JWT real. Incluye búsqueda enlazada literal, relaciones/filtros compartidos y los seis órdenes permitidos.
 - **Pasó:** `php -l` en todos los PHP nuevos/modificados; `git diff --check`.
-- **Pasó:** `php -d xdebug.mode=off tests/user-photos.php` con MySQL local funcional y CGI real en esquema temporal eliminado por la suite. Verifica búsquedas por socio, plan histórico con fecha y folio fuera de la primera página (12 coincidencias, página de tamaño 10), los tres órdenes en ambas direcciones a través de tres páginas, empates estables, totales sin duplicados, búsqueda vacía/sin coincidencias, caracteres literales/inyección, 422, JWT y relaciones/fotos aisladas. Conserva canceladas, cero, nulos y días negativos. Se corrigió el fixture previo de administradores para incluir `Password`, obligatorio en el esquema actual; no cambia datos operativos.
+- **Pasó:** `php -d xdebug.mode=off tests/user-photos.php` con MySQL local funcional y CGI real en esquema temporal eliminado por la suite. Verifica búsquedas por socio, nombre del periodo y folio fuera de la primera página (12 coincidencias, página de tamaño 10), los tres órdenes en ambas direcciones a través de tres páginas, empates estables, totales sin duplicados, búsqueda vacía/sin coincidencias, caracteres literales/inyección, 422, JWT y relaciones/fotos aisladas. Conserva canceladas, cero, nulos y días negativos. Se corrigió el fixture previo de administradores para incluir `Password`, obligatorio en el esquema actual; no cambia datos operativos.
 - **Pasó:** regresiones de reporte de membresías, membresía vigente, ficha del socio y fotografías (carga multipart, descarga protegida, reintentos, conflictos, fallos de persistencia, limpieza y bajas) en la misma suite.
 - **Pendiente para Johanna/orquestador:** conectar el portal real y validar sus controles, tarjetas y estados antes de aceptar el flujo completo API–portal. Solo se modificó el backend asignado; no se accedió al repositorio del portal ni al escritorio. No se desplegó ni se modificaron datos reales. Los parámetros nuevos son opcionales y el backend puede prepararse antes de actualizar el consumidor.
 

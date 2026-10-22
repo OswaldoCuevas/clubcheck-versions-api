@@ -105,7 +105,7 @@ class MembershipSalesService
         $period = $this->period($query);
         $page = $this->pageNumber($query, 'page', 1, 1000000);
         $pageSize = $this->pageNumber($query, 'pageSize', 25, 100);
-        $columns = ['memberName' => 'u.Fullname', 'planName' => "NULLIF(TRIM(i.ProductName), '')", 'paymentDate' => 't.SaleDate'];
+        $columns = ['memberName' => 'u.Fullname', 'planName' => "NULLIF(TRIM(p.Name), '')", 'paymentDate' => 't.SaleDate'];
         $sortBy = $this->sortOption($query, 'sortBy', 'paymentDate', array_keys($columns));
         $sortDir = $this->sortOption($query, 'sortDir', 'desc', ['asc', 'desc']);
         $search = $query['search'] ?? '';
@@ -117,13 +117,14 @@ class MembershipSalesService
         $from = 'FROM SaleTicketItemDesktop i
              LEFT JOIN SaleTicketDesktop t ON t.Id = i.SaleTicketId AND t.CustomerApiId = i.CustomerApiId
              LEFT JOIN SubscriptionsDesktop s ON s.Id = i.SubscriptionId AND s.CustomerApiId = i.CustomerApiId
-             LEFT JOIN UsersDesktop u ON u.Id = s.UserId AND u.CustomerApiId = i.CustomerApiId';
+             LEFT JOIN UsersDesktop u ON u.Id = s.UserId AND u.CustomerApiId = i.CustomerApiId
+             LEFT JOIN SubscriptionPeriodDesktop p ON p.Id = s.SubscriptionPeriodId AND p.CustomerApiId = i.CustomerApiId';
         $where = "i.CustomerApiId = ? AND NULLIF(TRIM(i.SubscriptionId), '') IS NOT NULL";
         $params = [$customerId];
         if ($search !== '') {
             // La coincidencia parcial es literal: %, _ y el escape no se interpretan como comodines del usuario.
             $pattern = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search) . '%';
-            $where .= " AND (u.Fullname LIKE ? ESCAPE '!' OR NULLIF(TRIM(i.ProductName), '') LIKE ? ESCAPE '!' OR t.Folio LIKE ? ESCAPE '!')";
+            $where .= " AND (u.Fullname LIKE ? ESCAPE '!' OR NULLIF(TRIM(p.Name), '') LIKE ? ESCAPE '!' OR t.Folio LIKE ? ESCAPE '!')";
             array_push($params, $pattern, $pattern, $pattern);
         }
         if ($period !== null) {
@@ -146,7 +147,7 @@ class MembershipSalesService
         $order = $columns[$sortBy] . ' ' . strtoupper($sortDir) . ', i.Id DESC';
         $rows = $this->db->fetchAll(
             "SELECT i.Id AS SaleTicketItemId, i.SaleTicketId, i.SubscriptionId,
-                NULLIF(TRIM(i.ProductName), '') AS PlanName,
+                NULLIF(TRIM(p.Name), '') AS PlanName,
                 t.Folio, t.SaleDate AS PaymentDate, t.PaymentMethod, NULLIF(TRIM(t.PaymentReference), '') AS PaymentReference,
                 a.Id AS SellerId, a.Username AS SellerName,
                 CASE WHEN t.Id IS NULL THEN NULL WHEN t.Active = 0 OR t.CancelledOn IS NOT NULL THEN 1
@@ -182,7 +183,6 @@ class MembershipSalesService
                     ELSE COALESCE(NULLIF(TRIM(p.Name), ''), 'Plan no disponible') END AS planName,
                 COUNT(*) AS soldCount
              {$from}
-             LEFT JOIN SubscriptionPeriodDesktop p ON p.Id = s.SubscriptionPeriodId AND p.CustomerApiId = i.CustomerApiId
              WHERE {$where} AND {$confirmed}
              GROUP BY {$planId}, planName
              ORDER BY soldCount DESC, subscriptionPeriodId ASC", $params);
