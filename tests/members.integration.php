@@ -57,9 +57,12 @@ $pipes = [];
 $serverLog = null;
 try {
     $db = new Database();
-    $db->query('CREATE TABLE Customers (Id VARCHAR(64) PRIMARY KEY, Name VARCHAR(150), IsActive TINYINT, Token VARCHAR(64), TokenJwt TEXT, LastSeen DATETIME) ENGINE=InnoDB');
+    $db->query('CREATE TABLE Customers (Id VARCHAR(64) PRIMARY KEY, Name VARCHAR(150), CodeAccess VARCHAR(100), IsActive TINYINT, Token VARCHAR(64), TokenJwt TEXT, LastSeen DATETIME) ENGINE=InnoDB');
     $db->query('CREATE TABLE UsersDesktop (Id VARCHAR(36) PRIMARY KEY, CustomerApiId VARCHAR(64), Fullname VARCHAR(150), Removed TINYINT DEFAULT 0) ENGINE=InnoDB');
-    $db->query('CREATE TABLE AdministratorsDesktop (Id VARCHAR(36) PRIMARY KEY, CustomerApiId VARCHAR(64), Password VARCHAR(255), Role INT, Removed TINYINT DEFAULT 0) ENGINE=InnoDB');
+    $db->query('CREATE TABLE AdministratorsDesktop (Id VARCHAR(36) PRIMARY KEY, CustomerApiId VARCHAR(64), Username VARCHAR(100), Email VARCHAR(160), Password VARCHAR(255), Role INT, Removed TINYINT DEFAULT 0) ENGINE=InnoDB');
+    // El fixture mínimo comparte la collation del servidor, incluida la FK del login existente.
+    $db->multi_query(str_replace(' COLLATE=utf8mb4_unicode_ci', '', file_get_contents(__DIR__ . '/../database/migrations/007_create_customer_web_login_attempts.sql')));
+    do { if ($r = $db->store_result()) { $r->free(); } } while ($db->more_results() && $db->next_result());
     $sql = file_get_contents(__DIR__ . '/../database/migrations/017_create_member_accounts.sql');
     $db->multi_query($sql);
     do { if ($r = $db->store_result()) { $r->free(); } } while ($db->more_results() && $db->next_result());
@@ -68,6 +71,12 @@ try {
     do { if ($r = $db->store_result()) { $r->free(); } } while ($db->more_results() && $db->next_result());
     $mail = [];
     $svc = new MembersService($db, static function (string $email, string $url) use (&$mail): bool { $mail[$email] = substr($url, strpos($url, '#token=') + 7); return true; });
+    // Cuenta global sin invitación: autenticación y lista vacía son válidas por sí mismas.
+    $svc->register(['Name' => 'Sin relaciones', 'Email' => 'empty@example.test', 'Password' => 'password123']);
+    $svc->verifyEmail(['Token' => $mail['empty@example.test']]);
+    $emptyLogin = $svc->login(['Email' => 'empty@example.test', 'Password' => 'password123']);
+    check(array_key_exists('PendingInvitationContextId', $emptyLogin) && $emptyLogin['PendingInvitationContextId'] === null, 'No invitation required');
+    check($svc->links($svc->authenticate($emptyLogin['Token'])['Account']['Id']) === ['Items' => []], 'Empty links contract');
     $admins = []; $users = [];
     for ($i = 1; $i <= 3; $i++) {
         $gym = 'gym-' . $i; $admin = MembersService::uuid(); $user = MembersService::uuid();
@@ -119,6 +128,7 @@ try {
     rejects(fn() => $svc->issue($admins[0], ['UserId' => $users[0], 'RequestId' => 'cannot-transfer']), 'MEMBER_ALREADY_OWNED', 409);
     rejects(fn() => $svc->redeem($identity, $ctx), 'LINK_DISABLED', 403);
     $adminToken = (new JwtService())->createToken(['customerId' => 'gym-1', 'name' => 'Gym 1', 'adminId' => $admins[0]['Id'], 'role' => 0]);
+    check(MembersService::operatorCapabilities($db, $admins[0]) === ['IsOwner' => true, 'Permissions' => ['MemberInvitations.Issue']], 'Persisted portal capabilities');
     $svc->operator($adminToken);
     rejects(fn() => $svc->authenticate($adminToken), 'SESSION_INVALID', 401);
     rejects(fn() => $svc->operator($login['Token']), 'SESSION_INVALID', 401);
@@ -128,6 +138,7 @@ try {
     check($svc->operator($opLogin['Token'])['Id'] === $admins[0]['Id'], 'Individual desktop identity');
     rejects(fn() => $svc->operatorSession('gym-1', ['AdministratorId' => $admins[0]['Id'], 'Password' => hash('sha256', 'operator-password')]), 'INVALID_CREDENTIALS', 401);
     $db->update('MemberOperatorPermissions', ['Active' => 0], 'AdministratorId = ?', [$admins[0]['Id']]);
+    check(MembersService::operatorCapabilities($db, $admins[0])['Permissions'] === [], 'No implicit owner permission');
     rejects(fn() => $svc->issue($svc->operator($adminToken), ['UserId' => $users[0], 'RequestId' => 'denied']), 'PERMISSION_DENIED', 403);
     rejects(fn() => $svc->issue($svc->operator($opLogin['Token']), ['UserId' => $users[0], 'RequestId' => 'denied']), 'PERMISSION_DENIED', 403);
     $db->update('MemberOperatorPermissions', ['Active' => 1], 'AdministratorId = ?', [$admins[0]['Id']]);
@@ -151,6 +162,8 @@ try {
     $second = $svc->authenticate($secondLogin['Token']);
     rejects(fn() => $svc->redeem($second, $ctx), 'INVITATION_CONFLICT', 409);
     rejects(fn() => $svc->redeem($second, $pending), 'INVITATION_EXPIRED', 410);
+    $svc->authenticate($secondLogin['Token'], false);
+    check($svc->links($second['Account']['Id']) === ['Items' => []], 'Failed redemption preserves global access');
     check($second['Account']['Name'] === 'Second', 'Expired invitation preserves account');
     $fresh = $svc->issue($admins[0], ['UserId' => $extraUser, 'RequestId' => 'fresh']);
     $freshCtx = $svc->invitationContext(['Code' => $fresh['Code']]);
@@ -184,6 +197,12 @@ try {
     $failedMail = new MembersService($db, static fn() => false);
     rejects(fn() => $failedMail->register(['Name' => 'Mail fail', 'Email' => 'mailfail@example.test', 'Password' => 'password123']), 'MAIL_UNAVAILABLE', 503);
     check($db->fetchOne('SELECT Id FROM MemberAccounts WHERE Email = ?', ['mailfail@example.test']) !== null, 'SMTP failure preserves account');
+    $failedAccount = $db->fetchOne('SELECT Id FROM MemberAccounts WHERE Email = ?', ['mailfail@example.test']);
+    $db->update('MemberEmailVerifications', ['CreatedAt' => '2000-01-01 00:00:00'], 'MemberAccountId = ?', [$failedAccount['Id']]);
+    $svc->resend(['Email' => 'mailfail@example.test']);
+    $svc->verifyEmail(['Token' => $mail['mailfail@example.test']]);
+    check($svc->login(['Email' => 'mailfail@example.test', 'Password' => 'password123'])['Account']['Id'] === $failedAccount['Id'], 'SMTP recovery keeps original account');
+    check((int) $db->fetchOne('SELECT COUNT(*) AS C FROM MemberAccounts WHERE Email = ?', ['mailfail@example.test'])['C'] === 1, 'SMTP recovery does not duplicate account');
     for ($i = 0; $i < 20; $i++) {
         try { $svc->invitationContext(['Code' => 'AAAAAAAAAA']); } catch (MemberException $e) { check(in_array($e->getErrorCode(), ['INVITATION_EXPIRED', 'RATE_LIMITED']), 'Rate error'); }
     }
@@ -226,6 +245,18 @@ try {
     $httpLogin = request($address, 'POST', '/api/members/login', ['Email' => 'second@example.test', 'Password' => 'password123']);
     check($httpLogin['Status'] === 200 && isset($httpLogin['Body']['Token']), 'HTTP login: ' . json_encode($httpLogin));
     $httpToken = $httpLogin['Body']['Token'];
+    $httpEmpty = request($address, 'POST', '/api/members/login', ['Email' => 'empty@example.test', 'Password' => 'password123']);
+    check($httpEmpty['Status'] === 200 && array_key_exists('PendingInvitationContextId', $httpEmpty['Body']) && $httpEmpty['Body']['PendingInvitationContextId'] === null, 'HTTP login without invitation');
+    check(request($address, 'GET', '/api/members/me', null, $httpEmpty['Body']['Token'])['Body']['Account']['Email'] === 'empty@example.test', 'HTTP global me without context');
+    check(request($address, 'GET', '/api/members/links', null, $httpEmpty['Body']['Token'])['Raw'] === '{"Items":[]}', 'HTTP empty JSON array');
+    $invalid = request($address, 'POST', '/api/members/login', ['Email' => 'invalid', 'Password' => 'password123']);
+    check($invalid['Status'] === 400 && $invalid['Body']['Code'] === 'INVALID_INPUT' && is_string($invalid['Body']['Message']), 'HTTP validation contract');
+    $wrong = request($address, 'POST', '/api/members/login', ['Email' => 'empty@example.test', 'Password' => 'wrong-password']);
+    check($wrong['Status'] === 401 && $wrong['Body']['Code'] === 'INVALID_CREDENTIALS' && is_string($wrong['Body']['Message']), 'HTTP credentials contract');
+    $expired = request($address, 'POST', '/api/members/links', ['InvitationContextId' => $pending['InvitationContextId']], $httpToken);
+    check($expired['Status'] === 410 && $expired['Body']['Code'] === 'INVITATION_EXPIRED', 'HTTP expired redemption');
+    check(request($address, 'GET', '/api/members/me', null, $httpToken)['Status'] === 200, 'HTTP redemption failure preserves session');
+    check(request($address, 'GET', '/api/members/me', null, $selected['Token'])['Status'] === 401, 'HTTP revoked selected token');
     check(request($address, 'GET', '/api/members/me', null, $httpToken)['Body']['Account']['Name'] === 'Second', 'HTTP restore');
     check(request($address, 'GET', '/api/members/links', null, $adminToken)['Status'] === 401, 'HTTP admin rejected in members');
     check(request($address, 'GET', '/api/member-management/accounts', null, $httpToken)['Status'] === 401, 'HTTP members rejected in management');
@@ -257,12 +288,44 @@ try {
     $httpRedeem = request($address, 'POST', '/api/members/links', ['InvitationContextId' => $httpAccountLogin['PendingInvitationContextId']], $httpAccountLogin['Token']);
     check($httpRedeem['Status'] === 200 && isset($httpRedeem['Body']['LinkId']), 'HTTP automatic redemption');
     check(request($address, 'POST', '/api/members/links', ['InvitationContextId' => $httpAccountLogin['PendingInvitationContextId']], $httpAccountLogin['Token'])['Body'] === $httpRedeem['Body'], 'HTTP redemption retry');
-    check(request($address, 'POST', '/api/members/context', ['LinkId' => $httpRedeem['Body']['LinkId']], $httpAccountLogin['Token'])['Status'] === 200, 'HTTP selected context');
+    $httpSelected = request($address, 'POST', '/api/members/context', ['LinkId' => $httpRedeem['Body']['LinkId']], $httpAccountLogin['Token']);
+    check($httpSelected['Status'] === 200, 'HTTP selected context');
+    check(request($address, 'PATCH', '/api/member-management/links/' . $httpRedeem['Body']['LinkId'], ['Active' => false], $adminToken)['Status'] === 200, 'HTTP disable selected relation');
+    $httpBlocked = request($address, 'POST', '/api/members/context', ['LinkId' => $httpRedeem['Body']['LinkId']], $httpSelected['Body']['Token']);
+    check($httpBlocked['Status'] === 403 && $httpBlocked['Body']['Code'] === 'LINK_DISABLED', 'HTTP disabled relation denied with valid JWT');
+    check(request($address, 'GET', '/api/members/me', null, $httpSelected['Body']['Token'])['Status'] === 200, 'HTTP disabled context preserves global account');
+    $httpDisabledLinks = request($address, 'GET', '/api/members/links', null, $httpSelected['Body']['Token']);
+    check($httpDisabledLinks['Status'] === 200 && $httpDisabledLinks['Body']['Items'][0]['Active'] === false, 'HTTP disabled link differs from empty list');
     $db->update('Customers', ['Token' => 'machine', 'TokenJwt' => $machineToken], 'Id = ?', ['gym-1']);
     $httpOperator = request($address, 'POST', '/api/member-management/operator-session', ['AdministratorId' => $admins[0]['Id'], 'Password' => 'operator-password'], $machineToken);
     check($httpOperator['Status'] === 200 && isset($httpOperator['Body']['Token']), 'HTTP individual operator: ' . json_encode($httpOperator));
+    // Login real del productor portal: capacidades JSON/JWT y autorización tras revocar permiso.
+    $db->update('Customers', ['CodeAccess' => 'TEST-GYM'], 'Id = ?', ['gym-1']);
+    $db->update('AdministratorsDesktop', ['Username' => 'test-owner', 'Email' => 'owner@example.test'], 'Id = ?', [$admins[0]['Id']]);
+    $portalLogin = request($address, 'POST', '/api/desktop/login', ['codeAccess' => 'TEST-GYM', 'login' => 'test-owner', 'password' => 'operator-password']);
+    check($portalLogin['Status'] === 200 && $portalLogin['Body']['IsOwner'] === true && $portalLogin['Body']['Permissions'] === ['MemberInvitations.Issue'], 'HTTP portal capabilities');
+    $portalClaims = (new JwtService())->validateToken($portalLogin['Body']['token']);
+    check($portalClaims['IsOwner'] === true && $portalClaims['Permissions'] === ['MemberInvitations.Issue'], 'Signed portal capabilities');
+    check(request($address, 'GET', '/api/member-management/accounts', null, $portalLogin['Body']['token'])['Status'] === 200, 'Real portal token accepted');
+    $operatorUser = MembersService::uuid();
+    $db->insert('UsersDesktop', ['Id' => $operatorUser, 'CustomerApiId' => 'gym-1', 'Fullname' => 'Operator test']);
+    $operatorBody = ['UserId' => $operatorUser, 'RequestId' => 'operator-http'];
+    check(request($address, 'POST', '/api/member-management/invitations', $operatorBody, $machineToken)['Status'] === 401, 'Machine alone cannot issue');
+    $issued = request($address, 'POST', '/api/member-management/invitations', $operatorBody, $httpOperator['Body']['Token']);
+    check($issued['Status'] === 200 && isset($issued['Body']['InvitationId'], $issued['Body']['Code'], $issued['Body']['Url'], $issued['Body']['ExpiresAt']), 'Individual operator issues invitation');
+    check(request($address, 'POST', '/api/member-management/invitations', $operatorBody, $httpOperator['Body']['Token'])['Body'] === $issued['Body'], 'HTTP operator idempotency');
+    $db->update('MemberOperatorPermissions', ['Active' => 0], 'AdministratorId = ?', [$admins[0]['Id']]);
+    foreach ([$portalLogin['Body']['token'], $httpOperator['Body']['Token']] as $operatorToken) {
+        $denied = request($address, 'POST', '/api/member-management/invitations', $operatorBody, $operatorToken);
+        check($denied['Status'] === 403 && $denied['Body']['Code'] === 'PERMISSION_DENIED', 'Revocation overrides existing token claims');
+    }
+    $portalDenied = request($address, 'POST', '/api/desktop/login', ['codeAccess' => 'TEST-GYM', 'login' => 'test-owner', 'password' => 'operator-password']);
+    check($portalDenied['Body']['IsOwner'] === true && $portalDenied['Body']['Permissions'] === [], 'Portal owner does not imply issuance');
+    $db->query('DROP TABLE MemberOperatorPermissions');
+    $portalUnavailable = request($address, 'POST', '/api/desktop/login', ['codeAccess' => 'TEST-GYM', 'login' => 'test-owner', 'password' => 'operator-password']);
+    check($portalUnavailable['Status'] === 200 && $portalUnavailable['Body']['IsOwner'] === false && $portalUnavailable['Body']['Permissions'] === [], 'Legacy login survives unavailable permissions with controls denied');
     $preflight = request($address, 'OPTIONS', '/api/member-management/invitations', null);
-    check($preflight['Status'] === 204 && str_contains(implode('|', $preflight['Headers']), 'https://members.example.test'), 'Configured CORS');
+    check($preflight['Status'] === 204 && str_contains(implode('|', $preflight['Headers']), 'https://localhost:8100'), 'Configured CORS');
     echo "PASS: HTTP production routing, login, restore, token separation, accounts, context, disable, verification, logout and CORS.\n";
 } finally {
     if (is_resource($server)) { proc_terminate($server); foreach ($pipes as $pipe) { if (is_resource($pipe)) { fclose($pipe); } } proc_close($server); }
@@ -275,7 +338,7 @@ try {
 /** Ejecuta peticiones HTTP locales y conserva estado, JSON y cabeceras para validar el contrato. */
 function request(string $address, string $method, string $path, ?array $body, string $token = ''): array
 {
-    $headers = ['Content-Type: application/json', 'Origin: https://members.example.test'];
+    $headers = ['Content-Type: application/json', 'Origin: https://localhost:8100'];
     if ($token !== '') { $headers[] = 'Authorization: Bearer ' . $token; }
     $context = stream_context_create(['http' => ['method' => $method, 'header' => implode("\r\n", $headers),
         'content' => $body === null ? '' : json_encode((object) $body), 'ignore_errors' => true, 'timeout' => 10]]);

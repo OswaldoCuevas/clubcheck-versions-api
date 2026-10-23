@@ -84,6 +84,10 @@ El JWT members tiene clave exclusiva, `typ=members`, `aud=clubcheck-members`, `s
 
 El gimnasio se obtiene exclusivamente del JWT individual autenticado y del administrador persistido. `CustomerApiId` del cuerpo nunca se utiliza. El portal usa su login existente, que incluye `adminId` y `customerId`; no necesita la sesión de máquina. Escritorio valida primero el JWT customer contra `Customers.TokenJwt`, `Customers.Token`, `IsActive`; la contraseña sincronizada acredita al operador. Se admiten las representaciones existentes de contraseña (hash PHP, SHA-256 UTF-8 hex o texto heredado) con detección de formato para impedir presentar un hash como contraseña. La nueva sesión individual tiene `typ=member_operator`, `aud=clubcheck-member-management`, `sid`; no contiene credenciales. No almacenar su token en disco; renovar explícitamente al vencer. Permiso y administrador no eliminado se revalidan por operación. Machine JWT por sí solo no puede emitir/listar/deshabilitar.
 
+El productor `POST /api/desktop/login` conserva su petición existente `{codeAccess, login, password}` y sus campos de respuesta. Añade `IsOwner: boolean` y `Permissions: string[]` tanto en la raíz del JSON como en el payload firmado del JWT. `IsOwner` procede de `AdministratorsDesktop.Role=2`; `Permissions` contiene únicamente `MemberInvitations.Issue` si existe la concesión activa, no eliminada, para ese administrador y gimnasio. Ser dueño no concede emisión. El consumidor portal debe leer esos nombres PascalCase, negar acciones cuando falten y renovar sesión para actualizar sus controles después de un cambio de permisos. Son información para la interfaz: cada operación vuelve a consultar persistencia, por lo que una revocación prevalece sobre claims anteriores. Si no puede consultarse la tabla de permisos (por ejemplo, antes de aplicar la migración members), el login existente sigue funcionando con `IsOwner:false` y `Permissions:[]`; nunca se habilitan controles por defecto. El login del portal conserva su restricción previa a dueños; este ajuste no amplía quién puede autenticarse.
+
+El consumidor escritorio debe solicitar explícitamente `operator-session` con el JWT customer vigente y la contraseña del operador, conservar en memoria el token individual devuelto y usarlo como Bearer para emitir. No debe usar los claims del portal ni un rol local para reemplazar esa acreditación. El origen HTTPS se obtiene de configuración por entorno (`MEMBERS_WEB_URL`); aquí no se define un dominio oficial. No se modifican contratos ni configuración de otros repositorios en esta tarea.
+
 Paginación: Page 1–100000, PageSize 1–100, Search hasta 150 bytes sobre nombre/correo de la cuenta. Tanto selección de cuentas como relaciones anidadas se filtran por el gimnasio autenticado. El bloqueo es idempotente; no hay `Active:true`. Ni deshabilitar ni emitir cambia la cuenta global, otros vínculos o tablas de acceso físico.
 
 ## Continuidad, concurrencia y secretos
@@ -112,3 +116,27 @@ Verificaciones ejecutadas localmente el 2026-10-21:
 - `git diff --check`: sin errores de whitespace.
 
 El test admite `MEMBERS_TEST_DB_USER` y `MEMBERS_TEST_DB_PASSWORD`, requiere MySQL local 127.0.0.1:3306 con permiso para crear/eliminar **únicamente esquemas de prueba**; no usa datos reales. `XDEBUG_MODE=off` evita intentos del depurador en workers. No se probó entrega SMTP real, configuración pública HTTPS/CORS/SPA ni integración visual de clientes. No se ejecutaron migraciones productivas, publicación ni operaciones Git de integración.
+
+## Verificación incremental de tarea 51 — 2026-10-22
+
+Candidata local sobre `222360182424b9450d3f7109faf29ccbd62d0df0`, rama conservada `orchestrator/implementation-16`, sin commit de esta tarea. PHP CLI 8.3.11 / MySQL local, fixtures sintéticos `@example.test`, correo simulado y servidor HTTP loopback del front controller. La conexión de pruebas no toma credenciales de `.env`. Cada ejecución crea y elimina su esquema `clubcheck_members_test_<hex>`; no modifica datos operativos.
+
+Incompatibilidad corregida: el productor del login portal carecía de los campos `IsOwner`/`Permissions` requeridos por sus controles. Se añadieron capacidades persistidas al JSON y al JWT conservando la autorización por operación. No se reconstruyó autenticación, dominio ni tablas; no hay migración nueva. La prueba CORS también tenía una inconsistencia reproducida: configuraba `https://localhost:8100` y enviaba/comprobaba otro origen. Ahora la petición y la aserción usan el origen configurado, sin cambiar configuración del usuario.
+
+| Caso sintético | Resultado ejecutado |
+| --- | --- |
+| Registro y confirmación sin invitación; login solo Email/Password; me sin contexto; links vacío | Aprobado en servicio y HTTP; `PendingInvitationContextId:null`, JSON exacto `{"Items":[]}` |
+| Validación y contraseña incorrecta | Aprobado HTTP: 400 `INVALID_INPUT`, 401 `INVALID_CREDENTIALS`, ambos con Message |
+| Correo no confirmado y verificación utilizada | Aprobado servicio/HTTP: 403 `EMAIL_UNCONFIRMED`, 410 `VERIFICATION_EXPIRED` |
+| Invitación vencida y canje fallido | Aprobado servicio/HTTP: 410 `INVITATION_EXPIRED`; me sigue accesible con el mismo token |
+| Relación deshabilitada con JWT vigente | Aprobado servicio/HTTP: 403 `LINK_DISABLED`; me y links siguen accesibles, Active falso se distingue de lista vacía y otras relaciones se conservan |
+| Fallo de correo y reenvío posterior | Aprobado: 503 `MAIL_UNAVAILABLE`; reenvío simulado, confirmación y login mantienen el Id original y una sola cuenta |
+| Login real del portal | Aprobado HTTP: JSON y JWT incluyen capacidades persistidas; token aceptado en administración |
+| Emisión individual de escritorio y reintento | Aprobado HTTP: cuatro campos de respuesta, misma invitación con el mismo RequestId; JWT de máquina solo rechazado |
+| Revocación de permiso con tokens anteriores | Aprobado HTTP: portal y escritorio devuelven 403 `PERMISSION_DENIED`; nuevo login del dueño entrega Permissions vacío |
+| Tabla de permisos no disponible | Aprobado HTTP en esquema temporal: login existente responde 200 con IsOwner falso y Permissions vacío |
+| Concurrencia, tres gimnasios, aislamiento, caducidad, regeneración y separación de perfiles JWT | Regresión existente aprobada |
+
+Comandos ejecutados: `php tests/members.integration.php` (tres bloques PASS), `php -l app/Services/MembersService.php`, `php -l app/Controllers/DesktopApiController.php`, `php -l tests/members.integration.php`, `php tests/isapi_picture_test.php`, `node tests/isapi-picture-ui.test.js`, `git diff --check`; todos aprobados tras las correcciones. El PHP con su configuración global terminaba sin salida; se ejecutó con `PHPRC` apuntando a un INI temporal dentro de `tests`, cargando solo mysqli, mbstring y openssl desde las extensiones del ejecutable instalado. Los workers y servidor heredaron esa configuración. El INI temporal se retiró después; no se alteró la instalación de PHP.
+
+Pendiente para QA integrada: ejecución visual de portal/members/WPF y sus consumidores actualizados, escaneo en dispositivos, SMTP real y HTTPS/CORS públicos con valores oficiales del entorno. Esos repositorios y servicios no se inspeccionaron ni modificaron porque la tarea limita el acceso a este proyecto y no autoriza red externa. Estos resultados automatizados de API no acreditan el cierre de la candidata integrada.

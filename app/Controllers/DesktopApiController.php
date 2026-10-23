@@ -31,6 +31,7 @@ class DesktopApiController extends Controller
         $this->loginAttemptModel = new CustomerWebLoginAttemptModel();
     }
 
+    /** Autentica al dueño del portal y publica capacidades members persistidas para sus controles. */
     public function login(): void
     {
         ApiHelper::respondIfOptions();
@@ -101,17 +102,30 @@ class DesktopApiController extends Controller
             'failureReason' => null,
         ]);
 
+        require_once __DIR__ . '/../Services/MembersService.php';
+        try {
+            $capabilities = \App\Services\MembersService::operatorCapabilities($this->db, [
+                'Id' => $row['AdminId'], 'CustomerApiId' => $row['CustomerId'], 'Role' => $row['Role'],
+            ]);
+        } catch (\Throwable $e) {
+            // Conserva el login previo a la migración members, con controles nuevos denegados.
+            $capabilities = ['IsOwner' => false, 'Permissions' => []];
+        }
         $jwt = new JwtService();
         $token = $jwt->createToken([
             'name' => $row['CustomerName'],
             'customerId' => $row['CustomerId'],
             'adminId' => $row['AdminId'],
             'role' => (int) $row['Role'],
+            'IsOwner' => $capabilities['IsOwner'],
+            'Permissions' => $capabilities['Permissions'],
         ], self::JWT_TTL_SECONDS);
 
         ApiHelper::respond([
             'status' => 'success',
             'token' => $token,
+            'IsOwner' => $capabilities['IsOwner'],
+            'Permissions' => $capabilities['Permissions'],
             'expiresIn' => self::JWT_TTL_SECONDS,
             'expiresAt' => date('Y-m-d H:i:s', time() + self::JWT_TTL_SECONDS),
             'customer' => [

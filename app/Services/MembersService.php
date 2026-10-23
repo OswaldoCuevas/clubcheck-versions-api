@@ -445,6 +445,14 @@ class MembersService
         }
     }
 
+    /** Publica capacidades del portal desde persistencia; no sustituye la autorización por operación. */
+    public static function operatorCapabilities($db, array $operator): array
+    {
+        $permission = $db->fetchOne("SELECT Id FROM MemberOperatorPermissions WHERE AdministratorId = ? AND CustomerApiId = ? AND Permission = 'MemberInvitations.Issue' AND Active = 1 AND IsDeleted = 0", [$operator['Id'], $operator['CustomerApiId']]);
+        return ['IsOwner' => (int) ($operator['Role'] ?? 0) === 2,
+            'Permissions' => $permission ? ['MemberInvitations.Issue'] : []];
+    }
+
     /** Usa Role=2 persistido, como el proceso existente de resolución por dueño. */
     private function requireOwner(array $operator): void
     {
