@@ -7,4 +7,4 @@ CREATE TABLE IF NOT EXISTS MemberMonthlyGoals (
  UNIQUE KEY UqMemberMonthlyGoalLink (LinkId),
  FOREIGN KEY (LinkId) REFERENCES MemberAccountLinks(Id),
  CHECK (TargetDays > 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

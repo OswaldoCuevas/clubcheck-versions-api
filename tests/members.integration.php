@@ -53,7 +53,7 @@ if (($argv[1] ?? '') === '--worker') {
 $schema = 'clubcheck_members_test_' . bin2hex(random_bytes(6));
 testEnvironment($schema);
 $root = new mysqli('127.0.0.1', getenv('DEV_DB_USERNAME'), getenv('DEV_DB_PASSWORD'), '', 3306);
-$root->query('CREATE DATABASE `' . $schema . '` CHARACTER SET utf8mb4');
+$root->query('CREATE DATABASE `' . $schema . '` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
 $server = null;
 $pipes = [];
 $serverLog = null;
