@@ -471,6 +471,22 @@ class MembersService
         return $row;
     }
 
+    /** Exige los tres claims del JWT y revalida titularidad y disponibilidad para recursos del socio. */
+    public function requireContext(array $identity): array
+    {
+        $payload = $identity['Payload'];
+        foreach (['LinkId', 'UserId', 'CustomerApiId'] as $key) {
+            if (!isset($payload[$key]) || !is_string($payload[$key]) || $payload[$key] === '') {
+                $this->fail('CONTEXT_REQUIRED', 'Selecciona una relación para continuar.', 400);
+            }
+        }
+        $link = $this->authorizedLink($identity['Account']['Id'], $payload['LinkId']);
+        if ($link['UserId'] !== $payload['UserId'] || $link['CustomerApiId'] !== $payload['CustomerApiId']) {
+            $this->fail('SESSION_INVALID', 'Contexto inválido.', 401);
+        }
+        return $link;
+    }
+
     /** Produce JWT con identidad y contexto opcional sin ampliar la sesión original. */
     private function sessionResponse(array $account, string $sessionId, int $expires, ?array $link = null): array
     {

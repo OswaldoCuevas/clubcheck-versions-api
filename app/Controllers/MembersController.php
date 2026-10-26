@@ -9,6 +9,15 @@ use App\Exceptions\MemberException;
 /** Adaptador HTTP del dominio members; las rutas administrativas conservan identidad propia. */
 class MembersController
 {
+    /** Expone identidad, membresía y actividad del socio seleccionado en el dashboard. */
+    public function dashboard(): void { $this->run('dashboard', true); }
+
+    /** Expone pagos acreditados paginados, aislados por el contexto JWT vigente. */
+    public function payments(): void { $this->run('payments', true); }
+
+    /** Actualiza la meta recurrente del socio seleccionado y devuelve progreso confirmado. */
+    public function monthlyGoal(): void { $this->run('monthlyGoal', true); }
+
     /** Registra una cuenta global y solicita correo confirmado antes del acceso privado. */
     public function register(): void { $this->run('register'); }
 
@@ -82,37 +91,48 @@ class MembersController
         header('Cache-Control: no-store');
         header('Referrer-Policy: no-referrer');
         try {
-            $service = new MembersService();
-            $data = in_array($action, ['me', 'links', 'accounts', 'logout'], true) ? [] : $this->body();
-            if ($member) {
-                // Operaciones de recuperación global no exigen que siga habilitado el contexto seleccionado.
-                $identity = $service->authenticate($this->bearer(), false);
-                $result = match ($action) {
-                    'me' => ['Account' => $service->accountView($identity['Account'])],
-                    'links' => $service->links($identity['Account']['Id']),
-                    'logout' => $service->logout($identity),
-                    default => $service->$action($identity, $data),
-                };
-            } elseif (in_array($action, ['issue', 'accounts', 'disable'], true)) {
-                $operator = $service->operator($this->bearer());
-                if ($action === 'issue') {
-                    $requestId = $_SERVER['HTTP_REQUESTID'] ?? $_SERVER['HTTP_REQUEST_ID'] ?? $_SERVER['HTTP_X_REQUEST_ID'] ?? null;
-                    if ($requestId !== null) { $data['RequestId'] = $requestId; }
-                }
-                $result = match ($action) {
-                    'accounts' => $service->accounts($operator, $_GET),
-                    'disable' => $service->disable($operator, $linkId, $data),
-                    default => $service->issue($operator, $data),
-                };
-            } elseif ($action === 'operatorSession') {
-                require_once __DIR__ . '/../Services/CustomerJwtService.php';
-                $machine = (new \App\Services\CustomerJwtService())->validateCustomerToken($this->bearer());
-                if (!$machine['valid']) {
-                    throw new MemberException('Máquina no autorizada.', 401, [], 'SESSION_INVALID');
-                }
-                $result = $service->operatorSession($machine['customerId'], $data);
+            if (in_array($action, ['dashboard', 'payments', 'monthlyGoal'], true)) {
+                require_once __DIR__ . '/../Services/MemberDashboardService.php';
+                require_once __DIR__ . '/../../utils/database.php';
+                $database = new \Database();
+                $service = new MembersService($database);
+                $identity = $service->authenticate($this->bearer());
+                $resources = new \App\Services\MemberDashboardService($database, $service);
+                $data = $action === 'monthlyGoal' ? $this->body() : [];
+                $result = $action === 'monthlyGoal' ? $resources->monthlyGoal($identity, $data, $_GET) : $resources->$action($identity, $_GET);
             } else {
-                $result = $service->$action($data);
+                $service = new MembersService();
+                $data = in_array($action, ['me', 'links', 'accounts', 'logout'], true) ? [] : $this->body();
+                if ($member) {
+                    // Operaciones de recuperación global no exigen que siga habilitado el contexto seleccionado.
+                    $identity = $service->authenticate($this->bearer(), false);
+                    $result = match ($action) {
+                        'me' => ['Account' => $service->accountView($identity['Account'])],
+                        'links' => $service->links($identity['Account']['Id']),
+                        'logout' => $service->logout($identity),
+                        default => $service->$action($identity, $data),
+                    };
+                } elseif (in_array($action, ['issue', 'accounts', 'disable'], true)) {
+                    $operator = $service->operator($this->bearer());
+                    if ($action === 'issue') {
+                        $requestId = $_SERVER['HTTP_REQUESTID'] ?? $_SERVER['HTTP_REQUEST_ID'] ?? $_SERVER['HTTP_X_REQUEST_ID'] ?? null;
+                        if ($requestId !== null) { $data['RequestId'] = $requestId; }
+                    }
+                    $result = match ($action) {
+                        'accounts' => $service->accounts($operator, $_GET),
+                        'disable' => $service->disable($operator, $linkId, $data),
+                        default => $service->issue($operator, $data),
+                    };
+                } elseif ($action === 'operatorSession') {
+                    require_once __DIR__ . '/../Services/CustomerJwtService.php';
+                    $machine = (new \App\Services\CustomerJwtService())->validateCustomerToken($this->bearer());
+                    if (!$machine['valid']) {
+                        throw new MemberException('Máquina no autorizada.', 401, [], 'SESSION_INVALID');
+                    }
+                    $result = $service->operatorSession($machine['customerId'], $data);
+                } else {
+                    $result = $service->$action($data);
+                }
             }
             http_response_code(200);
             echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);

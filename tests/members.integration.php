@@ -2,6 +2,7 @@
 // Ejecutar: php tests/members.integration.php. Solo crea y elimina clubcheck_members_test_<hex>.
 require_once __DIR__ . '/../app/Services/MembersService.php';
 require_once __DIR__ . '/../utils/database.php';
+require_once __DIR__ . '/members-dashboard-fixtures.php';
 
 use App\Services\MembersService;
 use App\Services\JwtService;
@@ -16,7 +17,8 @@ function testEnvironment(string $schema): void
         'DEV_DB_PASSWORD' => getenv('MEMBERS_TEST_DB_PASSWORD') ?: '', 'MEMBERS_JWT_SECRET' => str_repeat('members-test-', 4),
         'MEMBERS_INVITATION_KEY' => str_repeat('invite-test-', 4), 'MEMBERS_WEB_URL' => 'https://localhost:8100',
         'JWT_SECRET_KEY' => str_repeat('administrative-test-', 3), 'MEMBERS_CORS_ORIGINS' => 'https://localhost:8100',
-        'MAIL_HOST' => '', 'MAIL_USER' => '', 'MAIL_PASSWORD' => '', 'MAIL_FROM_ADDRESS' => ''];
+        'MAIL_HOST' => '', 'MAIL_USER' => '', 'MAIL_PASSWORD' => '', 'MAIL_FROM_ADDRESS' => '',
+        'MEMBERS_ATTENDANCE_TIME_ZONES' => '{"gym-1":"America/Mexico_City","gym-2":"America/Mexico_City","gym-3":"America/Mexico_City"}'];
     foreach ($values as $k => $v) { putenv($k . '=' . $v); $_ENV[$k] = $v; }
     $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
 }
@@ -116,6 +118,10 @@ try {
     rejects(fn() => $svc->accounts($admins[0], ['PageSize' => 101]), 'INVALID_INPUT', 400);
     $selected = $svc->selectContext($identity, ['LinkId' => $link['LinkId']]);
     $svc->authenticate($selected['Token']);
+    createDashboardTables($db);
+    $otherLink = array_values(array_filter($svc->links($identity['Account']['Id'])['Items'], static fn($item) => $item['Id'] !== $link['LinkId']))[0];
+    $otherSelected = $svc->selectContext($identity, ['LinkId' => $otherLink['Id']]);
+    checkDashboardResources($db, $svc, $svc->authenticate($selected['Token']), $login['Token'], $otherSelected['Token']);
     rejects(fn() => $svc->disable($admins[1], $link['LinkId'], ['Active' => false]), 'PERMISSION_DENIED', 403);
     rejects(fn() => $svc->disable($admins[0], $link['LinkId'], ['Active' => true]), 'INVALID_INPUT', 400);
     $svc->disable($admins[0], $link['LinkId'], ['Active' => false]);
@@ -290,7 +296,44 @@ try {
     check(request($address, 'POST', '/api/members/links', ['InvitationContextId' => $httpAccountLogin['PendingInvitationContextId']], $httpAccountLogin['Token'])['Body'] === $httpRedeem['Body'], 'HTTP redemption retry');
     $httpSelected = request($address, 'POST', '/api/members/context', ['LinkId' => $httpRedeem['Body']['LinkId']], $httpAccountLogin['Token']);
     check($httpSelected['Status'] === 200, 'HTTP selected context');
+    $resourceToken = $httpSelected['Body']['Token'];
+    foreach (['dashboard', 'payments'] as $resource) {
+        check(request($address, 'GET', '/api/members/' . $resource, null)['Status'] === 401, 'HTTP resource requires session');
+        check(request($address, 'GET', '/api/members/' . $resource, null, $httpAccountLogin['Token'])['Body']['Code'] === 'CONTEXT_REQUIRED', 'HTTP resource requires context');
+        check(request($address, 'GET', '/api/members/' . $resource . '?UserId=foreign', null, $resourceToken)['Status'] === 400, 'HTTP rejects supplied identities');
+    }
+    $httpDashboard = request($address, 'GET', '/api/members/dashboard', null, $resourceToken);
+    check($httpDashboard['Status'] === 200 && $httpDashboard['Body']['Member']['FirstName'] === 'HTTP' && $httpDashboard['Body']['Membership'] === null && $httpDashboard['Body']['MonthlyGoal']['TargetDays'] === 20, 'HTTP real empty dashboard');
+    check($httpDashboard['Body']['BillingMode'] === 'Manual' && $httpDashboard['Body']['PaymentMethod'] === 'Unregistered', 'HTTP manual billing');
+    check(request($address, 'GET', '/api/members/payments?Page=1&PageSize=20', null, $resourceToken)['Body'] === ['Items' => [], 'Page' => 1, 'PageSize' => 20, 'Total' => 0], 'HTTP empty payment history');
+    $localToday = (new DateTimeImmutable('now', new DateTimeZone('America/Mexico_City')))->format('Y-m-d');
+    $db->update('SubscriptionsDesktop', ['UserId' => $httpUser, 'StartDate' => $localToday, 'EndingDate' => $localToday], 'Id = ?', ['current-z']);
+    $db->insert('AttendancesDesktop', ['Id' => 'http-attendance', 'CustomerApiId' => 'gym-1', 'UserId' => $httpUser, 'CheckIn' => $localToday . ' 00:00:00', 'Active' => 1]);
+    $populatedDashboard = request($address, 'GET', '/api/members/dashboard', null, $resourceToken);
+    check($populatedDashboard['Status'] === 200 && $populatedDashboard['Body']['ReferenceDate'] === $localToday && $populatedDashboard['Body']['Membership']['ExpiresOn'] === $localToday && $populatedDashboard['Body']['Attendance']['CurrentMonthVisits'] === 1, 'HTTP populated dashboard / inclusive membership boundary');
+    $populatedPayments = request($address, 'GET', '/api/members/payments?PageSize=1', null, $resourceToken);
+    check($populatedPayments['Status'] === 200 && $populatedPayments['Body']['Total'] === 1 && $populatedPayments['Body']['Items'][0]['Id'] === 'mixed' && $populatedPayments['Body']['Items'][0]['Amount'] === 88, 'HTTP mixed-ticket payment attribution');
+    check(request($address, 'PUT', '/api/members/monthly-goal', ['TargetDays' => 7], $resourceToken)['Body']['TargetDays'] === 7, 'HTTP goal update');
+    $reloadedGoal = request($address, 'GET', '/api/members/dashboard', null, $resourceToken)['Body']['MonthlyGoal'];
+    check($reloadedGoal === ['TargetDays' => 7, 'AttendedDays' => 1, 'ProgressPercent' => 14.29], 'HTTP goal reload and rounding');
+    check(request($address, 'PUT', '/api/members/monthly-goal', ['TargetDays' => '7'], $resourceToken)['Status'] === 400, 'HTTP invalid goal');
+    check(request($address, 'PUT', '/api/members/monthly-goal', ['TargetDays' => 7], $httpAccountLogin['Token'])['Status'] === 400, 'HTTP global token cannot write goal');
+    $claims = (new JwtService(getenv('MEMBERS_JWT_SECRET')))->validateToken($resourceToken);
+    $claims['UserId'] = 'foreign-member';
+    $tamperedContext = (new JwtService(getenv('MEMBERS_JWT_SECRET')))->createToken($claims, 3600);
+    check(request($address, 'GET', '/api/members/dashboard', null, $tamperedContext)['Status'] === 401, 'HTTP signed mismatched identity denied');
+    $db->query('RENAME TABLE AttendancesDesktop TO AttendancesDesktopUnavailable');
+    try {
+        $failedDashboard = request($address, 'GET', '/api/members/dashboard', null, $resourceToken);
+        check($failedDashboard['Status'] === 503 && $failedDashboard['Body']['Code'] === 'TEMPORARILY_UNAVAILABLE', 'HTTP failed query is never zero activity');
+    } finally {
+        $db->query('RENAME TABLE AttendancesDesktopUnavailable TO AttendancesDesktop');
+    }
     check(request($address, 'PATCH', '/api/member-management/links/' . $httpRedeem['Body']['LinkId'], ['Active' => false], $adminToken)['Status'] === 200, 'HTTP disable selected relation');
+    foreach (['dashboard', 'payments'] as $resource) {
+        check(request($address, 'GET', '/api/members/' . $resource, null, $resourceToken)['Status'] === 403, 'HTTP disabled context denies reads');
+    }
+    check(request($address, 'PUT', '/api/members/monthly-goal', ['TargetDays' => 8], $resourceToken)['Status'] === 403, 'HTTP disabled context denies write');
     $httpBlocked = request($address, 'POST', '/api/members/context', ['LinkId' => $httpRedeem['Body']['LinkId']], $httpSelected['Body']['Token']);
     check($httpBlocked['Status'] === 403 && $httpBlocked['Body']['Code'] === 'LINK_DISABLED', 'HTTP disabled relation denied with valid JWT');
     check(request($address, 'GET', '/api/members/me', null, $httpSelected['Body']['Token'])['Status'] === 200, 'HTTP disabled context preserves global account');
@@ -326,6 +369,8 @@ try {
     check($portalUnavailable['Status'] === 200 && $portalUnavailable['Body']['IsOwner'] === false && $portalUnavailable['Body']['Permissions'] === [], 'Legacy login survives unavailable permissions with controls denied');
     $preflight = request($address, 'OPTIONS', '/api/member-management/invitations', null);
     check($preflight['Status'] === 204 && str_contains(implode('|', $preflight['Headers']), 'https://localhost:8100'), 'Configured CORS');
+    $goalPreflight = request($address, 'OPTIONS', '/api/members/monthly-goal', null);
+    check($goalPreflight['Status'] === 204 && str_contains(implode('|', $goalPreflight['Headers']), 'GET, POST, PUT, PATCH, OPTIONS'), 'Members CORS allows goal PUT');
     echo "PASS: HTTP production routing, login, restore, token separation, accounts, context, disable, verification, logout and CORS.\n";
 } finally {
     if (is_resource($server)) { proc_terminate($server); foreach ($pipes as $pipe) { if (is_resource($pipe)) { fclose($pipe); } } proc_close($server); }

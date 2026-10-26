@@ -1,5 +1,7 @@
 # Cuentas globales de socios — contrato y operación
 
+El incremento de dashboard, pagos y meta está documentado en [members-dashboard-api.md](members-dashboard-api.md), incluida su migración aditiva y la confirmación pendiente de zona horaria por gimnasio.
+
 Implementación de backend de la fase web. No crea `UsersDesktop`, no modifica sincronización, membresías, cuentas administrativas ni acceso físico. Una cuenta puede ser titular de varios socios de distintos gimnasios. La restricción única `(CustomerApiId, UserId)` conserva titularidad incluso con `Active=0` o `IsDeleted=1`. No hay transferencia, reactivación ni recuperación de contraseña en esta fase.
 
 ## Configuración y orden de entrega
@@ -32,7 +34,7 @@ Para revocar, actualizar `Active=0`, `UpdatedAt` y `UpdatedBy` en esa fila. La c
 
 ## Convenciones HTTP
 
-JSON PascalCase, fechas ISO-8601 UTC; fechas persistidas UTC. Respuestas correctas `200`. Error: `{ "Code": "...", "Message": "..." }`. No enviar secretos por query string. Todas las nuevas respuestas usan `Cache-Control: no-store` y `Referrer-Policy: no-referrer`.
+JSON PascalCase. Las fechas de cuentas/sesiones son UTC; las fechas sincronizadas del dashboard y pagos siguen la convención local documentada abajo y no se convierten implícitamente a UTC. Respuestas correctas `200`. Error: `{ "Code": "...", "Message": "..." }`. No enviar secretos por query string. Todas las nuevas respuestas usan `Cache-Control: no-store` y `Referrer-Policy: no-referrer`.
 
 | Estado | Code | Significado |
 | --- | --- | --- |

@@ -29,7 +29,7 @@ function sendCorsHeaders(): void
             header('Access-Control-Allow-Origin: ' . $origin);
         }
         header('Vary: Origin');
-        header('Access-Control-Allow-Methods: GET, POST, PATCH, OPTIONS');
+        header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, OPTIONS');
         header('Access-Control-Allow-Headers: Content-Type, Authorization, RequestId, Request-Id, X-Request-Id');
         header('Cache-Control: no-store');
         header('Referrer-Policy: no-referrer');

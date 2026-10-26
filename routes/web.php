@@ -276,6 +276,9 @@ $router->post('/api/members/resend-verification', 'MembersController', 'resendVe
 $router->post('/api/members/login', 'MembersController', 'login');
 $router->post('/api/members/logout', 'MembersController', 'logout');
 $router->get('/api/members/me', 'MembersController', 'me');
+$router->get('/api/members/dashboard', 'MembersController', 'dashboard');
+$router->get('/api/members/payments', 'MembersController', 'payments');
+$router->put('/api/members/monthly-goal', 'MembersController', 'monthlyGoal');
 $router->get('/api/members/links', 'MembersController', 'links');
 $router->post('/api/members/context', 'MembersController', 'context');
 $router->post('/api/members/invitation-context', 'MembersController', 'invitationContext');
