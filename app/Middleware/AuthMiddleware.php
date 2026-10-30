@@ -8,6 +8,11 @@ require_once __DIR__ . '/../Core/UrlHelper.php';
 
 class AuthMiddleware
 {
+    public function handle(): void
+    {
+        self::apply();
+    }
+
     /**
      * Rutas públicas que no requieren autenticación
      */

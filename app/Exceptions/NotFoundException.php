@@ -26,6 +26,6 @@ class NotFoundException extends ApiException
             }
         }
 
-        parent::__construct($message, 404, $data, 'NOT_FOUND');
+        parent::__construct($message, 404, $data, ApiErrorCode::NotFound);
     }
 }

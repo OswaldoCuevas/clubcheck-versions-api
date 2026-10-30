@@ -79,6 +79,9 @@ debug_*.php
 *_debug.php
 phpunit.xml
 .phpunit.result.cache
+/.phpunit.cache/
+/tests/.artifacts/
+/tests/.sessions/
 
 # Documentación temporal
 # ===========================================

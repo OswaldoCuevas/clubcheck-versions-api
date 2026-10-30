@@ -1,36 +1,54 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Exceptions;
 
+// Compatibilidad con scripts heredados que cargan esta clase sin Composer.
+require_once __DIR__ . '/ApiErrorCode.php';
+
+use Exception;
+use Throwable;
+
 /**
- * Excepción base para errores de API controlados
- * 
- * Uso:
- *   throw new ApiException('Mensaje de error', 400);
- *   throw new ApiException('No encontrado', 404, ['field' => 'id']);
+ * Excepción controlada que el Router convierte en una respuesta JSON.
+ *
+ * Para código nuevo se recomienda fromErrorCode(), porque obtiene del enum
+ * el estado HTTP y el mensaje predeterminado.
  */
-class ApiException extends \Exception
+class ApiException extends Exception
 {
     protected int $statusCode;
     protected array $data;
-    protected string $errorCode;
+    protected ApiErrorCode $errorCode;
 
-    /**
-     * @param string $message Mensaje de error para el usuario
-     * @param int $statusCode Código HTTP (400, 401, 403, 404, 500, etc.)
-     * @param array $data Datos adicionales para incluir en la respuesta
-     * @param string $errorCode Código de error interno (ej: 'VALIDATION_ERROR', 'NOT_FOUND')
-     */
     public function __construct(
         string $message = 'Error en la solicitud',
         int $statusCode = 400,
         array $data = [],
-        string $errorCode = 'API_ERROR'
+        ApiErrorCode $errorCode = ApiErrorCode::ApiError,
+        ?Throwable $previous = null,
     ) {
-        parent::__construct($message, $statusCode);
+        parent::__construct($message, $statusCode, $previous);
         $this->statusCode = $statusCode;
         $this->data = $data;
         $this->errorCode = $errorCode;
+    }
+
+    /** Crea una excepción usando la información declarada en el enum. */
+    public static function fromErrorCode(
+        ApiErrorCode $errorCode,
+        ?string $message = null,
+        array $data = [],
+        ?Throwable $previous = null,
+    ): self {
+        return new self(
+            $message ?? $errorCode->publicMessage(),
+            $errorCode->httpStatus(),
+            $data,
+            $errorCode,
+            $previous,
+        );
     }
 
     public function getStatusCode(): int
@@ -43,20 +61,24 @@ class ApiException extends \Exception
         return $this->data;
     }
 
+    /** Mantiene compatibilidad con código que compara el valor como string. */
     public function getErrorCode(): string
+    {
+        return $this->errorCode->value;
+    }
+
+    public function getApiErrorCode(): ApiErrorCode
     {
         return $this->errorCode;
     }
 
-    /**
-     * Convierte la excepción a un array para respuesta JSON
-     */
+    /** @return array<string, mixed> */
     public function toArray(): array
     {
         $response = [
             'success' => false,
             'error' => $this->getMessage(),
-            'error_code' => $this->errorCode,
+            'error_code' => $this->errorCode->value,
         ];
 
         if (!empty($this->data)) {
@@ -66,14 +88,4 @@ class ApiException extends \Exception
         return $response;
     }
 
-    /**
-     * Responde directamente con JSON y termina la ejecución
-     */
-    public function respond(): void
-    {
-        http_response_code($this->statusCode);
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode($this->toArray(), JSON_UNESCAPED_UNICODE);
-        exit;
-    }
 }

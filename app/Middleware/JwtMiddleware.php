@@ -3,6 +3,7 @@
 namespace App\Middleware;
 
 use App\Services\JwtService;
+use App\Exceptions\ApiErrorCode;
 use App\Exceptions\UnauthorizedException;
 
 /**
@@ -37,7 +38,7 @@ class JwtMiddleware
         $token = $this->extractToken();
 
         if (!$token) {
-            throw new UnauthorizedException('Token no proporcionado', 'TOKEN_MISSING');
+            throw new UnauthorizedException('Token no proporcionado', ApiErrorCode::TokenMissing);
         }
 
         $payload = $this->jwtService->validateToken($token);
@@ -47,10 +48,10 @@ class JwtMiddleware
             $info = $this->jwtService->getTokenInfo($token);
             
             if ($info['valid_format'] && $info['is_expired']) {
-                throw new UnauthorizedException('Token expirado', 'TOKEN_EXPIRED');
+                throw new UnauthorizedException('Token expirado', ApiErrorCode::TokenExpired);
             }
 
-            throw new UnauthorizedException('Token inválido', 'TOKEN_INVALID');
+            throw new UnauthorizedException('Token inválido', ApiErrorCode::TokenInvalid);
         }
 
         // Guardar payload para uso posterior

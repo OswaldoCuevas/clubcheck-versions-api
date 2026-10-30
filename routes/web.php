@@ -2,7 +2,8 @@
 
 use Core\Router;
 
-$router = new Router();
+$container = require __DIR__ . '/../config/services.php';
+$router = new Router($container);
 
 // ==================== MIDDLEWARES ====================
 // 
@@ -150,7 +151,12 @@ $router->post('/admin/api/push/send', 'PushNotificationsController', 'send');
 $router->get('/admin/announcements', 'AdminController', 'announcements');// NO, Administrativo
 $router->get('/admin/api/announcements', 'AdminController', 'announcementsJson');// NO, Administrativo
 $router->post('/admin/api/announcements', 'AdminController', 'announcementSaveJson');// NO, Administrativo
-$router->post('/admin/api/announcements/upload-image', 'AdminController', 'announcementUploadImageJson');// NO, Administrativo
+$router->post(
+    '/admin/api/announcements/upload-image',
+    'AdminAnnouncementController',
+    'announcementUploadImageJson',
+    ['auth', 'permission:admin_access'],
+);
 $router->get('/admin/api/announcements/:id/views', 'AdminController', 'announcementViewsJson');// NO, Administrativo
 $router->post('/admin/api/announcements/:id/activate', 'AdminController', 'announcementActivateJson');// NO, Administrativo
 $router->post('/admin/api/announcements/:id/delete', 'AdminController', 'announcementDeleteJson');// NO, Administrativo

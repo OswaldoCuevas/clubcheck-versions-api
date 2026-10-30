@@ -2,7 +2,9 @@
 
 namespace Core;
 
+use App\Exceptions\ApiErrorCode;
 use App\Exceptions\ApiException;
+use App\Http\JsonResponse;
 
 class Router
 {
@@ -20,7 +22,12 @@ class Router
         'customer_jwt' => \App\Middleware\CustomerJwtMiddleware::class,
         'desktop_jwt' => \App\Middleware\DesktopJwtMiddleware::class,
         'push_client_jwt' => \App\Middleware\PushClientJwtMiddleware::class,
+        'permission' => \Middleware\PermissionMiddleware::class,
     ];
+
+    public function __construct(private ?Container $container = null)
+    {
+    }
 
     /**
      * Registra un nuevo middleware en el registry
@@ -120,7 +127,7 @@ class Router
             $this->respondJson([
                 'success' => false,
                 'error' => 'Endpoint no encontrado',
-                'error_code' => 'ROUTE_NOT_FOUND'
+                'error_code' => ApiErrorCode::RouteNotFound->value
             ], 404);
             return;
         }
@@ -234,24 +241,23 @@ class Router
         $controllerClass = "Controllers\\{$route['controller']}";
         $method = $route['action'];
 
-        if (!class_exists($controllerClass)) {
-            throw new \Exception("Controller {$controllerClass} not found");
-        }
-
-        $controller = new $controllerClass();
-
-        if (!method_exists($controller, $method)) {
-            throw new \Exception("Method {$method} not found in {$controllerClass}");
-        }
-
         try {
+            if (!class_exists($controllerClass)) {
+                throw new \Exception("Controller {$controllerClass} not found");
+            }
+
             // Ejecutar middlewares antes del controlador
             $this->runMiddleware($route['middleware'] ?? []);
+
+            $controller = $this->resolveClass($controllerClass);
+            if (!method_exists($controller, $method)) {
+                throw new \Exception("Method {$method} not found in {$controllerClass}");
+            }
             
             return call_user_func_array([$controller, $method], $this->routeParams);
         } catch (ApiException $e) {
             // Excepción controlada - responder con JSON formateado
-            $e->respond();
+            JsonResponse::send($e->toArray(), $e->getStatusCode());
         } catch (\Throwable $e) {
             // Excepción no controlada - loguear y responder error genérico
             $errorId = 'err_' . date('YmdHis') . '_' . bin2hex(random_bytes(4));
@@ -275,7 +281,7 @@ class Router
             $response = [
                 'success' => false,
                 'error' => $showDebug ? $e->getMessage() : 'Error interno del servidor',
-                'error_code' => 'INTERNAL_ERROR',
+                'error_code' => ApiErrorCode::InternalError->value,
                 'error_id' => $errorId,
             ];
             if ($showDebug) {
@@ -318,7 +324,7 @@ class Router
             }
 
             // Instanciar y ejecutar el middleware
-            $middleware = new $middlewareClass();
+            $middleware = $this->resolveClass($middlewareClass);
 
             if (method_exists($middleware, 'handle')) {
                 $middleware->handle(...$params);
@@ -326,6 +332,15 @@ class Router
                 throw new \Exception("Middleware '{$middlewareName}' no tiene método handle()");
             }
         }
+    }
+
+    private function resolveClass(string $className): object
+    {
+        if ($this->container?->has($className)) {
+            return $this->container->get($className);
+        }
+
+        return new $className();
     }
 
     public function getCurrentRoute()

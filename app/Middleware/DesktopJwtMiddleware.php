@@ -5,6 +5,7 @@ namespace App\Middleware;
 require_once __DIR__ . '/../Services/JwtService.php';
 require_once __DIR__ . '/../Exceptions/UnauthorizedException.php';
 
+use App\Exceptions\ApiErrorCode;
 use App\Exceptions\UnauthorizedException;
 use App\Services\JwtService;
 
@@ -22,7 +23,7 @@ class DesktopJwtMiddleware
         $token = $this->extractToken();
 
         if (!$token) {
-            throw new UnauthorizedException('Token no proporcionado', 'TOKEN_MISSING');
+            throw new UnauthorizedException('Token no proporcionado', ApiErrorCode::TokenMissing);
         }
 
         $payload = $this->jwtService->validateToken($token);
@@ -30,14 +31,14 @@ class DesktopJwtMiddleware
         if (!$payload) {
             $info = $this->jwtService->getTokenInfo($token);
             if (($info['valid_format'] ?? false) && ($info['is_expired'] ?? false)) {
-                throw new UnauthorizedException('Token expirado', 'TOKEN_EXPIRED');
+                throw new UnauthorizedException('Token expirado', ApiErrorCode::TokenExpired);
             }
 
-            throw new UnauthorizedException('Token invalido', 'TOKEN_INVALID');
+            throw new UnauthorizedException('Token invalido', ApiErrorCode::TokenInvalid);
         }
 
         if (empty($payload['customerId']) || empty($payload['name'])) {
-            throw new UnauthorizedException('Token invalido para desktop', 'TOKEN_TYPE_INVALID');
+            throw new UnauthorizedException('Token invalido para desktop', ApiErrorCode::TokenTypeInvalid);
         }
 
         $GLOBALS['desktop_jwt_payload'] = $payload;

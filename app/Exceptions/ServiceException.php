@@ -8,18 +8,18 @@ namespace App\Exceptions;
  * 
  * Uso:
  *   throw new ServiceException('Error al conectar con Stripe');
- *   throw new ServiceException('Servicio de WhatsApp no disponible', 'WHATSAPP_UNAVAILABLE');
+ *   throw new ServiceException('Servicio de WhatsApp no disponible', ApiErrorCode::WhatsAppUnavailable);
  */
 class ServiceException extends ApiException
 {
     /**
      * @param string $message Mensaje de error
-     * @param string $errorCode Código de error específico
+     * @param ApiErrorCode $errorCode Código de error específico
      * @param int $statusCode 502 (Bad Gateway) o 503 (Service Unavailable)
      */
     public function __construct(
         string $message = 'Error en servicio externo',
-        string $errorCode = 'SERVICE_ERROR',
+        ApiErrorCode $errorCode = ApiErrorCode::ServiceError,
         int $statusCode = 502
     ) {
         parent::__construct($message, $statusCode, [], $errorCode);

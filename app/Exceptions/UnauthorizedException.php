@@ -9,15 +9,18 @@ namespace App\Exceptions;
  * Uso:
  *   throw new UnauthorizedException();
  *   throw new UnauthorizedException('Token expirado');
- *   throw new UnauthorizedException('Credenciales inválidas', 'INVALID_CREDENTIALS');
+ *   throw new UnauthorizedException('Credenciales inválidas', ApiErrorCode::InvalidCredentials);
  */
 class UnauthorizedException extends ApiException
 {
     /**
      * @param string $message Mensaje de error
-     * @param string $errorCode Código de error específico
+     * @param ApiErrorCode $errorCode Código de error específico
      */
-    public function __construct(string $message = 'No autorizado', string $errorCode = 'UNAUTHORIZED')
+    public function __construct(
+        string $message = 'No autorizado',
+        ApiErrorCode $errorCode = ApiErrorCode::Unauthorized,
+    )
     {
         parent::__construct($message, 401, [], $errorCode);
     }

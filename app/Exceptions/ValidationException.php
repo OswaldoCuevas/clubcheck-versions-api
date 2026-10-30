@@ -17,7 +17,7 @@ class ValidationException extends ApiException
      */
     public function __construct(string $message = 'Error de validación', array $errors = [])
     {
-        parent::__construct($message, 400, $errors, 'VALIDATION_ERROR');
+        parent::__construct($message, 400, $errors, ApiErrorCode::ValidationError);
     }
 
     public function toArray(): array
@@ -25,7 +25,7 @@ class ValidationException extends ApiException
         $response = [
             'success' => false,
             'error' => $this->getMessage(),
-            'error_code' => $this->errorCode,
+            'error_code' => $this->errorCode->value,
         ];
 
         if (!empty($this->data)) {

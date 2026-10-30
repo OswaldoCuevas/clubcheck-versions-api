@@ -8,18 +8,18 @@ namespace App\Exceptions;
  * 
  * Uso:
  *   throw new ConflictException('El email ya está registrado');
- *   throw new ConflictException('Ya existe una suscripción activa', 'SUBSCRIPTION_EXISTS');
+ *   throw new ConflictException('Ya existe una suscripción activa', ApiErrorCode::SubscriptionExists);
  */
 class ConflictException extends ApiException
 {
     /**
      * @param string $message Mensaje de error
-     * @param string $errorCode Código de error específico
+     * @param ApiErrorCode $errorCode Código de error específico
      * @param array $data Datos adicionales
      */
     public function __construct(
         string $message = 'Conflicto con el recurso',
-        string $errorCode = 'CONFLICT',
+        ApiErrorCode $errorCode = ApiErrorCode::Conflict,
         array $data = []
     ) {
         parent::__construct($message, 409, $data, $errorCode);

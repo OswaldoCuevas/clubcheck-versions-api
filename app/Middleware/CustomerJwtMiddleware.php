@@ -6,6 +6,7 @@ require_once __DIR__ . '/../Services/CustomerJwtService.php';
 require_once __DIR__ . '/../Exceptions/UnauthorizedException.php';
 
 use App\Services\CustomerJwtService;
+use App\Exceptions\ApiErrorCode;
 use App\Exceptions\UnauthorizedException;
 
 /**
@@ -46,7 +47,7 @@ class CustomerJwtMiddleware
         $token = $this->extractToken();
 
         if (!$token) {
-            throw new UnauthorizedException('Token no proporcionado', 'TOKEN_MISSING');
+            throw new UnauthorizedException('Token no proporcionado', ApiErrorCode::TokenMissing);
         }
 
         // Obtener información del request para logging
@@ -77,7 +78,8 @@ class CustomerJwtMiddleware
             ];
 
             $message = $errorMessages[$result['errorCode']] ?? 'Token inválido';
-            throw new UnauthorizedException($message, $result['errorCode']);
+            $errorCode = ApiErrorCode::tryFrom((string) $result['errorCode']) ?? ApiErrorCode::TokenInvalid;
+            throw new UnauthorizedException($message, $errorCode);
         }
 
         // Guardar información para uso posterior

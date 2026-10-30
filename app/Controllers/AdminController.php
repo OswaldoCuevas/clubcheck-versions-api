@@ -630,44 +630,6 @@ class AdminController extends Controller
         $this->json(['success' => true]);
     }
 
-    public function announcementUploadImageJson(): void
-    {
-        $this->requirePermission('admin_access');
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->json(['error' => 'Method not allowed'], 405);
-        }
-        if (empty($_FILES['image']) || !is_uploaded_file($_FILES['image']['tmp_name'])) {
-            $this->json(['error' => 'Imagen no proporcionada'], 422);
-        }
-
-        $file = $_FILES['image'];
-        $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
-        $mime = mime_content_type($file['tmp_name']) ?: '';
-        if (!isset($allowed[$mime])) {
-            $this->json(['error' => 'Formato de imagen no soportado'], 422);
-        }
-        if (($file['size'] ?? 0) > 5 * 1024 * 1024) {
-            $this->json(['error' => 'La imagen no puede superar 5 MB'], 422);
-        }
-
-        $dir = __DIR__ . '/../../uploads/announcements';
-        if (!is_dir($dir) && !mkdir($dir, 0775, true)) {
-            $this->json(['error' => 'No se pudo crear el directorio de imagenes'], 500);
-        }
-
-        $filename = date('YmdHis') . '-' . bin2hex(random_bytes(6)) . '.' . $allowed[$mime];
-        $target = $dir . '/' . $filename;
-        if (!move_uploaded_file($file['tmp_name'], $target)) {
-            $this->json(['error' => 'No se pudo guardar la imagen'], 500);
-        }
-
-        $this->json([
-            'success' => true,
-            'imageUrl' => app_url('/uploads/announcements/' . $filename),
-        ]);
-    }
-
     public function apiDocs()
     {
         $this->requirePermission('admin_access');
@@ -1990,7 +1952,7 @@ class AdminController extends Controller
      *   "expiresAt":      1780000000   // opcional: solo para planes recurrentes sin suscripción Stripe
      * }
      */
-    public function generateLicenseAdmin(): void
+    public function generateLicenseAdmin()
     {
         $this->requirePermission('admin_access');
 
