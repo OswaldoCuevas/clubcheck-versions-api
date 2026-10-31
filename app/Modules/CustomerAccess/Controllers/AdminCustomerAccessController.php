@@ -8,6 +8,7 @@ use App\Application\Contracts\IMediator;
 use App\Http\JsonResponse;
 use App\Http\JsonResult;
 use App\Http\ViewResponse;
+use App\Http\JsonPayload;
 use App\Modules\CustomerAccess\Features\CreateToken\Command as CreateTokenCommand;
 use App\Modules\CustomerAccess\Features\FlagIp\Command as FlagIpCommand;
 use App\Modules\CustomerAccess\Features\ListCustomerIps\Query as ListCustomerIpsQuery;
@@ -40,11 +41,11 @@ final readonly class AdminCustomerAccessController
     }
     public function createJwtToken(): void
     {
-        $this->send($this->mediator->send(new CreateTokenCommand($this->jsonBody())));
+        $this->send($this->mediator->send(new CreateTokenCommand(JsonPayload::Get())));
     }
     public function revokeJwtToken(): void
     {
-        $this->send($this->mediator->send(new RevokeTokenCommand($this->jsonBody())));
+        $this->send($this->mediator->send(new RevokeTokenCommand(JsonPayload::Get())));
     }
     public function customerIpsJson(string $customerId): void
     {
@@ -52,15 +53,10 @@ final readonly class AdminCustomerAccessController
     }
     public function flagIp(string $id): void
     {
-        $this->send($this->mediator->send(new FlagIpCommand($id, $this->jsonBody())));
+        $this->send($this->mediator->send(new FlagIpCommand($id, JsonPayload::Get())));
     }
     private function send(JsonResult $result): never
     {
         JsonResponse::send($result->data, $result->statusCode);
-    }
-    private function jsonBody(): array
-    {
-        $body = json_decode(file_get_contents('php://input'), true);
-        return is_array($body) ? $body : [];
     }
 }

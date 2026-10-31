@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Customers\Controllers;
 
 use App\Application\Contracts\IMediator;
+use App\Http\JsonPayload;
 use App\Http\JsonResponse;
 use App\Http\JsonResult;
 use App\Http\ViewResponse;
@@ -36,7 +37,7 @@ final readonly class AdminCustomerController
 
     public function regenerateAccessKey(): void
     {
-        $this->send($this->mediator->send(new RegenerateAccessKeyCommand($this->jsonBody())));
+        $this->send($this->mediator->send(new RegenerateAccessKeyCommand(JsonPayload::Get())));
     }
 
     public function deleteCustomerJson(string $customerId): void
@@ -46,14 +47,7 @@ final readonly class AdminCustomerController
 
     public function saveCustomerJson(): void
     {
-        $this->send($this->mediator->send(new SaveCustomerCommand($this->jsonBody())));
-    }
-
-    /** @return array<string, mixed> */
-    private function jsonBody(): array
-    {
-        $payload = json_decode(file_get_contents('php://input'), true);
-        return is_array($payload) ? $payload : [];
+        $this->send($this->mediator->send(new SaveCustomerCommand(JsonPayload::Get())));
     }
 
     private function send(JsonResult $result): never

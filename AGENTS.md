@@ -40,3 +40,5 @@
 - Repository contracts belong in `Modules/<Module>/Contracts/` and expose business-oriented persistence operations, not raw SQL or HTTP concepts. Keep Commands, Queries, Handlers, and Controllers unaware of `IDatabaseConnection`; only concrete repositories may depend on it.
 - Commands, Queries, Results, Requests, entities, and value objects contain operation data and must not be registered as singletons.
 - Constructor parameters with scalar configuration require an explicit factory. Do not read global configuration from application Handlers when it can be supplied by the composition root.
+
+JsonPayload siempre se debe usar para recibir el paylod en todos los controllers que se modifiquen o migren apra tenrlo en cuenta

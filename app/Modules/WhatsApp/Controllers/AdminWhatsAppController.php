@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\WhatsApp\Controllers;
 
 use App\Application\Contracts\IMediator;
+use App\Http\JsonPayload;
 use App\Http\JsonResponse;
 use App\Http\JsonResult;
 use App\Http\ViewResponse;
@@ -51,7 +52,7 @@ final readonly class AdminWhatsAppController
     }
     public function whatsappCreateJson(): void
     {
-        $this->send($this->mediator->send(new CreateConfigurationCommand($this->jsonBody())));
+        $this->send($this->mediator->send(new CreateConfigurationCommand(JsonPayload::Get())));
     }
     public function whatsappDeleteJson(string $id): void
     {
@@ -71,7 +72,7 @@ final readonly class AdminWhatsAppController
     }
     public function whatsappTemplateCreateJson(): void
     {
-        $this->send($this->mediator->send(new CreateTemplateCommand($this->jsonBody())));
+        $this->send($this->mediator->send(new CreateTemplateCommand(JsonPayload::Get())));
     }
     public function whatsappTemplateDeleteJson(string $id): void
     {
@@ -80,10 +81,5 @@ final readonly class AdminWhatsAppController
     private function send(JsonResult $result): never
     {
         JsonResponse::send($result->data, $result->statusCode);
-    }
-    private function jsonBody(): array
-    {
-        $body = json_decode(file_get_contents('php://input'), true);
-        return is_array($body) ? $body : [];
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Licenses\Controllers;
 
 use App\Application\Contracts\IMediator;
+use App\Http\JsonPayload;
 use App\Http\JsonResponse;
 use App\Http\JsonResult;
 use App\Http\ViewResponse;
@@ -27,8 +28,8 @@ final readonly class AdminLicenseController
     }
     public function generateLicenseAdmin(): void
     {
-        $body = json_decode(file_get_contents('php://input'), true);
-        $this->send($this->mediator->send(new GenerateLicenseCommand(is_array($body) ? $body : [])));
+        $body = JsonPayload::Get();
+        $this->send($this->mediator->send(new GenerateLicenseCommand($body)));
     }
     private function send(JsonResult $result): never
     {
