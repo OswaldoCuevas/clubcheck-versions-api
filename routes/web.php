@@ -5,6 +5,7 @@ use App\Modules\Admin\Controllers\AdminDashboardController;
 use App\Modules\ApiDocs\Controllers\AdminApiDocsController;
 use App\Modules\CustomerAccess\Controllers\AdminCustomerAccessController;
 use App\Modules\Customers\Controllers\AdminCustomerController;
+use App\Modules\Customers\Controllers\CustomerDesktopSyncController;
 use App\Modules\CustomerStats\Controllers\AdminCustomerStatsController;
 use App\Modules\Downloads\Controllers\AdminDownloadController;
 use App\Modules\Licenses\Controllers\AdminLicenseController;
@@ -72,8 +73,8 @@ $router->post('/api/customers/permission-requests/:id/cancel', 'PermissionReques
 $router->get('/api/customers/announcements/current', 'AnnouncementsController', 'current', ['customer_jwt']);
 $router->post('/api/customers/announcements/viewed', 'AnnouncementsController', 'viewedCurrent', ['customer_jwt']);
 $router->post('/api/customers/announcements/:id/viewed', 'AnnouncementsController', 'viewed', ['customer_jwt']);
-$router->any('/api/customers/desktop/pull', 'CustomersController', 'pullDesktop', ['customer_jwt']);
-$router->any('/api/customers/desktop/push', 'CustomersController', 'pushDesktop', ['customer_jwt']);
+$router->any('/api/customers/desktop/pull', CustomerDesktopSyncController::class, 'pullDesktop', ['customer_jwt']);
+$router->any('/api/customers/desktop/push', CustomerDesktopSyncController::class, 'pushDesktop', ['customer_jwt']);
 $router->post('/api/customers/desktop/users/:userId/photo', 'UserPhotosController', 'upload', ['customer_jwt']);
 $router->any('/api/customers', 'CustomersController', 'patchCustomer',['customer_jwt']);
 $router->any('/api/customers/:customerId', 'CustomersController', 'getCustomer', ['customer_jwt']);

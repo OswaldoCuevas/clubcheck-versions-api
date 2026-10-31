@@ -13,5 +13,8 @@
         <testsuite name="admin-http-characterization">
             <directory suffix="Test.php">tests/Characterization/Admin</directory>
         </testsuite>
+        <testsuite name="customer-http-characterization">
+            <directory suffix="Test.php">tests/Characterization/Customers</directory>
+        </testsuite>
     </testsuites>
 </phpunit>

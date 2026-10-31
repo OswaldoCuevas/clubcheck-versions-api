@@ -1,0 +1,296 @@
+{
+    "version": 1,
+    "controller": "Controllers\\CustomersController",
+    "routeController": "CustomersController",
+    "description": "Contratos HTTP basales de CustomersController antes de migrarlo al monolito modular.",
+    "endpoints": [
+        {
+            "id": "customers.sessions.start.required-customer",
+            "name": "startSession exige customerId",
+            "controllerMethod": "startSession",
+            "routeMiddleware": [],
+            "authenticated": false,
+            "request": {
+                "method": "POST",
+                "path": "/api/customers/sessions/start",
+                "options": {"json": {}}
+            },
+            "expected": {
+                "status": 422,
+                "jsonSubset": {"error": "El campo customerId es obligatorio"}
+            }
+        },
+        {
+            "id": "customers.sessions.heartbeat.required-session",
+            "name": "heartbeat exige sessionId",
+            "controllerMethod": "heartbeat",
+            "routeMiddleware": [],
+            "authenticated": false,
+            "request": {
+                "method": "POST",
+                "path": "/api/customers/sessions/heartbeat",
+                "options": {"json": {}}
+            },
+            "expected": {
+                "status": 422,
+                "jsonSubset": {"error": "El campo sessionId es obligatorio"}
+            }
+        },
+        {
+            "id": "customers.sessions.end.required-session",
+            "name": "endSession exige sessionId",
+            "controllerMethod": "endSession",
+            "routeMiddleware": [],
+            "authenticated": false,
+            "request": {
+                "method": "POST",
+                "path": "/api/customers/sessions/end",
+                "options": {"json": {}}
+            },
+            "expected": {
+                "status": 422,
+                "jsonSubset": {"error": "El campo sessionId es obligatorio"}
+            }
+        },
+        {
+            "id": "customers.sessions.active.empty",
+            "name": "activeSessions devuelve el inventario de sesiones",
+            "controllerMethod": "activeSessions",
+            "routeMiddleware": [],
+            "authenticated": false,
+            "request": {
+                "method": "GET",
+                "path": "/api/customers/sessions/active"
+            },
+            "expected": {
+                "status": 200,
+                "jsonSubset": {"count": 0, "sessions": []}
+            }
+        },
+        {
+            "id": "customers.get.authenticated",
+            "name": "getCustomer devuelve el cliente autenticado",
+            "controllerMethod": "getCustomer",
+            "routeMiddleware": ["customer_jwt"],
+            "authenticated": true,
+            "request": {
+                "method": "GET",
+                "path": "/api/customers/customer-test-1"
+            },
+            "expected": {
+                "status": 200,
+                "jsonSubset": {"customer": {"customerId": "customer-test-1"}}
+            }
+        },
+        {
+            "id": "customers.desktop.pull.empty",
+            "name": "pullDesktop devuelve todos los bulks",
+            "controller": "App\\Modules\\Customers\\Controllers\\CustomerDesktopSyncController",
+            "routeController": "App\\Modules\\Customers\\Controllers\\CustomerDesktopSyncController",
+            "controllerMethod": "pullDesktop",
+            "routeMiddleware": ["customer_jwt"],
+            "authenticated": true,
+            "request": {
+                "method": "POST",
+                "path": "/api/customers/desktop/pull",
+                "options": {"json": {}}
+            },
+            "expected": {
+                "status": 200,
+                "jsonSubset": {"customerApiId": "customer-test-1", "bulks": {}}
+            }
+        },
+        {
+            "id": "customers.desktop.push.requires-bulks",
+            "name": "pushDesktop exige el objeto bulks",
+            "controller": "App\\Modules\\Customers\\Controllers\\CustomerDesktopSyncController",
+            "routeController": "App\\Modules\\Customers\\Controllers\\CustomerDesktopSyncController",
+            "controllerMethod": "pushDesktop",
+            "routeMiddleware": ["customer_jwt"],
+            "authenticated": true,
+            "request": {
+                "method": "POST",
+                "path": "/api/customers/desktop/push",
+                "options": {"json": {}}
+            },
+            "expected": {
+                "status": 422,
+                "jsonSubset": {"error": "Debes enviar el objeto bulks con la información a sincronizar"}
+            }
+        },
+        {
+            "id": "customers.save.requires-attributes",
+            "name": "saveCustomer exige al menos un atributo",
+            "controllerMethod": "saveCustomer",
+            "routeMiddleware": ["customer_jwt"],
+            "authenticated": true,
+            "request": {
+                "method": "POST",
+                "path": "/api/customers/save",
+                "options": {"json": {}}
+            },
+            "expected": {
+                "status": 422,
+                "jsonSubset": {"error": "No se enviaron atributos"}
+            }
+        },
+        {
+            "id": "customers.register.requires-name-and-token",
+            "name": "registerCustomer exige nombre y token",
+            "controllerMethod": "registerCustomer",
+            "routeMiddleware": [],
+            "authenticated": false,
+            "request": {
+                "method": "POST",
+                "path": "/api/customers/register",
+                "options": {"json": {}}
+            },
+            "expected": {
+                "status": 422,
+                "jsonSubset": {"error": "El nombre y el token son obligatorios"}
+            }
+        },
+        {
+            "id": "customers.login.requires-credentials",
+            "name": "loginCustomer exige sus cuatro credenciales",
+            "controllerMethod": "loginCustomer",
+            "routeMiddleware": [],
+            "authenticated": false,
+            "request": {
+                "method": "POST",
+                "path": "/api/customers/login",
+                "options": {"json": {}}
+            },
+            "expected": {
+                "status": 422,
+                "jsonSubset": {"error": "Debes proporcionar email, accessKey, deviceName y token"}
+            }
+        },
+        {
+            "id": "customers.patch.requires-attributes",
+            "name": "patchCustomer exige atributos",
+            "controllerMethod": "patchCustomer",
+            "routeMiddleware": ["customer_jwt"],
+            "authenticated": true,
+            "request": {
+                "method": "POST",
+                "path": "/api/customers",
+                "options": {"json": {}}
+            },
+            "expected": {
+                "status": 422,
+                "jsonSubset": {"error": "Debes proporcionar al menos un atributo para actualizar"}
+            }
+        },
+        {
+            "id": "customers.validate.requires-name-and-token",
+            "name": "validateCustomer exige nombre y token",
+            "controllerMethod": "validateCustomer",
+            "routeMiddleware": [],
+            "authenticated": false,
+            "request": {
+                "method": "POST",
+                "path": "/api/customers/validate",
+                "options": {"json": {}}
+            },
+            "expected": {
+                "status": 422,
+                "jsonSubset": {"error": "El nombre y el token son obligatorios"}
+            }
+        },
+        {
+            "id": "customers.token.await.requires-customer",
+            "name": "awaitToken exige customerId",
+            "controllerMethod": "awaitToken",
+            "routeMiddleware": [],
+            "authenticated": false,
+            "request": {
+                "method": "POST",
+                "path": "/api/customers/token/await",
+                "options": {"json": {}}
+            },
+            "expected": {
+                "status": 422,
+                "jsonSubset": {"error": "El campo customerId es obligatorio"}
+            }
+        },
+        {
+            "id": "customers.token.get.requires-customer",
+            "name": "customerToken exige customerId",
+            "controllerMethod": "customerToken",
+            "routeMiddleware": [],
+            "authenticated": false,
+            "request": {
+                "method": "GET",
+                "path": "/api/customers/token"
+            },
+            "expected": {
+                "status": 422,
+                "jsonSubset": {"error": "El campo customerId es obligatorio"}
+            }
+        },
+        {
+            "id": "customers.token.register.requires-token",
+            "name": "registerToken exige token",
+            "controllerMethod": "registerToken",
+            "routeMiddleware": ["customer_jwt"],
+            "authenticated": true,
+            "request": {
+                "method": "POST",
+                "path": "/api/customers/token/register",
+                "options": {"json": {}}
+            },
+            "expected": {
+                "status": 422,
+                "jsonSubset": {"error": "Los campos customerId y token son obligatorios"}
+            }
+        },
+        {
+            "id": "customers.messages.current-month",
+            "name": "getMessagesSendsAtMonth devuelve el contador mensual",
+            "controllerMethod": "getMessagesSendsAtMonth",
+            "routeMiddleware": ["customer_jwt"],
+            "authenticated": true,
+            "request": {
+                "method": "GET",
+                "path": "/api/customers/messages-sends-at-month/customer-test-1"
+            },
+            "expected": {
+                "status": 200,
+                "jsonSubset": {"customerId": "customer-test-1", "total": 0}
+            }
+        },
+        {
+            "id": "customers.jwt.validate.requires-token",
+            "name": "validateJwtToken exige token",
+            "controllerMethod": "validateJwtToken",
+            "routeMiddleware": [],
+            "authenticated": false,
+            "request": {
+                "method": "POST",
+                "path": "/api/customers/jwt/validate",
+                "options": {"json": {}}
+            },
+            "expected": {
+                "status": 400,
+                "jsonSubset": {"valid": false, "errorCode": "TOKEN_MISSING"}
+            }
+        },
+        {
+            "id": "customers.version.requires-version",
+            "name": "updateClientVersion exige version",
+            "controllerMethod": "updateClientVersion",
+            "routeMiddleware": ["customer_jwt"],
+            "authenticated": true,
+            "request": {
+                "method": "POST",
+                "path": "/api/customers/update-client-version",
+                "options": {"json": {}}
+            },
+            "expected": {
+                "status": 422,
+                "jsonSubset": {"error": "El parámetro version es obligatorio"}
+            }
+        }
+    ]
+}

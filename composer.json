@@ -22,8 +22,12 @@
         }
     },
     "scripts": {
-        "test": "phpunit",
+        "test": [
+            "Composer\\Config::disableProcessTimeout",
+            "phpunit"
+        ],
         "test:unit": "phpunit --testsuite unit",
-        "test:admin-http": "phpunit --testsuite admin-http-characterization"
+        "test:admin-http": "phpunit --testsuite admin-http-characterization",
+        "test:customers-http": "phpunit --testsuite customer-http-characterization"
     }
 }

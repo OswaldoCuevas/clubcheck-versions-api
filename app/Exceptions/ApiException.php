@@ -21,6 +21,7 @@ class ApiException extends Exception
     protected int $statusCode;
     protected array $data;
     protected ApiErrorCode $errorCode;
+    protected ?array $responseBody;
 
     public function __construct(
         string $message = 'Error en la solicitud',
@@ -28,11 +29,13 @@ class ApiException extends Exception
         array $data = [],
         ApiErrorCode $errorCode = ApiErrorCode::ApiError,
         ?Throwable $previous = null,
+        ?array $responseBody = null,
     ) {
         parent::__construct($message, $statusCode, $previous);
         $this->statusCode = $statusCode;
         $this->data = $data;
         $this->errorCode = $errorCode;
+        $this->responseBody = $responseBody;
     }
 
     /** Crea una excepción usando la información declarada en el enum. */
@@ -48,6 +51,29 @@ class ApiException extends Exception
             $data,
             $errorCode,
             $previous,
+        );
+    }
+
+    /**
+     * Conserva el body de un contrato HTTP heredado mientras el error se
+     * identifica internamente con un case estable de ApiErrorCode.
+     *
+     * @param array<string, mixed> $responseBody
+     */
+    public static function preservingResponse(
+        ApiErrorCode $errorCode,
+        array $responseBody,
+        ?Throwable $previous = null,
+    ): self {
+        $message = $responseBody['error'] ?? $errorCode->publicMessage();
+
+        return new self(
+            (string) $message,
+            $errorCode->httpStatus(),
+            [],
+            $errorCode,
+            $previous,
+            $responseBody,
         );
     }
 
@@ -75,6 +101,10 @@ class ApiException extends Exception
     /** @return array<string, mixed> */
     public function toArray(): array
     {
+        if ($this->responseBody !== null) {
+            return $this->responseBody;
+        }
+
         $response = [
             'success' => false,
             'error' => $this->getMessage(),

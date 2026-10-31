@@ -18,6 +18,7 @@ enum ApiErrorCode: string
     case Forbidden = 'FORBIDDEN';
     case NotFound = 'NOT_FOUND';
     case RouteNotFound = 'ROUTE_NOT_FOUND';
+    case MethodNotAllowed = 'METHOD_NOT_ALLOWED';
     case Conflict = 'CONFLICT';
     case ServiceError = 'SERVICE_ERROR';
     case InternalError = 'INTERNAL_ERROR';
@@ -31,6 +32,8 @@ enum ApiErrorCode: string
     case MachineTokenMismatch = 'MACHINE_TOKEN_MISMATCH';
     case CustomerNotFound = 'CUSTOMER_NOT_FOUND';
     case CustomerInactive = 'CUSTOMER_INACTIVE';
+    case InvalidJsonPayload = 'INVALID_JSON_PAYLOAD';
+    case DesktopSyncValidationFailed = 'DESKTOP_SYNC_VALIDATION_FAILED';
 
     case InvalidCredentials = 'INVALID_CREDENTIALS';
     case PlanLimitExceeded = 'PLAN_LIMIT_EXCEEDED';
@@ -68,13 +71,16 @@ enum ApiErrorCode: string
             self::RouteNotFound,
             self::AnnouncementNotFound => 404,
 
+            self::MethodNotAllowed => 405,
+
             self::Conflict,
             self::SubscriptionExists => 409,
 
             self::AnnouncementImageMissing,
             self::AnnouncementImageUnsupportedFormat,
             self::AnnouncementImageTooLarge,
-            self::AnnouncementValidationFailed => 422,
+            self::AnnouncementValidationFailed,
+            self::DesktopSyncValidationFailed => 422,
 
             self::ServiceError,
             self::WhatsAppUnavailable => 502,
@@ -85,7 +91,8 @@ enum ApiErrorCode: string
             self::AnnouncementImageStorageFailed => 500,
 
             self::ApiError,
-            self::ValidationError => 400,
+            self::ValidationError,
+            self::InvalidJsonPayload => 400,
         };
     }
 
@@ -98,6 +105,7 @@ enum ApiErrorCode: string
             self::Forbidden => 'Acceso prohibido',
             self::NotFound => 'Recurso no encontrado',
             self::RouteNotFound => 'Endpoint no encontrado',
+            self::MethodNotAllowed => 'Método no permitido',
             self::Conflict => 'Conflicto con el recurso',
             self::ServiceError => 'Error en servicio externo',
             self::InternalError => 'Error interno del servidor',
@@ -110,6 +118,8 @@ enum ApiErrorCode: string
             self::MachineTokenMismatch => 'Token de máquina no coincide',
             self::CustomerNotFound => 'Cliente no encontrado',
             self::CustomerInactive => 'Cliente inactivo',
+            self::InvalidJsonPayload => 'Carga JSON inválida',
+            self::DesktopSyncValidationFailed => 'Datos de sincronización inválidos',
             self::InvalidCredentials => 'Credenciales inválidas',
             self::PlanLimitExceeded => 'El plan no permite esta operación',
             self::SubscriptionExists => 'Ya existe una suscripción activa',

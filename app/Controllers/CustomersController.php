@@ -5,42 +5,7 @@ namespace Controllers;
 require_once __DIR__ . '/../Core/Controller.php';
 require_once __DIR__ . '/../Models/CustomerSessionModel.php';
 require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
-require_once __DIR__ . '/../Models/UsersDesktopModel.php';
-require_once __DIR__ . '/../Models/SubscriptionsDesktopModel.php';
-require_once __DIR__ . '/../Models/AttendancesDesktopModel.php';
-require_once __DIR__ . '/../Models/AdministratorsDesktopModel.php';
-require_once __DIR__ . '/../Models/SendEmailsAdminDesktopModel.php';
-require_once __DIR__ . '/../Models/HistoryOperationsDesktopModel.php';
-require_once __DIR__ . '/../Models/InfoMySubscriptionDesktopModel.php';
-require_once __DIR__ . '/../Models/WhatsAppDesktopModel.php';
-require_once __DIR__ . '/../Models/AppSettingsDesktopModel.php';
-require_once __DIR__ . '/../Models/SentMessagesDesktopModel.php';
 require_once __DIR__ . '/../Models/MessageSentModel.php';
-require_once __DIR__ . '/../Models/ProductDesktopModel.php';
-require_once __DIR__ . '/../Models/ProductPriceDesktopModel.php';
-require_once __DIR__ . '/../Models/ProductStockDesktopModel.php';
-require_once __DIR__ . '/../Models/CashRegisterDesktopModel.php';
-require_once __DIR__ . '/../Models/SaleTicketDesktopModel.php';
-require_once __DIR__ . '/../Models/SaleTicketItemDesktopModel.php';
-require_once __DIR__ . '/../Models/SubscriptionPeriodDesktopModel.php';
-require_once __DIR__ . '/../Models/SyncStatusDesktopModel.php';
-require_once __DIR__ . '/../Models/MigrationsDesktopModel.php';
-require_once __DIR__ . '/../Models/BarcodeLookupCacheDesktopModel.php';
-require_once __DIR__ . '/../Models/AccessDevicesDesktopModel.php';
-require_once __DIR__ . '/../Models/OperationsAccessDevicesDesktopModel.php';
-require_once __DIR__ . '/../Models/UserAccessDevicesDesktopModel.php';
-require_once __DIR__ . '/../Models/AccessUsersDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassCatalogDesktopModel.php';
-require_once __DIR__ . '/../Models/InstructorsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassInstructorsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassScheduleGroupsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassSchedulesDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassEnrollmentsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassReservationsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassScheduleInstructorsDesktopModel.php';
-require_once __DIR__ . '/../Models/ClassScheduleReschedulesDesktopModel.php';
-require_once __DIR__ . '/../Models/SaleClassesDesktopModel.php';
-require_once __DIR__ . '/../Models/SaleClassSchedulesDesktopModel.php';
 require_once __DIR__ . '/../Helpers/ApiHelper.php';
 require_once __DIR__ . '/../Services/StripeService.php';
 require_once __DIR__ . '/../Services/JwtService.php';
@@ -49,42 +14,7 @@ require_once __DIR__ . '/../Services/LicenseService.php';
 use Core\Controller;
 use Models\CustomerRegistryModel;
 use Models\CustomerSessionModel;
-use Models\UsersDesktopModel;
-use Models\SubscriptionsDesktopModel;
-use Models\AttendancesDesktopModel;
-use Models\AdministratorsDesktopModel;
-use Models\SendEmailsAdminDesktopModel;
-use Models\HistoryOperationsDesktopModel;
-use Models\InfoMySubscriptionDesktopModel;
-use Models\WhatsAppDesktopModel;
-use Models\AppSettingsDesktopModel;
-use Models\SentMessagesDesktopModel;
 use Models\MessageSentModel;
-use Models\ProductDesktopModel;
-use Models\ProductPriceDesktopModel;
-use Models\ProductStockDesktopModel;
-use Models\CashRegisterDesktopModel;
-use Models\SaleTicketDesktopModel;
-use Models\SaleTicketItemDesktopModel;
-use Models\SubscriptionPeriodDesktopModel;
-use Models\SyncStatusDesktopModel;
-use Models\MigrationsDesktopModel;
-use Models\BarcodeLookupCacheDesktopModel;
-use Models\AccessDevicesDesktopModel;
-use Models\OperationsAccessDevicesDesktopModel;
-use Models\UserAccessDevicesDesktopModel;
-use Models\AccessUsersDesktopModel;
-use Models\ClassCatalogDesktopModel;
-use Models\InstructorsDesktopModel;
-use Models\ClassInstructorsDesktopModel;
-use Models\ClassScheduleGroupsDesktopModel;
-use Models\ClassSchedulesDesktopModel;
-use Models\ClassEnrollmentsDesktopModel;
-use Models\ClassReservationsDesktopModel;
-use Models\ClassScheduleInstructorsDesktopModel;
-use Models\ClassScheduleReschedulesDesktopModel;
-use Models\SaleClassesDesktopModel;
-use Models\SaleClassSchedulesDesktopModel;
 use App\Services\StripeService;
 use ApiHelper;
 use App\Services\JwtService;
@@ -98,8 +28,6 @@ class CustomersController extends Controller
     private StripeService $stripeService;
     private ?LicenseService $licenseService = null;
     
-    private array $desktopModels;
-
     public function __construct()
     {
         parent::__construct();
@@ -107,8 +35,6 @@ class CustomersController extends Controller
         $this->sessionModel = new CustomerSessionModel();
         $this->customerRegistry = new CustomerRegistryModel();
         $this->messageSentModel = new MessageSentModel();
-        $this->desktopModels = $this->createDesktopModels();
-        
         // Inicializar StripeService
         $stripeConfig = require __DIR__ . '/../../config/stripe.php';
         $appMode = $_ENV['APP_MODE'] ?? 'DEV';
@@ -126,47 +52,6 @@ class CustomersController extends Controller
             // LicenseService no disponible si no están configuradas las claves
             $this->licenseService = null;
         }
-    }
-
-    private function createDesktopModels(): array
-    {
-        return [
-            'users' => new UsersDesktopModel(),
-            'subscriptions' => new SubscriptionsDesktopModel(),
-            'attendances' => new AttendancesDesktopModel(),
-            'administrators' => new AdministratorsDesktopModel(),
-            'sendEmailsAdmin' => new SendEmailsAdminDesktopModel(),
-            'historyOperations' => new HistoryOperationsDesktopModel(),
-            'infoMySubscription' => new InfoMySubscriptionDesktopModel(),
-            'whatsapp' => new WhatsAppDesktopModel(),
-            'appSettings' => new AppSettingsDesktopModel(),
-            'sentMessages' => new SentMessagesDesktopModel(),
-            'products' => new ProductDesktopModel(),
-            'productPrices' => new ProductPriceDesktopModel(),
-            'productStock' => new ProductStockDesktopModel(),
-            'cashRegisters' => new CashRegisterDesktopModel(),
-            'saleTickets' => new SaleTicketDesktopModel(),
-            'saleTicketItems' => new SaleTicketItemDesktopModel(),
-            'subscriptionPeriods' => new SubscriptionPeriodDesktopModel(),
-            'syncStatus' => new SyncStatusDesktopModel(),
-            'accessDevices' => new AccessDevicesDesktopModel(),
-            'operationsAccessDevices' => new OperationsAccessDevicesDesktopModel(),
-            'userAccessDevices' => new UserAccessDevicesDesktopModel(),
-            'accessUsers' => new AccessUsersDesktopModel(),
-            'classCatalog' => new ClassCatalogDesktopModel(),
-            'instructors' => new InstructorsDesktopModel(),
-            'classInstructors' => new ClassInstructorsDesktopModel(),
-            'classScheduleGroups' => new ClassScheduleGroupsDesktopModel(),
-            'classSchedules' => new ClassSchedulesDesktopModel(),
-            'classEnrollments' => new ClassEnrollmentsDesktopModel(),
-            'classReservations' => new ClassReservationsDesktopModel(),
-            'classScheduleInstructors' => new ClassScheduleInstructorsDesktopModel(),
-            'classScheduleReschedules' => new ClassScheduleReschedulesDesktopModel(),
-            'saleClasses' => new SaleClassesDesktopModel(),
-            'saleClassSchedules' => new SaleClassSchedulesDesktopModel(),
-            'migrations' => new MigrationsDesktopModel(),
-            'barcodeLookupCache' => new BarcodeLookupCacheDesktopModel(),
-        ];
     }
 
     private function normalizeTermsAndConditionsAcceptancePayload($value, bool $required): ?array
@@ -341,36 +226,6 @@ class CustomersController extends Controller
             'acceptedAt' => $acceptedAt,
             'userAgent' => $userAgent,
         ];
-    }
-
-    private function normalizeSyncFlag($value, string $field): bool
-    {
-        if (is_bool($value)) {
-            return $value;
-        }
-
-        if (is_int($value)) {
-            if ($value === 0 || $value === 1) {
-                return (bool) $value;
-            }
-        }
-
-        if (is_string($value)) {
-            $normalized = strtolower(trim($value));
-            if (in_array($normalized, ['1', 'true', 'yes', 'on'], true)) {
-                return true;
-            }
-
-            if (in_array($normalized, ['0', 'false', 'no', 'off'], true)) {
-                return false;
-            }
-        }
-
-        ApiHelper::respond([
-            'error' => sprintf('El campo %s debe ser booleano (true/false, 1/0)', $field)
-        ], 422);
-
-        return false;
     }
 
     public function startSession()
@@ -564,111 +419,6 @@ class CustomersController extends Controller
 
         ApiHelper::respond([
             'customer' => $customer,
-        ]);
-    }
-
-    public function pullDesktop()
-    {
-        ApiHelper::respondIfOptions();
-
-        ApiHelper::allowedMethodsPost();
-
-        $payload = ApiHelper::getJsonBody();
-        $customerApiId = isset($payload['customerApiId']) ? trim((string) $payload['customerApiId']) : '';
-
-        if ($customerApiId === '' && isset($payload['customerIdApi'])) {
-            $customerApiId = trim((string) $payload['customerIdApi']);
-        }
-
-        $customerApiId = ApiHelper::getCustomerIdFromSession($customerApiId) ?? $customerApiId;
-
-        if ($customerApiId === '') {
-            ApiHelper::respond([
-                'error' => 'El campo customerApiId es obligatorio'
-            ], 422);
-        }
-
-        $includeRemoved = false;
-        if (array_key_exists('includeRemoved', $payload)) {
-            $includeRemoved = $this->normalizeSyncFlag($payload['includeRemoved'], 'includeRemoved');
-        }
-
-        $includeRemovedByBulk = [];
-        if (array_key_exists('includeRemovedByBulk', $payload)) {
-            $bulkFlags = $payload['includeRemovedByBulk'];
-            if (!is_array($bulkFlags)) {
-                ApiHelper::respond([
-                    'error' => 'El campo includeRemovedByBulk debe ser un objeto con banderas por bulk'
-                ], 422);
-            }
-
-            foreach ($bulkFlags as $bulkName => $flagValue) {
-                $includeRemovedByBulk[$bulkName] = $this->normalizeSyncFlag(
-                    $flagValue,
-                    sprintf('includeRemovedByBulk.%s', $bulkName)
-                );
-            }
-        }
-
-        $bulks = [];
-
-        foreach ($this->desktopModels as $bulk => $model) {
-            $includeFlag = $includeRemovedByBulk[$bulk] ?? $includeRemoved;
-            $bulks[$bulk] = $model->pull($customerApiId, $includeFlag);
-        }
-
-        ApiHelper::respond([
-            'customerApiId' => $customerApiId,
-            'bulks' => $bulks,
-        ]);
-    }
-
-    public function pushDesktop()
-    {
-        ApiHelper::respondIfOptions();
-
-        ApiHelper::allowedMethodsPost();
-
-        $payload = ApiHelper::getJsonBody();
-        $customerApiId = isset($payload['customerApiId']) ? trim((string) $payload['customerApiId']) : '';
-
-        if ($customerApiId === '' && isset($payload['customerIdApi'])) {
-            $customerApiId = trim((string) $payload['customerIdApi']);
-        }
-
-    $customerApiId = ApiHelper::getCustomerIdFromSession($customerApiId) ?? $customerApiId;
-
-        if ($customerApiId === '') {
-            ApiHelper::respond([
-                'error' => 'El campo customerApiId es obligatorio'
-            ], 422);
-        }
-
-        $bulksPayload = $payload['bulks'] ?? $payload['data'] ?? null;
-
-        if ($bulksPayload === null || !is_array($bulksPayload)) {
-            ApiHelper::respond([
-                'error' => 'Debes enviar el objeto bulks con la información a sincronizar'
-            ], 422);
-        }
-
-        $results = [];
-
-        foreach ($this->desktopModels as $bulk => $model) {
-            $records = $bulksPayload[$bulk] ?? [];
-
-            if (!is_array($records)) {
-                ApiHelper::respond([
-                    'error' => sprintf('El bulk %s debe ser un arreglo de registros', $bulk)
-                ], 422);
-            }
-
-            $results[$bulk] = $model->push($customerApiId, $records);
-        }
-
-        ApiHelper::respond([
-            'customerApiId' => $customerApiId,
-            'bulks' => $results,
         ]);
     }
 

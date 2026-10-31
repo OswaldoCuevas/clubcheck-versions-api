@@ -1,6 +1,7 @@
 # Inventario HTTP de los módulos administrativos
 
-`admin-controller.json` es el inventario versionado de los contratos basales.
+`admin-controller.json` y `customers-controller.json` son los inventarios
+versionados de los contratos basales.
 Cada entrada guarda:
 
 - identificador y nombre del caso;
@@ -20,6 +21,9 @@ tests/.artifacts/http-characterization/runs/<fecha-proceso>/
 Cada artefacto contiene la solicitud, la expectativa, la respuesta real y
 `httpContractMatched`. Cookies, CSRF, contraseñas, access keys, tokens de
 máquina y licencias se reemplazan por `<redacted>`.
+
+`customers-controller.json` protege las acciones heredadas de
+`CustomersController` antes de migrarlas a Features del monolito modular.
 
 No se debe cambiar una expectativa únicamente para hacer pasar una prueba.
 Primero hay que decidir si el cambio de comportamiento fue intencional.
