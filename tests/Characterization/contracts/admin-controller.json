@@ -1,343 +1,766 @@
 {
   "version": 1,
-  "description": "Inventario versionado del comportamiento HTTP observable de AdminController. Los cuerpos reales de cada corrida se guardan en tests/.artifacts/http-characterization/latest.",
+  "description": "Inventario versionado del comportamiento HTTP observable de los módulos administrativos. Los cuerpos reales de cada corrida se guardan en tests/.artifacts/http-characterization/latest.",
   "endpoints": [
     {
       "id": "admin.index.page",
       "name": "Muestra el panel administrativo",
       "controllerMethod": "index",
-      "request": {"method": "GET", "path": "/admin"},
-      "expected": {"status": 200, "bodyContains": ["Panel Administrativo"]},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin"
+      },
+      "expected": {
+        "status": 200,
+        "bodyContains": [
+          "Panel Administrativo"
+        ]
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\Admin\\Controllers\\AdminDashboardController"
     },
     {
       "id": "admin.customers.page",
       "name": "Muestra la página de clientes vacía",
       "controllerMethod": "customers",
-      "request": {"method": "GET", "path": "/admin/customers"},
-      "expected": {"status": 200, "bodyContains": ["Clientes"]},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/customers"
+      },
+      "expected": {
+        "status": 200,
+        "bodyContains": [
+          "Clientes"
+        ]
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\Customers\\Controllers\\AdminCustomerController"
     },
     {
       "id": "admin.customer-login-attempts.page",
       "name": "Muestra el historial de intentos de login",
       "controllerMethod": "customerLoginAttempts",
-      "request": {"method": "GET", "path": "/admin/customer-login-attempts"},
-      "expected": {"status": 200, "bodyContains": ["Intentos de Login"]},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/customer-login-attempts"
+      },
+      "expected": {
+        "status": 200,
+        "bodyContains": [
+          "Intentos de Login"
+        ]
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\CustomerAccess\\Controllers\\AdminCustomerAccessController"
     },
     {
       "id": "admin.whatsapp-messages.page",
       "name": "Muestra el historial administrativo de WhatsApp",
       "controllerMethod": "whatsappMessages",
-      "request": {"method": "GET", "path": "/admin/whatsapp/messages"},
-      "expected": {"status": 200, "bodyContains": ["WhatsApp"]},
-      "sideEffects": "creates session CSRF"
+      "request": {
+        "method": "GET",
+        "path": "/admin/whatsapp/messages"
+      },
+      "expected": {
+        "status": 200,
+        "bodyContains": [
+          "WhatsApp"
+        ]
+      },
+      "sideEffects": "creates session CSRF",
+      "controller": "App\\Modules\\WhatsApp\\Controllers\\AdminWhatsAppController"
     },
     {
       "id": "admin.whatsapp-messages.send.rejects-csrf",
       "name": "Rechaza mensaje de prueba sin CSRF",
       "controllerMethod": "sendWhatsappTestMessage",
-      "request": {"method": "POST", "path": "/admin/whatsapp/messages/test", "options": {"form_params": {}}},
-      "expected": {"status": 403, "bodyContains": ["Solicitud no autorizada"]},
-      "sideEffects": "none"
+      "request": {
+        "method": "POST",
+        "path": "/admin/whatsapp/messages/test",
+        "options": {
+          "form_params": {}
+        }
+      },
+      "expected": {
+        "status": 403,
+        "bodyContains": [
+          "Solicitud no autorizada"
+        ]
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\WhatsApp\\Controllers\\AdminWhatsAppController"
     },
     {
       "id": "admin.customer-login-attempts.json.empty",
       "name": "Devuelve intentos de login vacíos",
       "controllerMethod": "customerLoginAttemptsJson",
-      "request": {"method": "GET", "path": "/admin/api/customer-login-attempts"},
-      "expected": {"status": 200, "headerContains": {"Content-Type": "application/json"}, "jsonSubset": {"attempts": [], "summary": {}}},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/api/customer-login-attempts"
+      },
+      "expected": {
+        "status": 200,
+        "headerContains": {
+          "Content-Type": "application/json"
+        },
+        "jsonSubset": {
+          "attempts": [],
+          "summary": {}
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\CustomerAccess\\Controllers\\AdminCustomerAccessController"
     },
     {
       "id": "admin.customers.json.empty",
       "name": "Devuelve clientes vacíos",
       "controllerMethod": "customersJson",
-      "request": {"method": "GET", "path": "/admin/api/customers"},
-      "expected": {"status": 200, "jsonSubset": {"count": 0, "customers": []}},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/api/customers"
+      },
+      "expected": {
+        "status": 200,
+        "jsonSubset": {
+          "count": 0,
+          "customers": []
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\Customers\\Controllers\\AdminCustomerController"
     },
     {
       "id": "admin.customers.regenerate-key.requires-id",
       "name": "Rechaza regeneración sin customerId",
       "controllerMethod": "regenerateAccessKey",
-      "request": {"method": "POST", "path": "/admin/api/customers/regenerate-access-key", "options": {"json": {}}},
-      "expected": {"status": 422, "jsonSubset": {"error": "customerId es obligatorio"}},
-      "sideEffects": "none"
+      "request": {
+        "method": "POST",
+        "path": "/admin/api/customers/regenerate-access-key",
+        "options": {
+          "json": {}
+        }
+      },
+      "expected": {
+        "status": 422,
+        "jsonSubset": {
+          "error": "customerId es obligatorio"
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\Customers\\Controllers\\AdminCustomerController"
     },
     {
       "id": "admin.customers.delete.not-found",
       "name": "Informa cliente inexistente al eliminar",
       "controllerMethod": "deleteCustomerJson",
-      "request": {"method": "DELETE", "path": "/admin/api/customers/customer-missing"},
-      "expected": {"status": 404, "jsonSubset": {"error": "Cliente no encontrado"}},
-      "sideEffects": "none"
+      "request": {
+        "method": "DELETE",
+        "path": "/admin/api/customers/customer-missing"
+      },
+      "expected": {
+        "status": 404,
+        "jsonSubset": {
+          "error": "Cliente no encontrado"
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\Customers\\Controllers\\AdminCustomerController"
     },
     {
       "id": "admin.customers.save.requires-attributes",
       "name": "Rechaza guardado sin atributos",
       "controllerMethod": "saveCustomerJson",
-      "request": {"method": "POST", "path": "/admin/api/customers/save", "options": {"json": {}}},
-      "expected": {"status": 422, "jsonSubset": {"error": "No se enviaron atributos"}},
-      "sideEffects": "none"
+      "request": {
+        "method": "POST",
+        "path": "/admin/api/customers/save",
+        "options": {
+          "json": {}
+        }
+      },
+      "expected": {
+        "status": 422,
+        "jsonSubset": {
+          "error": "No se enviaron atributos"
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\Customers\\Controllers\\AdminCustomerController"
     },
     {
       "id": "admin.announcements.page",
       "name": "Muestra la página de anuncios",
+      "controller": "App\\Modules\\Announcements\\Controllers\\AdminAnnouncementController",
       "controllerMethod": "announcements",
-      "request": {"method": "GET", "path": "/admin/announcements"},
-      "expected": {"status": 200, "bodyContains": ["Anuncios"]},
+      "request": {
+        "method": "GET",
+        "path": "/admin/announcements"
+      },
+      "expected": {
+        "status": 200,
+        "bodyContains": [
+          "Anuncios"
+        ]
+      },
       "sideEffects": "none"
     },
     {
       "id": "admin.announcements.json.empty",
       "name": "Devuelve anuncios vacíos",
-      "controllerMethod": "announcementsJson",
-      "request": {"method": "GET", "path": "/admin/api/announcements"},
-      "expected": {"status": 200, "jsonSubset": {"announcements": []}},
+      "controller": "App\\Modules\\Announcements\\Controllers\\AdminAnnouncementController",
+      "controllerMethod": "announcementsList",
+      "request": {
+        "method": "GET",
+        "path": "/admin/api/announcements"
+      },
+      "expected": {
+        "status": 200,
+        "jsonSubset": {
+          "announcements": []
+        }
+      },
       "sideEffects": "none"
     },
     {
       "id": "admin.announcements.save.rejects-empty",
       "name": "Rechaza anuncio vacío",
-      "controllerMethod": "announcementSaveJson",
-      "request": {"method": "POST", "path": "/admin/api/announcements", "options": {"json": {}}},
-      "expected": {"status": 422},
+      "controller": "App\\Modules\\Announcements\\Controllers\\AdminAnnouncementController",
+      "controllerMethod": "save",
+      "request": {
+        "method": "POST",
+        "path": "/admin/api/announcements",
+        "options": {
+          "json": {}
+        }
+      },
+      "expected": {
+        "status": 422
+      },
       "sideEffects": "none"
     },
     {
       "id": "admin.announcements.views.not-found",
       "name": "Informa anuncio inexistente al consultar vistas",
-      "controllerMethod": "announcementViewsJson",
-      "request": {"method": "GET", "path": "/admin/api/announcements/announcement-missing/views"},
-      "expected": {"status": 404, "jsonSubset": {"error": "Anuncio no encontrado"}},
+      "controller": "App\\Modules\\Announcements\\Controllers\\AdminAnnouncementController",
+      "controllerMethod": "getViews",
+      "request": {
+        "method": "GET",
+        "path": "/admin/api/announcements/announcement-missing/views"
+      },
+      "expected": {
+        "status": 404,
+        "jsonSubset": {
+          "error": "Anuncio no encontrado"
+        }
+      },
       "sideEffects": "none"
     },
     {
       "id": "admin.announcements.activate.not-found",
       "name": "Informa anuncio inexistente al activar",
-      "controllerMethod": "announcementActivateJson",
-      "request": {"method": "POST", "path": "/admin/api/announcements/announcement-missing/activate"},
-      "expected": {"status": 404, "jsonSubset": {"error": "Anuncio no encontrado"}},
+      "controller": "App\\Modules\\Announcements\\Controllers\\AdminAnnouncementController",
+      "controllerMethod": "activate",
+      "request": {
+        "method": "POST",
+        "path": "/admin/api/announcements/announcement-missing/activate"
+      },
+      "expected": {
+        "status": 404,
+        "jsonSubset": {
+          "error": "Anuncio no encontrado"
+        }
+      },
       "sideEffects": "none"
     },
     {
       "id": "admin.announcements.delete.not-found",
       "name": "Informa anuncio inexistente al eliminar",
-      "controllerMethod": "announcementDeleteJson",
-      "request": {"method": "DELETE", "path": "/admin/api/announcements/announcement-missing"},
-      "expected": {"status": 404, "jsonSubset": {"error": "Anuncio no encontrado"}},
+      "controller": "App\\Modules\\Announcements\\Controllers\\AdminAnnouncementController",
+      "controllerMethod": "delete",
+      "request": {
+        "method": "DELETE",
+        "path": "/admin/api/announcements/announcement-missing"
+      },
+      "expected": {
+        "status": 404,
+        "jsonSubset": {
+          "error": "Anuncio no encontrado"
+        }
+      },
       "sideEffects": "none"
     },
     {
       "id": "admin.announcements.upload.requires-file",
       "name": "Rechaza subida sin imagen",
-      "controller": "AdminAnnouncementController",
-      "controllerMethod": "announcementUploadImageJson",
-      "request": {"method": "POST", "path": "/admin/api/announcements/upload-image"},
-      "expected": {"status": 422, "jsonSubset": {"error": "Imagen no proporcionada", "error_code": "ANNOUNCEMENT_IMAGE_MISSING"}},
+      "controller": "App\\Modules\\Announcements\\Controllers\\AdminAnnouncementController",
+      "controllerMethod": "uploadImage",
+      "request": {
+        "method": "POST",
+        "path": "/admin/api/announcements/upload-image"
+      },
+      "expected": {
+        "status": 422,
+        "jsonSubset": {
+          "error": "Imagen no proporcionada",
+          "error_code": "ANNOUNCEMENT_IMAGE_MISSING"
+        }
+      },
       "sideEffects": "none"
     },
     {
       "id": "admin.api-docs.page",
       "name": "Muestra la documentación de la API",
       "controllerMethod": "apiDocs",
-      "request": {"method": "GET", "path": "/admin/api-docs"},
-      "expected": {"status": 200, "bodyContains": ["API"]},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/api-docs"
+      },
+      "expected": {
+        "status": 200,
+        "bodyContains": [
+          "API"
+        ]
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\ApiDocs\\Controllers\\AdminApiDocsController"
     },
     {
       "id": "admin.whatsapp.page",
       "name": "Muestra la configuración de WhatsApp",
       "controllerMethod": "whatsapp",
-      "request": {"method": "GET", "path": "/admin/whatsapp"},
-      "expected": {"status": 200, "bodyContains": ["WhatsApp"]},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/whatsapp"
+      },
+      "expected": {
+        "status": 200,
+        "bodyContains": [
+          "WhatsApp"
+        ]
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\WhatsApp\\Controllers\\AdminWhatsAppController"
     },
     {
       "id": "admin.whatsapp.json.empty",
       "name": "Devuelve configuraciones de WhatsApp vacías",
       "controllerMethod": "whatsappListJson",
-      "request": {"method": "GET", "path": "/admin/api/whatsapp"},
-      "expected": {"status": 200, "jsonSubset": {"success": true, "count": 0, "configurations": []}},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/api/whatsapp"
+      },
+      "expected": {
+        "status": 200,
+        "jsonSubset": {
+          "success": true,
+          "count": 0,
+          "configurations": []
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\WhatsApp\\Controllers\\AdminWhatsAppController"
     },
     {
       "id": "admin.whatsapp.create.requires-customer",
       "name": "Rechaza configuración de WhatsApp vacía",
       "controllerMethod": "whatsappCreateJson",
-      "request": {"method": "POST", "path": "/admin/api/whatsapp", "options": {"json": {}}},
-      "expected": {"status": 422, "jsonSubset": {"error": "Campo requerido: customerId"}},
-      "sideEffects": "none"
+      "request": {
+        "method": "POST",
+        "path": "/admin/api/whatsapp",
+        "options": {
+          "json": {}
+        }
+      },
+      "expected": {
+        "status": 422,
+        "jsonSubset": {
+          "error": "Campo requerido: customerId"
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\WhatsApp\\Controllers\\AdminWhatsAppController"
     },
     {
       "id": "admin.whatsapp.delete.not-found",
       "name": "Informa configuración de WhatsApp inexistente al eliminar",
       "controllerMethod": "whatsappDeleteJson",
-      "request": {"method": "DELETE", "path": "/admin/api/whatsapp/config-missing"},
-      "expected": {"status": 404},
-      "sideEffects": "none"
+      "request": {
+        "method": "DELETE",
+        "path": "/admin/api/whatsapp/config-missing"
+      },
+      "expected": {
+        "status": 404
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\WhatsApp\\Controllers\\AdminWhatsAppController"
     },
     {
       "id": "admin.whatsapp.register.not-found",
       "name": "Informa configuración de WhatsApp inexistente al registrar",
       "controllerMethod": "whatsappRegisterJson",
-      "request": {"method": "POST", "path": "/admin/api/whatsapp/config-missing/register"},
-      "expected": {"status": 404, "jsonSubset": {"error": "Configuración no encontrada"}},
-      "sideEffects": "none"
+      "request": {
+        "method": "POST",
+        "path": "/admin/api/whatsapp/config-missing/register"
+      },
+      "expected": {
+        "status": 404,
+        "jsonSubset": {
+          "error": "Configuración no encontrada"
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\WhatsApp\\Controllers\\AdminWhatsAppController"
     },
     {
       "id": "admin.whatsapp.status.not-found",
       "name": "Informa configuración de WhatsApp inexistente al consultar estado",
       "controllerMethod": "whatsappStatusJson",
-      "request": {"method": "GET", "path": "/admin/api/whatsapp/config-missing/status"},
-      "expected": {"status": 404, "jsonSubset": {"error": "Configuración no encontrada"}},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/api/whatsapp/config-missing/status"
+      },
+      "expected": {
+        "status": 404,
+        "jsonSubset": {
+          "error": "Configuración no encontrada"
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\WhatsApp\\Controllers\\AdminWhatsAppController"
     },
     {
       "id": "admin.whatsapp.templates.json",
       "name": "Devuelve catálogo y plantillas de WhatsApp",
       "controllerMethod": "whatsappTemplatesJson",
-      "request": {"method": "GET", "path": "/admin/api/whatsapp/templates"},
-      "expected": {"status": 200, "jsonSubset": {"success": true, "templates": []}},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/api/whatsapp/templates"
+      },
+      "expected": {
+        "status": 200,
+        "jsonSubset": {
+          "success": true,
+          "templates": []
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\WhatsApp\\Controllers\\AdminWhatsAppController"
     },
     {
       "id": "admin.whatsapp.templates.create.requires-fields",
       "name": "Rechaza plantilla de WhatsApp vacía",
       "controllerMethod": "whatsappTemplateCreateJson",
-      "request": {"method": "POST", "path": "/admin/api/whatsapp/templates", "options": {"json": {}}},
-      "expected": {"status": 422, "jsonSubset": {"error": "customerId y templateName son requeridos"}},
-      "sideEffects": "none"
+      "request": {
+        "method": "POST",
+        "path": "/admin/api/whatsapp/templates",
+        "options": {
+          "json": {}
+        }
+      },
+      "expected": {
+        "status": 422,
+        "jsonSubset": {
+          "error": "customerId y templateName son requeridos"
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\WhatsApp\\Controllers\\AdminWhatsAppController"
     },
     {
       "id": "admin.whatsapp.templates.delete.not-found",
       "name": "Conserva contrato al eliminar plantilla inexistente",
       "controllerMethod": "whatsappTemplateDeleteJson",
-      "request": {"method": "DELETE", "path": "/admin/api/whatsapp/templates/template-missing"},
-      "expected": {"status": 200},
-      "sideEffects": "none"
+      "request": {
+        "method": "DELETE",
+        "path": "/admin/api/whatsapp/templates/template-missing"
+      },
+      "expected": {
+        "status": 200
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\WhatsApp\\Controllers\\AdminWhatsAppController"
     },
     {
       "id": "admin.jwt.page",
       "name": "Muestra la página de tokens JWT",
       "controllerMethod": "jwtTokens",
-      "request": {"method": "GET", "path": "/admin/jwt-tokens"},
-      "expected": {"status": 200, "bodyContains": ["Tokens JWT"]},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/jwt-tokens"
+      },
+      "expected": {
+        "status": 200,
+        "bodyContains": [
+          "Tokens JWT"
+        ]
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\CustomerAccess\\Controllers\\AdminCustomerAccessController"
     },
     {
       "id": "admin.jwt.json.empty",
       "name": "Devuelve resumen JWT vacío",
       "controllerMethod": "jwtTokensJson",
-      "request": {"method": "GET", "path": "/admin/api/jwt-tokens"},
-      "expected": {"status": 200, "jsonSubset": {"success": true, "customers": []}},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/api/jwt-tokens"
+      },
+      "expected": {
+        "status": 200,
+        "jsonSubset": {
+          "success": true,
+          "customers": []
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\CustomerAccess\\Controllers\\AdminCustomerAccessController"
     },
     {
       "id": "admin.jwt.create.requires-customer",
       "name": "Rechaza creación de JWT sin customerId",
       "controllerMethod": "createJwtToken",
-      "request": {"method": "POST", "path": "/admin/api/jwt-tokens/create", "options": {"json": {}}},
-      "expected": {"status": 422, "jsonSubset": {"error": "customerId es obligatorio"}},
-      "sideEffects": "none"
+      "request": {
+        "method": "POST",
+        "path": "/admin/api/jwt-tokens/create",
+        "options": {
+          "json": {}
+        }
+      },
+      "expected": {
+        "status": 422,
+        "jsonSubset": {
+          "error": "customerId es obligatorio"
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\CustomerAccess\\Controllers\\AdminCustomerAccessController"
     },
     {
       "id": "admin.jwt.revoke.requires-customer",
       "name": "Rechaza revocación de JWT sin customerId",
       "controllerMethod": "revokeJwtToken",
-      "request": {"method": "POST", "path": "/admin/api/jwt-tokens/revoke", "options": {"json": {}}},
-      "expected": {"status": 422, "jsonSubset": {"error": "customerId es obligatorio"}},
-      "sideEffects": "none"
+      "request": {
+        "method": "POST",
+        "path": "/admin/api/jwt-tokens/revoke",
+        "options": {
+          "json": {}
+        }
+      },
+      "expected": {
+        "status": 422,
+        "jsonSubset": {
+          "error": "customerId es obligatorio"
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\CustomerAccess\\Controllers\\AdminCustomerAccessController"
     },
     {
       "id": "admin.jwt.ips.empty",
       "name": "Devuelve IPs vacías de un cliente inexistente",
       "controllerMethod": "customerIpsJson",
-      "request": {"method": "GET", "path": "/admin/api/jwt-tokens/customer/customer-missing/ips"},
-      "expected": {"status": 200, "jsonSubset": {"success": true, "customerId": "customer-missing", "hasMultipleRecentIps": false, "ips": []}},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/api/jwt-tokens/customer/customer-missing/ips"
+      },
+      "expected": {
+        "status": 200,
+        "jsonSubset": {
+          "success": true,
+          "customerId": "customer-missing",
+          "hasMultipleRecentIps": false,
+          "ips": []
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\CustomerAccess\\Controllers\\AdminCustomerAccessController"
     },
     {
       "id": "admin.jwt.ips.flag.not-found",
       "name": "Conserva respuesta exitosa actual al marcar una IP inexistente",
       "controllerMethod": "flagIp",
-      "request": {"method": "POST", "path": "/admin/api/jwt-tokens/ips/ip-missing/flag", "options": {"json": {"flagged": true, "reason": "Caracterización"}}},
-      "expected": {"status": 200, "jsonSubset": {"success": true, "message": "IP marcada como sospechosa"}},
-      "sideEffects": "none"
+      "request": {
+        "method": "POST",
+        "path": "/admin/api/jwt-tokens/ips/ip-missing/flag",
+        "options": {
+          "json": {
+            "flagged": true,
+            "reason": "Caracterización"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "jsonSubset": {
+          "success": true,
+          "message": "IP marcada como sospechosa"
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\CustomerAccess\\Controllers\\AdminCustomerAccessController"
     },
     {
       "id": "admin.customer-stats.page",
       "name": "Muestra estadísticas globales vacías",
       "controllerMethod": "customerStats",
-      "request": {"method": "GET", "path": "/admin/customer-stats"},
-      "expected": {"status": 200, "bodyContains": ["Estadísticas"]},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/customer-stats"
+      },
+      "expected": {
+        "status": 200,
+        "bodyContains": [
+          "Estadísticas"
+        ]
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\CustomerStats\\Controllers\\AdminCustomerStatsController"
     },
     {
       "id": "admin.customer-stats.json.empty",
       "name": "Devuelve estadísticas globales vacías",
       "controllerMethod": "customerStatsJson",
-      "request": {"method": "GET", "path": "/admin/api/customer-stats"},
-      "expected": {"status": 200, "jsonSubset": {"global": {"totalCustomers": 0}, "customers": []}},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/api/customer-stats"
+      },
+      "expected": {
+        "status": 200,
+        "jsonSubset": {
+          "global": {
+            "totalCustomers": 0
+          },
+          "customers": []
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\CustomerStats\\Controllers\\AdminCustomerStatsController"
     },
     {
       "id": "admin.customer-stats.detail.not-found",
       "name": "Informa cliente inexistente en estadísticas",
       "controllerMethod": "customerStatsDetailJson",
-      "request": {"method": "GET", "path": "/admin/api/customer-stats/customer-missing"},
-      "expected": {"status": 404, "jsonSubset": {"error": "Cliente no encontrado"}},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/api/customer-stats/customer-missing"
+      },
+      "expected": {
+        "status": 404,
+        "jsonSubset": {
+          "error": "Cliente no encontrado"
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\CustomerStats\\Controllers\\AdminCustomerStatsController"
     },
     {
       "id": "admin.downloads.page",
       "name": "Muestra el historial de descargas vacío",
       "controllerMethod": "downloads",
-      "request": {"method": "GET", "path": "/admin/downloads"},
-      "expected": {"status": 200, "bodyContains": ["Historial de Descargas"]},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/downloads"
+      },
+      "expected": {
+        "status": 200,
+        "bodyContains": [
+          "Historial de Descargas"
+        ]
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\Downloads\\Controllers\\AdminDownloadController"
     },
     {
       "id": "admin.downloads.json.empty",
       "name": "Devuelve historial de descargas vacío",
       "controllerMethod": "downloadsJson",
-      "request": {"method": "GET", "path": "/admin/api/downloads"},
-      "expected": {"status": 200, "jsonSubset": {"downloads": {"data": []}}},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/api/downloads"
+      },
+      "expected": {
+        "status": 200,
+        "jsonSubset": {
+          "downloads": {
+            "data": []
+          }
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\Downloads\\Controllers\\AdminDownloadController"
     },
     {
       "id": "admin.downloads.ip.empty",
       "name": "Devuelve historial vacío para una IP",
       "controllerMethod": "downloadsByIpJson",
-      "request": {"method": "GET", "path": "/admin/api/downloads/ip/203.0.113.10"},
-      "expected": {"status": 200, "jsonSubset": {"ipAddress": "203.0.113.10", "count": 0, "downloads": []}},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/api/downloads/ip/203.0.113.10"
+      },
+      "expected": {
+        "status": 200,
+        "jsonSubset": {
+          "ipAddress": "203.0.113.10",
+          "count": 0,
+          "downloads": []
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\Downloads\\Controllers\\AdminDownloadController"
     },
     {
       "id": "admin.licenses.page",
       "name": "Muestra la página de licencias",
       "controllerMethod": "licenses",
-      "request": {"method": "GET", "path": "/admin/licenses"},
-      "expected": {"status": 200, "bodyContains": ["Licencias"]},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/licenses"
+      },
+      "expected": {
+        "status": 200,
+        "bodyContains": [
+          "Licencias"
+        ]
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\Licenses\\Controllers\\AdminLicenseController"
     },
     {
       "id": "admin.licenses.json.empty",
       "name": "Devuelve licencias vacías",
       "controllerMethod": "licensesJson",
-      "request": {"method": "GET", "path": "/admin/api/licenses"},
-      "expected": {"status": 200, "jsonSubset": {"count": 0, "licenses": []}},
-      "sideEffects": "none"
+      "request": {
+        "method": "GET",
+        "path": "/admin/api/licenses"
+      },
+      "expected": {
+        "status": 200,
+        "jsonSubset": {
+          "count": 0,
+          "licenses": []
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\Licenses\\Controllers\\AdminLicenseController"
     },
     {
       "id": "admin.licenses.generate.requires-customer",
       "name": "Rechaza generación de licencia sin customerId",
       "controllerMethod": "generateLicenseAdmin",
-      "request": {"method": "POST", "path": "/admin/api/licenses/generate", "options": {"json": {}}},
-      "expected": {"status": 422, "jsonSubset": {"error": "customerId es obligatorio"}},
-      "sideEffects": "none"
+      "request": {
+        "method": "POST",
+        "path": "/admin/api/licenses/generate",
+        "options": {
+          "json": {}
+        }
+      },
+      "expected": {
+        "status": 422,
+        "jsonSubset": {
+          "error": "customerId es obligatorio"
+        }
+      },
+      "sideEffects": "none",
+      "controller": "App\\Modules\\Licenses\\Controllers\\AdminLicenseController"
     }
   ]
 }

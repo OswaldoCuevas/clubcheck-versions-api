@@ -1,4 +1,4 @@
-# Inventario HTTP de AdminController
+# Inventario HTTP de los módulos administrativos
 
 `admin-controller.json` es el inventario versionado de los contratos basales.
 Cada entrada guarda:

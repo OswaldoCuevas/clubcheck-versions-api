@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Modules\Announcements;
 
 use App\Exceptions\ApiException;
-use App\Modules\Announcements\Infrastructure\LocalAnnouncementImageStorage;
+use App\Modules\Announcements\Services\LocalAnnouncementImageStorage;
 use PHPUnit\Framework\TestCase;
 
 final class LocalAnnouncementImageStorageTest extends TestCase

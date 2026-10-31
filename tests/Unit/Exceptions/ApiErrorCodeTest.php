@@ -14,6 +14,21 @@ final class ApiErrorCodeTest extends TestCase
     /** @return iterable<string, array{ApiErrorCode, int, string}> */
     public static function announcementErrors(): iterable
     {
+        yield 'announcement not found' => [
+            ApiErrorCode::AnnouncementNotFound,
+            404,
+            'Anuncio no encontrado',
+        ];
+        yield 'announcement validation' => [
+            ApiErrorCode::AnnouncementValidationFailed,
+            422,
+            'Datos de anuncio inválidos',
+        ];
+        yield 'announcement save failure' => [
+            ApiErrorCode::AnnouncementSaveFailed,
+            500,
+            'Error al guardar el anuncio',
+        ];
         yield 'missing image' => [
             ApiErrorCode::AnnouncementImageMissing,
             422,

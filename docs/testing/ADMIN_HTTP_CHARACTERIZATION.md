@@ -1,6 +1,6 @@
 # Pruebas HTTP de caracterización administrativa
 
-Esta suite protege el comportamiento observable de `AdminController` antes
+Esta suite protege el comportamiento observable de los módulos administrativos antes
 de separarlo en controladores, validadores, casos de uso y repositorios.
 Aunque se ejecuta con PHPUnit, es una suite de integración/caracterización,
 no una suite unitaria: Guzzle realiza peticiones HTTP reales contra un

@@ -1,11 +1,13 @@
 <?php
 
+use App\Infrastructure\Database\IDatabaseConnection;
+
 ini_set('max_execution_time', 0);
 ini_set('memory_limit', '-1');
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-class Database extends mysqli
+class Database extends mysqli implements IDatabaseConnection
 {
   private array $config;
 
@@ -69,6 +71,11 @@ class Database extends mysqli
     }
 
     return null;
+  }
+
+  public function execute(string $sql, array $params = []): void
+  {
+    $this->execute_query($sql, $params);
   }
 
   public function insert(string $table, array $data): int

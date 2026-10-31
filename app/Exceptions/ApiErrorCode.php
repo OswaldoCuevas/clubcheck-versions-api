@@ -37,6 +37,9 @@ enum ApiErrorCode: string
     case SubscriptionExists = 'SUBSCRIPTION_EXISTS';
     case WhatsAppUnavailable = 'WHATSAPP_UNAVAILABLE';
 
+    case AnnouncementNotFound = 'ANNOUNCEMENT_NOT_FOUND';
+    case AnnouncementValidationFailed = 'ANNOUNCEMENT_VALIDATION_FAILED';
+    case AnnouncementSaveFailed = 'ANNOUNCEMENT_SAVE_FAILED';
     case AnnouncementImageMissing = 'ANNOUNCEMENT_IMAGE_MISSING';
     case AnnouncementImageUnsupportedFormat = 'ANNOUNCEMENT_IMAGE_UNSUPPORTED_FORMAT';
     case AnnouncementImageTooLarge = 'ANNOUNCEMENT_IMAGE_TOO_LARGE';
@@ -62,19 +65,22 @@ enum ApiErrorCode: string
             self::PlanLimitExceeded => 403,
 
             self::NotFound,
-            self::RouteNotFound => 404,
+            self::RouteNotFound,
+            self::AnnouncementNotFound => 404,
 
             self::Conflict,
             self::SubscriptionExists => 409,
 
             self::AnnouncementImageMissing,
             self::AnnouncementImageUnsupportedFormat,
-            self::AnnouncementImageTooLarge => 422,
+            self::AnnouncementImageTooLarge,
+            self::AnnouncementValidationFailed => 422,
 
             self::ServiceError,
             self::WhatsAppUnavailable => 502,
 
             self::InternalError,
+            self::AnnouncementSaveFailed,
             self::AnnouncementImageDirectoryCreationFailed,
             self::AnnouncementImageStorageFailed => 500,
 
@@ -108,6 +114,9 @@ enum ApiErrorCode: string
             self::PlanLimitExceeded => 'El plan no permite esta operación',
             self::SubscriptionExists => 'Ya existe una suscripción activa',
             self::WhatsAppUnavailable => 'Servicio de WhatsApp no disponible',
+            self::AnnouncementNotFound => 'Anuncio no encontrado',
+            self::AnnouncementValidationFailed => 'Datos de anuncio inválidos',
+            self::AnnouncementSaveFailed => 'Error al guardar el anuncio',
             self::AnnouncementImageMissing => 'Imagen no proporcionada',
             self::AnnouncementImageUnsupportedFormat => 'Formato de imagen no soportado',
             self::AnnouncementImageTooLarge => 'La imagen no puede superar 5 MB',

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Modules\Announcements;
 
 use App\Exceptions\ApiException;
-use App\Modules\Announcements\Http\Requests\UploadAnnouncementImageRequest;
+use App\Modules\Announcements\Controllers\Requests\UploadAnnouncementImageRequest;
 use PHPUnit\Framework\TestCase;
 
 final class UploadAnnouncementImageRequestTest extends TestCase

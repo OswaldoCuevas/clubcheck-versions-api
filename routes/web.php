@@ -1,5 +1,14 @@
 <?php
 
+use App\Modules\Announcements\Controllers\AdminAnnouncementController;
+use App\Modules\Admin\Controllers\AdminDashboardController;
+use App\Modules\ApiDocs\Controllers\AdminApiDocsController;
+use App\Modules\CustomerAccess\Controllers\AdminCustomerAccessController;
+use App\Modules\Customers\Controllers\AdminCustomerController;
+use App\Modules\CustomerStats\Controllers\AdminCustomerStatsController;
+use App\Modules\Downloads\Controllers\AdminDownloadController;
+use App\Modules\Licenses\Controllers\AdminLicenseController;
+use App\Modules\WhatsApp\Controllers\AdminWhatsAppController;
 use Core\Router;
 
 $container = require __DIR__ . '/../config/services.php';
@@ -133,62 +142,58 @@ $router->post('/api/customers/whatsapp/business-profile/register', 'WhatsAppCont
 $router->get('/api/customers/whatsapp/business-profile', 'WhatsAppController', 'getBusinessProfile'); // NO, Administrativo
 
 // Rutas administrativas
-$router->any('/admin', 'AdminController', 'index');// NO, Administrativo
-$router->get('/admin/customers', 'AdminController', 'customers');// NO, Administrativo
-$router->get('/admin/customer-login-attempts', 'AdminController', 'customerLoginAttempts');// NO, Administrativo
-$router->get('/admin/api/customers', 'AdminController', 'customersJson');// NO, Administrativo
-$router->get('/admin/api/customer-login-attempts', 'AdminController', 'customerLoginAttemptsJson');// NO, Administrativo
-$router->post('/admin/api/customers/save', 'AdminController', 'saveCustomerJson');// NO, Administrativo
-$router->post('/admin/api/customers/regenerate-access-key', 'AdminController', 'regenerateAccessKey');// NO, Administrativo
+$adminMiddleware = ['auth', 'permission:admin_access'];
+$router->any('/admin', AdminDashboardController::class, 'index', $adminMiddleware);
+$router->get('/admin/customers', AdminCustomerController::class, 'customers', $adminMiddleware);
+$router->get('/admin/customer-login-attempts', AdminCustomerAccessController::class, 'customerLoginAttempts', $adminMiddleware);
+$router->get('/admin/api/customers', AdminCustomerController::class, 'customersJson', $adminMiddleware);
+$router->get('/admin/api/customer-login-attempts', AdminCustomerAccessController::class, 'customerLoginAttemptsJson', $adminMiddleware);
+$router->post('/admin/api/customers/save', AdminCustomerController::class, 'saveCustomerJson', $adminMiddleware);
+$router->post('/admin/api/customers/regenerate-access-key', AdminCustomerController::class, 'regenerateAccessKey', $adminMiddleware);
 // Eliminar cliente (desde panel admin)
-$router->post('/admin/api/customers/:customerId/delete', 'AdminController', 'deleteCustomerJson');// NO, Administrativo
-$router->delete('/admin/api/customers/:customerId', 'AdminController', 'deleteCustomerJson');// NO, Administrativo
-$router->get('/admin/api-docs', 'AdminController', 'apiDocs');// NO, Administrativo
+$router->post('/admin/api/customers/:customerId/delete', AdminCustomerController::class, 'deleteCustomerJson', $adminMiddleware);
+$router->delete('/admin/api/customers/:customerId', AdminCustomerController::class, 'deleteCustomerJson', $adminMiddleware);
+$router->get('/admin/api-docs', AdminApiDocsController::class, 'apiDocs', $adminMiddleware);
 $router->get('/admin/push', 'PushNotificationsController', 'page');
 $router->post('/admin/api/push/send', 'PushNotificationsController', 'send');
 
 // Announcements Admin
-$router->get('/admin/announcements', 'AdminController', 'announcements');// NO, Administrativo
-$router->get('/admin/api/announcements', 'AdminController', 'announcementsJson');// NO, Administrativo
-$router->post('/admin/api/announcements', 'AdminController', 'announcementSaveJson');// NO, Administrativo
-$router->post(
-    '/admin/api/announcements/upload-image',
-    'AdminAnnouncementController',
-    'announcementUploadImageJson',
-    ['auth', 'permission:admin_access'],
-);
-$router->get('/admin/api/announcements/:id/views', 'AdminController', 'announcementViewsJson');// NO, Administrativo
-$router->post('/admin/api/announcements/:id/activate', 'AdminController', 'announcementActivateJson');// NO, Administrativo
-$router->post('/admin/api/announcements/:id/delete', 'AdminController', 'announcementDeleteJson');// NO, Administrativo
-$router->delete('/admin/api/announcements/:id', 'AdminController', 'announcementDeleteJson');// NO, Administrativo
+$router->get('/admin/announcements',AdminAnnouncementController::class,'announcements',$adminMiddleware,);
+$router->get('/admin/api/announcements',AdminAnnouncementController::class,'announcementsList',$adminMiddleware,);
+$router->post('/admin/api/announcements',AdminAnnouncementController::class,'save',$adminMiddleware,);
+$router->post('/admin/api/announcements/upload-image',AdminAnnouncementController::class,'uploadImage',$adminMiddleware,);
+$router->get('/admin/api/announcements/:id/views',AdminAnnouncementController::class,'getViews',$adminMiddleware,);
+$router->post('/admin/api/announcements/:id/activate',AdminAnnouncementController::class,'activate',$adminMiddleware,);
+$router->post('/admin/api/announcements/:id/delete',AdminAnnouncementController::class,'delete',$adminMiddleware,);
+$router->delete('/admin/api/announcements/:id',AdminAnnouncementController::class,'delete',$adminMiddleware,);
 
 // WhatsApp Admin CRUD
-$router->get('/admin/whatsapp', 'AdminController', 'whatsapp');// NO, Administrativo
-$router->get('/admin/whatsapp/messages', 'AdminController', 'whatsappMessages');// NO, Administrativo
-$router->post('/admin/whatsapp/messages/test', 'AdminController', 'sendWhatsappTestMessage');// NO, Administrativo
-$router->get('/admin/api/whatsapp', 'AdminController', 'whatsappListJson');// NO, Administrativo
-$router->get('/admin/api/whatsapp/templates', 'AdminController', 'whatsappTemplatesJson');// NO, Administrativo
-$router->post('/admin/api/whatsapp/templates', 'AdminController', 'whatsappTemplateCreateJson');// NO, Administrativo
-$router->post('/admin/api/whatsapp/templates/:id/delete', 'AdminController', 'whatsappTemplateDeleteJson');// NO, Administrativo
-$router->delete('/admin/api/whatsapp/templates/:id', 'AdminController', 'whatsappTemplateDeleteJson');// NO, Administrativo
-$router->post('/admin/api/whatsapp/:id/delete', 'AdminController', 'whatsappDeleteJson');// NO, Administrativo
-$router->post('/admin/api/whatsapp/:id/register', 'AdminController', 'whatsappRegisterJson');// NO, Administrativo
-$router->get('/admin/api/whatsapp/:id/status', 'AdminController', 'whatsappStatusJson');// NO, Administrativo
-$router->delete('/admin/api/whatsapp/:id', 'AdminController', 'whatsappDeleteJson');// NO, Administrativo
-$router->post('/admin/api/whatsapp', 'AdminController', 'whatsappCreateJson');// NO, Administrativo
+$router->get('/admin/whatsapp', AdminWhatsAppController::class, 'whatsapp', $adminMiddleware);
+$router->get('/admin/whatsapp/messages', AdminWhatsAppController::class, 'whatsappMessages', $adminMiddleware);
+$router->post('/admin/whatsapp/messages/test', AdminWhatsAppController::class, 'sendWhatsappTestMessage', $adminMiddleware);
+$router->get('/admin/api/whatsapp', AdminWhatsAppController::class, 'whatsappListJson', $adminMiddleware);
+$router->get('/admin/api/whatsapp/templates', AdminWhatsAppController::class, 'whatsappTemplatesJson', $adminMiddleware);
+$router->post('/admin/api/whatsapp/templates', AdminWhatsAppController::class, 'whatsappTemplateCreateJson', $adminMiddleware);
+$router->post('/admin/api/whatsapp/templates/:id/delete', AdminWhatsAppController::class, 'whatsappTemplateDeleteJson', $adminMiddleware);
+$router->delete('/admin/api/whatsapp/templates/:id', AdminWhatsAppController::class, 'whatsappTemplateDeleteJson', $adminMiddleware);
+$router->post('/admin/api/whatsapp/:id/delete', AdminWhatsAppController::class, 'whatsappDeleteJson', $adminMiddleware);
+$router->post('/admin/api/whatsapp/:id/register', AdminWhatsAppController::class, 'whatsappRegisterJson', $adminMiddleware);
+$router->get('/admin/api/whatsapp/:id/status', AdminWhatsAppController::class, 'whatsappStatusJson', $adminMiddleware);
+$router->delete('/admin/api/whatsapp/:id', AdminWhatsAppController::class, 'whatsappDeleteJson', $adminMiddleware);
+$router->post('/admin/api/whatsapp', AdminWhatsAppController::class, 'whatsappCreateJson', $adminMiddleware);
 
 // JWT Tokens Admin
-$router->get('/admin/jwt-tokens', 'AdminController', 'jwtTokens');// NO, Administrativo
-$router->get('/admin/api/jwt-tokens', 'AdminController', 'jwtTokensJson');// NO, Administrativo
-$router->post('/admin/api/jwt-tokens/create', 'AdminController', 'createJwtToken');// NO, Administrativo
-$router->post('/admin/api/jwt-tokens/revoke', 'AdminController', 'revokeJwtToken');// NO, Administrativo
-$router->get('/admin/api/jwt-tokens/customer/:customerId/ips', 'AdminController', 'customerIpsJson');// NO, Administrativo
-$router->post('/admin/api/jwt-tokens/ips/:id/flag', 'AdminController', 'flagIp');// NO, Administrativo
+$router->get('/admin/jwt-tokens', AdminCustomerAccessController::class, 'jwtTokens', $adminMiddleware);
+$router->get('/admin/api/jwt-tokens', AdminCustomerAccessController::class, 'jwtTokensJson', $adminMiddleware);
+$router->post('/admin/api/jwt-tokens/create', AdminCustomerAccessController::class, 'createJwtToken', $adminMiddleware);
+$router->post('/admin/api/jwt-tokens/revoke', AdminCustomerAccessController::class, 'revokeJwtToken', $adminMiddleware);
+$router->get('/admin/api/jwt-tokens/customer/:customerId/ips', AdminCustomerAccessController::class, 'customerIpsJson', $adminMiddleware);
+$router->post('/admin/api/jwt-tokens/ips/:id/flag', AdminCustomerAccessController::class, 'flagIp', $adminMiddleware);
 
 // Customer Stats Admin
-$router->get('/admin/customer-stats', 'AdminController', 'customerStats');// NO, Administrativo
-$router->get('/admin/api/customer-stats', 'AdminController', 'customerStatsJson');// NO, Administrativo
-$router->get('/admin/api/customer-stats/:customerId', 'AdminController', 'customerStatsDetailJson');// NO, Administrativo
+$router->get('/admin/customer-stats', AdminCustomerStatsController::class, 'customerStats', $adminMiddleware);
+$router->get('/admin/api/customer-stats', AdminCustomerStatsController::class, 'customerStatsJson', $adminMiddleware);
+$router->get('/admin/api/customer-stats/:customerId', AdminCustomerStatsController::class, 'customerStatsDetailJson', $adminMiddleware);
 
 // Desktop Tables Admin
 $router->get('/admin/desktop-tables', 'DesktopTablesController', 'index');// NO, Administrativo
@@ -196,17 +201,17 @@ $router->get('/admin/desktop-tables/view', 'DesktopTablesController', 'viewTable
 $router->get('/admin/desktop-tables/api/data', 'DesktopTablesController', 'getData');// NO, Administrativo
 
 // Downloads History Admin
-$router->get('/admin/downloads', 'AdminController', 'downloads');// NO, Administrativo
-$router->get('/admin/api/downloads', 'AdminController', 'downloadsJson');// NO, Administrativo
-$router->get('/admin/api/downloads/ip/:ipAddress', 'AdminController', 'downloadsByIpJson');// NO, Administrativo
+$router->get('/admin/downloads', AdminDownloadController::class, 'downloads', $adminMiddleware);
+$router->get('/admin/api/downloads', AdminDownloadController::class, 'downloadsJson', $adminMiddleware);
+$router->get('/admin/api/downloads/ip/:ipAddress', AdminDownloadController::class, 'downloadsByIpJson', $adminMiddleware);
 
 // License Validation (public — no auth required)
 $router->post('/api/licenses/validate', 'StripeController', 'validateLicense');
 
 // Licenses Admin
-$router->get('/admin/licenses', 'AdminController', 'licenses');// NO, Administrativo
-$router->get('/admin/api/licenses', 'AdminController', 'licensesJson');// NO, Administrativo
-$router->post('/admin/api/licenses/generate', 'AdminController', 'generateLicenseAdmin');// NO, Administrativo
+$router->get('/admin/licenses', AdminLicenseController::class, 'licenses', $adminMiddleware);
+$router->get('/admin/api/licenses', AdminLicenseController::class, 'licensesJson', $adminMiddleware);
+$router->post('/admin/api/licenses/generate', AdminLicenseController::class, 'generateLicenseAdmin', $adminMiddleware);
 
 // Diagnostico remoto ISAPI
 $router->get('/admin/isapi', 'IsapiController', 'page');

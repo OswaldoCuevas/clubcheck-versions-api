@@ -19,10 +19,11 @@ final class AdminControllerInventoryTest extends AdminHttpTestCase
 
     public function test_every_public_admin_controller_method_has_a_versioned_http_contract(): void
     {
-        $controllers = [
-            'AdminController' => \Controllers\AdminController::class,
-            'AdminAnnouncementController' => \Controllers\AdminAnnouncementController::class,
-        ];
+        $controllers = [];
+        foreach (self::inventory()['endpoints'] as $endpoint) {
+            $controller = $endpoint['controller'];
+            $controllers[$controller] = $controller;
+        }
 
         foreach ($controllers as $controllerName => $controllerClass) {
             $reflection = new ReflectionClass($controllerClass);
@@ -40,7 +41,7 @@ final class AdminControllerInventoryTest extends AdminHttpTestCase
                 static fn (array $endpoint): string => $endpoint['controllerMethod'],
                 array_filter(
                     self::inventory()['endpoints'],
-                    static fn (array $endpoint): bool => ($endpoint['controller'] ?? 'AdminController') === $controllerName
+                    static fn (array $endpoint): bool => $endpoint['controller'] === $controllerName
                 )
             ));
             sort($inventoriedMethods);
@@ -58,7 +59,7 @@ final class AdminControllerInventoryTest extends AdminHttpTestCase
 
         foreach (self::inventory()['endpoints'] as $endpoint) {
             $matches = array_filter($routes, static function (array $route) use ($endpoint): bool {
-                $controller = $endpoint['controller'] ?? 'AdminController';
+                $controller = $endpoint['controller'];
                 if ($route['controller'] !== $controller || $route['action'] !== $endpoint['controllerMethod']) {
                     return false;
                 }
@@ -69,25 +70,32 @@ final class AdminControllerInventoryTest extends AdminHttpTestCase
             self::assertNotEmpty($matches, sprintf(
                 'No existe una ruta %s para %s::%s (%s).',
                 $endpoint['request']['method'],
-                $endpoint['controller'] ?? 'AdminController',
+                $endpoint['controller'],
                 $endpoint['controllerMethod'],
                 $endpoint['id']
             ));
         }
     }
 
-    public function test_upload_route_declares_authentication_and_admin_permission_middleware(): void
+    public function test_all_migrated_admin_routes_declare_authentication_and_admin_permission_middleware(): void
     {
         $router = require dirname(__DIR__, 3) . '/routes/web.php';
         $reflection = new ReflectionClass($router);
         $routes = $reflection->getProperty('routes')->getValue($router);
 
-        $route = array_values(array_filter(
+        $controllers = array_values(array_unique(array_column(self::inventory()['endpoints'], 'controller')));
+        $adminRoutes = array_values(array_filter(
             $routes,
-            static fn (array $route): bool => $route['uri'] === '/admin/api/announcements/upload-image'
-        ))[0] ?? null;
+            static fn (array $route): bool => in_array($route['controller'], $controllers, true)
+        ));
 
-        self::assertNotNull($route);
-        self::assertSame(['auth', 'permission:admin_access'], $route['middleware']);
+        self::assertNotEmpty($adminRoutes);
+        foreach ($adminRoutes as $route) {
+            self::assertSame(
+                ['auth', 'permission:admin_access'],
+                $route['middleware'],
+                $route['method'] . ' ' . $route['uri'],
+            );
+        }
     }
 }

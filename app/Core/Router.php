@@ -238,7 +238,10 @@ class Router
 
     private function callController($route)
     {
-        $controllerClass = "Controllers\\{$route['controller']}";
+        $configuredController = ltrim((string) $route['controller'], '\\');
+        $controllerClass = str_contains($configuredController, '\\')
+            ? $configuredController
+            : "Controllers\\{$configuredController}";
         $method = $route['action'];
 
         try {
@@ -336,7 +339,7 @@ class Router
 
     private function resolveClass(string $className): object
     {
-        if ($this->container?->has($className)) {
+        if ($this->container !== null) {
             return $this->container->get($className);
         }
 
