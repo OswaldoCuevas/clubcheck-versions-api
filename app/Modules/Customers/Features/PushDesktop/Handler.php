@@ -17,15 +17,15 @@ final readonly class Handler
 
     public function handle(Command $command): JsonResult
     {
-        $this->validations($command);
-
         $payload = $command->payload;
         $customerApiId = $this->customerApiId(
             $payload,
             $command->authenticatedCustomerId,
         );
+        $this->validateCustomerApiId($customerApiId);
 
         $bulksPayload = $this->getBulksPayload($payload);
+        $this->validateRecordsByBulk($bulksPayload);
 
         $results = $this->desktopSync->push($customerApiId, $bulksPayload);
 
@@ -35,34 +35,21 @@ final readonly class Handler
         ]);
     }
 
-    private function validations(Command $command): void
+    private function validateCustomerApiId(string $customerApiId): void
     {
-        if ($command->requestMethod !== 'POST') {
-            throw ApiException::preservingResponse(
-                ApiErrorCode::MethodNotAllowed,
-                ['error' => 'Método no permitido'],
-            );
-        }
-
-        $payload = $command->payload;
-        $customerApiId = $this->customerApiId(
-            $payload,
-            $command->authenticatedCustomerId,
-        );
-
         if ($customerApiId === '') {
             throw ApiException::preservingResponse(
                 ApiErrorCode::DesktopSyncValidationFailed,
                 ['error' => 'El campo customerApiId es obligatorio'],
             );
         }
-
-        $bulksPayload = $this->getBulksPayload($payload);
-
-        $this->validateRecordsByBulk($bulksPayload);
     }
 
-    private function getBulksPayload(mixed $payload): array
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function getBulksPayload(array $payload): array
     {
         $bulksPayload = $payload['bulks'] ?? $payload['data'] ?? null;
 
@@ -78,9 +65,9 @@ final readonly class Handler
         return $bulksPayload;
     }
 
-    private function validateRecordsByBulk(mixed $bulksPayload)
+    /** @param array<string, mixed> $bulksPayload */
+    private function validateRecordsByBulk(array $bulksPayload): void
     {
-
         foreach ($this->desktopSync->bulkNames() as $bulkName) {
             $records = $bulksPayload[$bulkName] ?? [];
 

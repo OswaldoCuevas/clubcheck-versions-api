@@ -22,10 +22,8 @@ final readonly class CustomerDesktopSyncController
 
     public function pullDesktop(): void
     {
-        $requestMethod = $this->requestMethod();
-        $payload = $requestMethod === 'POST' ? $this->payload() : [];
+        $payload = $this->payload();
         $query = new PullDesktopQuery(
-            $requestMethod,
             $payload,
             CustomerJwtMiddleware::getCurrentCustomerId(),
         );
@@ -35,10 +33,8 @@ final readonly class CustomerDesktopSyncController
 
     public function pushDesktop(): void
     {
-        $requestMethod = $this->requestMethod();
-        $payload = $requestMethod === 'POST' ? $this->payload() : [];
+        $payload = $this->payload();
         $command = new PushDesktopCommand(
-            $requestMethod,
             $payload,
             CustomerJwtMiddleware::getCurrentCustomerId(),
         );
@@ -62,11 +58,6 @@ final readonly class CustomerDesktopSyncController
         }
 
         return $parsedPayload['payload'];
-    }
-
-    private function requestMethod(): string
-    {
-        return strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     }
 
     private function send(JsonResult $result): never

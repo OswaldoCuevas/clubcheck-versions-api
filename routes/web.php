@@ -73,8 +73,8 @@ $router->post('/api/customers/permission-requests/:id/cancel', 'PermissionReques
 $router->get('/api/customers/announcements/current', 'AnnouncementsController', 'current', ['customer_jwt']);
 $router->post('/api/customers/announcements/viewed', 'AnnouncementsController', 'viewedCurrent', ['customer_jwt']);
 $router->post('/api/customers/announcements/:id/viewed', 'AnnouncementsController', 'viewed', ['customer_jwt']);
-$router->any('/api/customers/desktop/pull', CustomerDesktopSyncController::class, 'pullDesktop', ['customer_jwt']);
-$router->any('/api/customers/desktop/push', CustomerDesktopSyncController::class, 'pushDesktop', ['customer_jwt']);
+$router->post('/api/customers/desktop/pull', CustomerDesktopSyncController::class, 'pullDesktop', ['customer_jwt']);
+$router->post('/api/customers/desktop/push', CustomerDesktopSyncController::class, 'pushDesktop', ['customer_jwt']);
 $router->post('/api/customers/desktop/users/:userId/photo', 'UserPhotosController', 'upload', ['customer_jwt']);
 $router->any('/api/customers', 'CustomersController', 'patchCustomer',['customer_jwt']);
 $router->any('/api/customers/:customerId', 'CustomersController', 'getCustomer', ['customer_jwt']);

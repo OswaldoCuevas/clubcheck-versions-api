@@ -71,7 +71,6 @@ final class DesktopSyncFeatureTest extends TestCase
         $handler = new PullDesktopHandler($coordinator);
 
         $result = $handler->handle(new PullDesktopQuery(
-            'POST',
             [
                 'customerApiId' => 'untrusted-customer',
                 'includeRemoved' => 'yes',
@@ -103,7 +102,6 @@ final class DesktopSyncFeatureTest extends TestCase
 
         try {
             $handler->handle(new PullDesktopQuery(
-                'POST',
                 [
                     'includeRemovedByBulk' => [
                         'users' => 'invalid',
@@ -140,7 +138,6 @@ final class DesktopSyncFeatureTest extends TestCase
         ];
 
         $result = $handler->handle(new PushDesktopCommand(
-            'POST',
             ['data' => $bulks],
             'customer-1',
         ));
@@ -162,7 +159,6 @@ final class DesktopSyncFeatureTest extends TestCase
 
         try {
             $handler->handle(new PushDesktopCommand(
-                'POST',
                 [
                     'bulks' => [
                         'products' => 'invalid',
@@ -180,30 +176,5 @@ final class DesktopSyncFeatureTest extends TestCase
         }
 
         self::assertNull($coordinator->pushCall);
-    }
-
-    public function test_both_features_preserve_method_not_allowed_contract(): void
-    {
-        $coordinator = new DesktopSyncCoordinatorFake();
-
-        $operations = [
-            static fn (): mixed => (new PullDesktopHandler($coordinator))->handle(
-                new PullDesktopQuery('GET', [], 'customer-1'),
-            ),
-            static fn (): mixed => (new PushDesktopHandler($coordinator))->handle(
-                new PushDesktopCommand('DELETE', [], 'customer-1'),
-            ),
-        ];
-
-        foreach ($operations as $operation) {
-            try {
-                $operation();
-                self::fail('Se esperaba un error controlado por método HTTP.');
-            } catch (ApiException $exception) {
-                self::assertSame(405, $exception->getStatusCode());
-                self::assertSame(ApiErrorCode::MethodNotAllowed, $exception->getApiErrorCode());
-                self::assertSame(['error' => 'Método no permitido'], $exception->toArray());
-            }
-        }
     }
 }

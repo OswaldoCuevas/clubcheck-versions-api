@@ -17,17 +17,14 @@ final readonly class Handler
 
     public function handle(Query $query): JsonResult
     {
-
-        $this->validations($query);
-
         $payload = $query->payload;
         $customerApiId = $this->customerApiId(
             $payload,
             $query->authenticatedCustomerId,
         );
+        $this->validateCustomerApiId($customerApiId);
 
         $includeRemoved = $this->includeRemoved($payload);
-
         $includeRemovedByBulk = $this->includeRemovedByBulk($payload);
 
         $bulks = $this->desktopSync->pull(
@@ -36,28 +33,14 @@ final readonly class Handler
             $includeRemovedByBulk,
         );
 
-        
-
         return new JsonResult([
             'customerApiId' => $customerApiId,
             'bulks' => $bulks,
         ]);
     }
-    private function validations(Query $query){
 
-        if ($query->requestMethod !== 'POST') {
-            throw ApiException::preservingResponse(
-                ApiErrorCode::MethodNotAllowed,
-                ['error' => 'Método no permitido'],
-            );
-        }
-
-        $payload = $query->payload;
-        $customerApiId = $this->customerApiId(
-            $payload,
-            $query->authenticatedCustomerId,
-        );
-
+    private function validateCustomerApiId(string $customerApiId): void
+    {
         if ($customerApiId === '') {
             throw ApiException::preservingResponse(
                 ApiErrorCode::DesktopSyncValidationFailed,
@@ -66,22 +49,28 @@ final readonly class Handler
         }
     }
 
-    private function includeRemoved(mixed $payload):bool{
-         $includeRemoved = false;
+    /** @param array<string, mixed> $payload */
+    private function includeRemoved(array $payload): bool
+    {
+        $includeRemoved = false;
 
         if (array_key_exists('includeRemoved', $payload)) {
-            $normalizedFlag = $this->normalizeSyncFlag(
+            $includeRemoved = $this->normalizeSyncFlag(
                 $payload['includeRemoved'],
                 'includeRemoved',
             );
-
-            $includeRemoved = $normalizedFlag;
         }
 
         return $includeRemoved;
     }
-    private function includeRemovedByBulk(mixed $payload):array{
-          $includeRemovedByBulk = [];
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, bool>
+     */
+    private function includeRemovedByBulk(array $payload): array
+    {
+        $includeRemovedByBulk = [];
 
         if (array_key_exists('includeRemovedByBulk', $payload)) {
             $bulkFlags = $payload['includeRemovedByBulk'];
@@ -97,9 +86,10 @@ final readonly class Handler
 
             foreach ($bulkFlags as $bulkName => $flagValue) {
                 $field = sprintf('includeRemovedByBulk.%s', $bulkName);
-                $normalizedFlag = $this->normalizeSyncFlag($flagValue, $field);
-
-                $includeRemovedByBulk[$bulkName] = $normalizedFlag;
+                $includeRemovedByBulk[$bulkName] = $this->normalizeSyncFlag(
+                    $flagValue,
+                    $field,
+                );
             }
         }
 

@@ -105,16 +105,75 @@ class Router
         error_log("Router Debug - Method: $requestMethod, URI: $requestUri");
 
         $this->routeParams = [];
+        $uriMatches = $this->findRoutesByUri($requestUri);
+
+        if ($uriMatches === []) {
+            $this->handleNotFound($requestUri);
+            return;
+        }
+
+        $routeMatch = $this->findRouteByMethod($uriMatches, $requestMethod);
+
+        if ($routeMatch === null) {
+            $this->handleMethodNotAllowed($requestUri, $uriMatches);
+            return;
+        }
+
+        $this->currentRoute = $routeMatch['route'];
+        $this->routeParams = $routeMatch['params'];
+
+        return $this->callController($routeMatch['route']);
+    }
+
+    /**
+     * Busca primero rutas estáticas para evitar que una URI conocida termine
+     * tratándose como un parámetro de una ruta dinámica.
+     *
+     * @return list<array{route: array<string, mixed>, params: list<string|null>}>
+     */
+    private function findRoutesByUri(string $requestUri): array
+    {
+        $staticMatches = [];
+        $dynamicMatches = [];
 
         foreach ($this->routes as $route) {
-            if ($this->matchRoute($route, $requestMethod, $requestUri)) {
-                $this->currentRoute = $route;
-                return $this->callController($route);
+            $params = $this->matchRouteUri($route, $requestUri);
+
+            if ($params === null) {
+                continue;
+            }
+
+            $match = [
+                'route' => $route,
+                'params' => $params,
+            ];
+
+            if ($route['hasParams']) {
+                $dynamicMatches[] = $match;
+                continue;
+            }
+
+            $staticMatches[] = $match;
+        }
+
+        return $staticMatches !== [] ? $staticMatches : $dynamicMatches;
+    }
+
+    /**
+     * @param list<array{route: array<string, mixed>, params: list<string|null>}> $uriMatches
+     * @return array{route: array<string, mixed>, params: list<string|null>}|null
+     */
+    private function findRouteByMethod(array $uriMatches, string $requestMethod): ?array
+    {
+        foreach ($uriMatches as $match) {
+            $routeMethod = $match['route']['method'];
+
+            if ($routeMethod === 'ANY' || $routeMethod === $requestMethod) {
+                return $match;
             }
         }
 
-        // Si no se encuentra la ruta, enviar 404
-        $this->handleNotFound($requestUri);
+        return null;
     }
 
     /**
@@ -135,6 +194,36 @@ class Router
         // Para peticiones web normales
         http_response_code(404);
         echo "404 - Página no encontrada";
+    }
+
+    /**
+     * @param list<array{route: array<string, mixed>, params: list<string|null>}> $uriMatches
+     */
+    private function handleMethodNotAllowed(string $requestUri, array $uriMatches): void
+    {
+        $allowedMethods = [];
+
+        foreach ($uriMatches as $match) {
+            $method = (string) $match['route']['method'];
+
+            if ($method !== 'ANY' && !in_array($method, $allowedMethods, true)) {
+                $allowedMethods[] = $method;
+            }
+        }
+
+        if ($allowedMethods !== []) {
+            header('Allow: ' . implode(', ', $allowedMethods));
+        }
+
+        if ($this->isApiRequest($requestUri)) {
+            JsonResponse::send(
+                ['error' => 'Método no permitido'],
+                ApiErrorCode::MethodNotAllowed->httpStatus(),
+            );
+        }
+
+        http_response_code(ApiErrorCode::MethodNotAllowed->httpStatus());
+        echo '405 - Método no permitido';
     }
 
     /**
@@ -211,29 +300,26 @@ class Router
         return $uri;
     }
 
-    private function matchRoute($route, $requestMethod, $requestUri)
+    /** @return list<string|null>|null */
+    private function matchRouteUri(array $route, string $requestUri): ?array
     {
-        // Verificar método HTTP
-        if ($route['method'] !== 'ANY' && $route['method'] !== $requestMethod) {
-            return false;
-        }
-
-        // Verificar URI exacta o con parámetros
         $routeUri = $route['uri'];
 
         if (!$route['hasParams']) {
-            return $requestUri === $routeUri;
+            return $requestUri === $routeUri ? [] : null;
         }
 
         if ($route['regex'] && preg_match($route['regex'], $requestUri, $matches)) {
-            $this->routeParams = [];
+            $params = [];
+
             foreach ($route['paramNames'] as $name) {
-                $this->routeParams[] = $matches[$name] ?? null;
+                $params[] = $matches[$name] ?? null;
             }
-            return true;
+
+            return $params;
         }
 
-        return false;
+        return null;
     }
 
     private function callController($route)

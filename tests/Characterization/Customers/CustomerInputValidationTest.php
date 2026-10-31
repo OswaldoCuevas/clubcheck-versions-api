@@ -157,13 +157,10 @@ final class CustomerInputValidationTest extends CustomerHttpTestCase
             'GET',
             '/api/customers/validate',
             [],
-            ['status' => 401, 'jsonSubset' => ['error_code' => 'TOKEN_MISSING']],
+            ['status' => 405, 'jsonSubset' => ['error' => 'Método no permitido']],
             false,
         );
 
-        // Caracterización: como la ruta validate solo acepta POST, el GET
-        // termina coincidiendo con /api/customers/:customerId y ejecuta su
-        // middleware customer_jwt.
-        self::assertSame(401, $explicitRoute->getStatusCode());
+        self::assertSame(405, $explicitRoute->getStatusCode());
     }
 }
