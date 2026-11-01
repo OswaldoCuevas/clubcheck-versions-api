@@ -12,6 +12,62 @@ final class TestDatabase
 {
     private const SAFE_SCHEMA_PATTERN = '/^clubcheck_admin_test_[a-f0-9]{16}$/D';
 
+    /** @var list<string> */
+    private const MUTABLE_TABLES = [
+        'loginattempts',
+        'customers',
+        'customerprivacyconsents',
+        'customertermsandconditionsconsents',
+        'customerloginattempts',
+        'customerwebloginattempts',
+        'customersessions',
+        'customerpushtokens',
+        'customeriplogs',
+        'announcements',
+        'announcementviews',
+        'downloadlogs',
+        'licenselogs',
+        'whatsappconfigurations',
+        'customerwhatsapptemplates',
+        'customerwhatsapptemplateevents',
+        'messagesent',
+        'usersdesktop',
+        'subscriptionsdesktop',
+        'attendancesdesktop',
+        'administratorsdesktop',
+        'sendemailsadmindesktop',
+        'historyoperationsdesktop',
+        'infomysubscriptiondesktop',
+        'whatsappdesktop',
+        'appsettingsdesktop',
+        'sentmessagesdesktop',
+        'productdesktop',
+        'productpricedesktop',
+        'productstockdesktop',
+        'cashregisterdesktop',
+        'saleticketdesktop',
+        'saleticketitemdesktop',
+        'subscriptionperioddesktop',
+        'syncstatusdesktop',
+        'accessdevicesdesktop',
+        'operationsaccessdevicesdesktop',
+        'useraccessdevicesdesktop',
+        'accessusersdesktop',
+        'classcatalogdesktop',
+        'instructorsdesktop',
+        'classinstructorsdesktop',
+        'classschedulegroupsdesktop',
+        'classschedulesdesktop',
+        'classenrollmentsdesktop',
+        'classreservationsdesktop',
+        'classscheduleinstructorsdesktop',
+        'classschedulereschedulesdesktop',
+        'saleclassesdesktop',
+        'saleclassschedulesdesktop',
+        'migrationsdesktop',
+        'barcodelookupcachedesktop',
+    ];
+
     private mysqli $server;
     private mysqli $database;
     private string $schema;
@@ -94,80 +150,116 @@ final class TestDatabase
         return $this->migrationReport;
     }
 
-    public function resetFixtures(): void
+    /** @param list<string>|null $tables */
+    public function resetFixtures(?array $tables = null): void
     {
-        $mutable = [
-            'loginattempts',
-            'customers',
-            'customerprivacyconsents',
-            'customertermsandconditionsconsents',
-            'customerloginattempts',
-            'customerwebloginattempts',
-            'customersessions',
-            'customerpushtokens',
-            'customeriplogs',
-            'announcements',
-            'announcementviews',
-            'downloadlogs',
-            'licenselogs',
-            'whatsappconfigurations',
-            'customerwhatsapptemplates',
-            'customerwhatsapptemplateevents',
-            'messagesent',
-            'usersdesktop',
-            'subscriptionsdesktop',
-            'attendancesdesktop',
-            'administratorsdesktop',
-            'sendemailsadmindesktop',
-            'historyoperationsdesktop',
-            'infomysubscriptiondesktop',
-            'whatsappdesktop',
-            'appsettingsdesktop',
-            'sentmessagesdesktop',
-            'productdesktop',
-            'productpricedesktop',
-            'productstockdesktop',
-            'cashregisterdesktop',
-            'saleticketdesktop',
-            'saleticketitemdesktop',
-            'subscriptionperioddesktop',
-            'syncstatusdesktop',
-            'accessdevicesdesktop',
-            'operationsaccessdevicesdesktop',
-            'useraccessdevicesdesktop',
-            'accessusersdesktop',
-            'classcatalogdesktop',
-            'instructorsdesktop',
-            'classinstructorsdesktop',
-            'classschedulegroupsdesktop',
-            'classschedulesdesktop',
-            'classenrollmentsdesktop',
-            'classreservationsdesktop',
-            'classscheduleinstructorsdesktop',
-            'classschedulereschedulesdesktop',
-            'saleclassesdesktop',
-            'saleclassschedulesdesktop',
-            'migrationsdesktop',
-            'barcodelookupcachedesktop',
-        ];
+        $mutableTables = $this->mutableTables($tables);
         $result = $this->database->query(
             "SELECT TABLE_NAME FROM information_schema.TABLES
              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'"
         );
 
+        $existingTables = [];
+
+        while ($row = $result->fetch_assoc()) {
+            $table = (string) $row['TABLE_NAME'];
+            $normalizedTable = strtolower($table);
+
+            if (isset($mutableTables[$normalizedTable])) {
+                $existingTables[$normalizedTable] = $table;
+            }
+        }
+
+        $tablesToReset = $this->tablesRequiringReset($existingTables);
+
         $this->database->query('SET FOREIGN_KEY_CHECKS = 0');
         try {
-            while ($row = $result->fetch_assoc()) {
-                $table = (string) $row['TABLE_NAME'];
-                if (in_array(strtolower($table), $mutable, true)) {
-                    $this->database->query('TRUNCATE TABLE `' . str_replace('`', '``', $table) . '`');
-                }
+            foreach ($tablesToReset as $table) {
+                $escapedTable = str_replace('`', '``', $table);
+                $this->database->query("TRUNCATE TABLE `{$escapedTable}`");
             }
         } finally {
             $this->database->query('SET FOREIGN_KEY_CHECKS = 1');
         }
 
         $this->setKnownAdminPassword();
+    }
+
+    /**
+     * @param list<string>|null $tables
+     * @return array<string, true>
+     */
+    private function mutableTables(?array $tables): array
+    {
+        $requestedTables = $tables ?? self::MUTABLE_TABLES;
+        $allowedTables = array_fill_keys(self::MUTABLE_TABLES, true);
+        $mutableTables = [];
+
+        foreach ($requestedTables as $table) {
+            $normalizedTable = strtolower($table);
+
+            if (!isset($allowedTables[$normalizedTable])) {
+                throw new RuntimeException("La tabla {$table} no está permitida para limpiar fixtures.");
+            }
+
+            $mutableTables[$normalizedTable] = true;
+        }
+
+        return $mutableTables;
+    }
+
+    /**
+     * @param array<string, string> $existingTables
+     * @return list<string>
+     */
+    private function tablesRequiringReset(array $existingTables): array
+    {
+        if ($existingTables === []) {
+            return [];
+        }
+
+        $checks = [];
+
+        foreach ($existingTables as $normalizedTable => $table) {
+            $escapedTable = str_replace('`', '``', $table);
+            $escapedName = $this->database->real_escape_string($normalizedTable);
+            $checks[] = sprintf(
+                "SELECT '%s' AS table_name WHERE EXISTS (SELECT 1 FROM `%s` LIMIT 1)",
+                $escapedName,
+                $escapedTable,
+            );
+        }
+
+        $tablesToReset = [];
+        $nonEmptyResult = $this->database->query(implode(' UNION ALL ', $checks));
+
+        while ($row = $nonEmptyResult->fetch_assoc()) {
+            $normalizedTable = strtolower((string) $row['table_name']);
+            $tablesToReset[$normalizedTable] = true;
+        }
+
+        $escapedNames = array_map(
+            fn (string $table): string => sprintf(
+                "'%s'",
+                $this->database->real_escape_string($table),
+            ),
+            array_keys($existingTables),
+        );
+        $autoIncrementResult = $this->database->query(sprintf(
+            'SELECT LOWER(TABLE_NAME) AS table_name
+             FROM information_schema.TABLES
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND LOWER(TABLE_NAME) IN (%s)
+               AND AUTO_INCREMENT > 1',
+            implode(', ', $escapedNames),
+        ));
+
+        while ($row = $autoIncrementResult->fetch_assoc()) {
+            $normalizedTable = strtolower((string) $row['table_name']);
+            $tablesToReset[$normalizedTable] = true;
+        }
+
+        return array_values(array_intersect_key($existingTables, $tablesToReset));
     }
 
     public function insertCustomer(array $overrides = []): array

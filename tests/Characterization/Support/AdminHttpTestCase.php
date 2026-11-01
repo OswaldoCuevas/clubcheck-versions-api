@@ -23,7 +23,7 @@ abstract class AdminHttpTestCase extends TestCase
         $this->environment = TestEnvironment::instance();
         $this->database = $this->environment->database();
         if ($this->shouldResetFixtures()) {
-            $this->database->resetFixtures();
+            $this->database->resetFixtures($this->fixtureTables());
         }
         $this->anonymousClient = $this->newClient();
     }
@@ -31,6 +31,12 @@ abstract class AdminHttpTestCase extends TestCase
     protected function shouldResetFixtures(): bool
     {
         return true;
+    }
+
+    /** @return list<string>|null */
+    protected function fixtureTables(): ?array
+    {
+        return null;
     }
 
     protected function adminClient(): Client

@@ -23,7 +23,7 @@ Cada artefacto contiene la solicitud, la expectativa, la respuesta real y
 máquina y licencias se reemplazan por `<redacted>`.
 
 `customers-controller.json` protege las acciones heredadas de
-`CustomersController` antes de migrarlas a Features del monolito modular.
+los endpoints de clientes durante su migración a Features del monolito modular.
 
 No se debe cambiar una expectativa únicamente para hacer pasar una prueba.
 Primero hay que decidir si el cambio de comportamiento fue intencional.

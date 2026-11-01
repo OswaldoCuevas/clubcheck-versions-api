@@ -12,6 +12,16 @@ use Tests\Characterization\Support\CustomerHttpTestCase;
 #[Group('characterization')]
 final class CustomerControllerInventoryTest extends CustomerHttpTestCase
 {
+    protected function shouldResetFixtures(): bool
+    {
+        return false;
+    }
+
+    protected function shouldPrepareAuthenticatedCustomer(): bool
+    {
+        return false;
+    }
+
     public function test_every_public_controller_method_has_a_versioned_http_contract(): void
     {
         $inventory = self::inventory();

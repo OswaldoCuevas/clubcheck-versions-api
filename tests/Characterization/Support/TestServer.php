@@ -27,6 +27,7 @@ final class TestServer
 
         $command = [
             PHP_BINARY,
+            '-d', 'xdebug.mode=off',
             '-d', 'variables_order=EGPCS',
             '-d', 'session.save_path=' . $this->sessionsDirectory,
             '-d', 'display_errors=0',

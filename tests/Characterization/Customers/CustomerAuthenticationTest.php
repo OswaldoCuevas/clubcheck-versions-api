@@ -11,6 +11,16 @@ use Tests\Characterization\Support\CustomerHttpTestCase;
 #[Group('characterization')]
 final class CustomerAuthenticationTest extends CustomerHttpTestCase
 {
+    protected function shouldResetFixtures(): bool
+    {
+        return false;
+    }
+
+    protected function shouldPrepareAuthenticatedCustomer(): bool
+    {
+        return false;
+    }
+
     /** @return iterable<string, array{0: array<string, mixed>}> */
     public static function protectedEndpoints(): iterable
     {

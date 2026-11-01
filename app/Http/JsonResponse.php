@@ -6,6 +6,11 @@ namespace App\Http;
 
 final class JsonResponse
 {
+    public static function sendResult(JsonResult $result): never
+    {
+        self::send($result->data, $result->statusCode);
+    }
+
     /** @param array<string, mixed> $data */
     public static function send(array $data, int $statusCode = 200): never
     {

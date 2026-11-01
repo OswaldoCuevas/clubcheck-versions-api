@@ -4,7 +4,9 @@ use App\Modules\Announcements\Controllers\AdminAnnouncementController;
 use App\Modules\Admin\Controllers\AdminDashboardController;
 use App\Modules\ApiDocs\Controllers\AdminApiDocsController;
 use App\Modules\CustomerAccess\Controllers\AdminCustomerAccessController;
+use App\Modules\CustomerSessions\Controllers\CustomerSessionController;
 use App\Modules\Customers\Controllers\AdminCustomerController;
+use App\Modules\Customers\Controllers\CustomerController;
 use App\Modules\Customers\Controllers\CustomerDesktopSyncController;
 use App\Modules\CustomerStats\Controllers\AdminCustomerStatsController;
 use App\Modules\Downloads\Controllers\AdminDownloadController;
@@ -52,19 +54,20 @@ $router->get('/api/download-zip', 'ApiController', 'downloadZip'); // Descarga p
 $router->get('/api/server/timestamp', 'ApiController', 'timestamp'); // Timestamp del servidor
 
 // Rutas para sesiones de clientes (aplicación de escritorio)
-$router->any('/api/customers/sessions/start', 'CustomersController', 'startSession');// NO
-$router->any('/api/customers/sessions/heartbeat', 'CustomersController', 'heartbeat');// NO
-$router->any('/api/customers/sessions/end', 'CustomersController', 'endSession');// NO
-$router->any('/api/customers/sessions/active', 'CustomersController', 'activeSessions');// NO
-$router->any('/api/customers/save', 'CustomersController', 'saveCustomer', ['customer_jwt']);
-$router->any('/api/customers/register', 'CustomersController', 'registerCustomer');// NO
-$router->any('/api/customers/login', 'CustomersController', 'loginCustomer');// NO
-$router->post('/api/customers/validate', 'CustomersController', 'validateCustomer');// NO
-$router->any('/api/customers/token', 'CustomersController', 'customerToken'); // NO
-$router->any('/api/customers/token/register', 'CustomersController', 'registerToken', ['customer_jwt']);
-$router->any('/api/customers/token/await', 'CustomersController', 'awaitToken');// NO
-$router->any('/api/customers/jwt/validate', 'CustomersController', 'validateJwtToken');
-$router->post('/api/customers/update-client-version', 'CustomersController', 'updateClientVersion', ['customer_jwt']);
+$router->post('/api/customers/sessions/start', CustomerSessionController::class, 'startSession');
+$router->post('/api/customers/sessions/heartbeat', CustomerSessionController::class, 'heartbeat');
+$router->post('/api/customers/sessions/end', CustomerSessionController::class, 'endSession');
+$router->get('/api/customers/sessions/active', CustomerSessionController::class, 'activeSessions');
+$router->post('/api/customers/save', CustomerController::class, 'saveCustomer', ['customer_jwt']);
+$router->post('/api/customers/register', CustomerController::class, 'registerCustomer');
+$router->post('/api/customers/login', CustomerController::class, 'loginCustomer');
+$router->post('/api/customers/validate', CustomerController::class, 'validateCustomer');
+$router->get('/api/customers/token', CustomerController::class, 'customerToken');
+$router->post('/api/customers/token/register', CustomerController::class, 'registerToken', ['customer_jwt']);
+$router->post('/api/customers/token/await', CustomerController::class, 'awaitToken');
+$router->get('/api/customers/jwt/validate', CustomerController::class, 'validateJwtToken');
+$router->post('/api/customers/jwt/validate', CustomerController::class, 'validateJwtToken');
+$router->post('/api/customers/update-client-version', CustomerController::class, 'updateClientVersion', ['customer_jwt']);
 $router->post('/api/customers/push-tokens', 'PushNotificationsController', 'register', ['push_client_jwt']);
 $router->post('/api/customers/push-tokens/unregister', 'PushNotificationsController', 'unregister', ['push_client_jwt']);
 $router->post('/api/customers/permission-requests', 'PermissionRequestsController', 'create', ['customer_jwt']);
@@ -76,9 +79,10 @@ $router->post('/api/customers/announcements/:id/viewed', 'AnnouncementsControlle
 $router->post('/api/customers/desktop/pull', CustomerDesktopSyncController::class, 'pullDesktop', ['customer_jwt']);
 $router->post('/api/customers/desktop/push', CustomerDesktopSyncController::class, 'pushDesktop', ['customer_jwt']);
 $router->post('/api/customers/desktop/users/:userId/photo', 'UserPhotosController', 'upload', ['customer_jwt']);
-$router->any('/api/customers', 'CustomersController', 'patchCustomer',['customer_jwt']);
-$router->any('/api/customers/:customerId', 'CustomersController', 'getCustomer', ['customer_jwt']);
-$router->any('/api/customers/messages-sends-at-month/:customerId', 'CustomersController', 'getMessagesSendsAtMonth', ['customer_jwt']);
+$router->post('/api/customers', CustomerController::class, 'patchCustomer', ['customer_jwt']);
+$router->patch('/api/customers', CustomerController::class, 'patchCustomer', ['customer_jwt']);
+$router->get('/api/customers/:customerId', CustomerController::class, 'getCustomer', ['customer_jwt']);
+$router->get('/api/customers/messages-sends-at-month/:customerId', CustomerController::class, 'getMessagesSendsAtMonth', ['customer_jwt']);
 
 // Desktop web/reporting API
 $router->post('/api/desktop/login', 'DesktopApiController', 'login');

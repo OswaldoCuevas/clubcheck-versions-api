@@ -11,6 +11,16 @@ use Tests\Characterization\Support\CustomerHttpTestCase;
 #[Group('characterization')]
 final class CustomerOptionsMatrixTest extends CustomerHttpTestCase
 {
+    protected function shouldResetFixtures(): bool
+    {
+        return false;
+    }
+
+    protected function shouldPrepareAuthenticatedCustomer(): bool
+    {
+        return false;
+    }
+
     /** @return iterable<string, array{0: string, 1: string}> */
     public static function paths(): iterable
     {

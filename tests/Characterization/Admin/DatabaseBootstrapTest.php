@@ -10,6 +10,11 @@ use Tests\Characterization\Support\AdminHttpTestCase;
 #[Group('characterization')]
 final class DatabaseBootstrapTest extends AdminHttpTestCase
 {
+    protected function shouldResetFixtures(): bool
+    {
+        return false;
+    }
+
     public function test_schema_and_all_migration_files_are_processed_in_an_isolated_database(): void
     {
         self::assertMatchesRegularExpression(

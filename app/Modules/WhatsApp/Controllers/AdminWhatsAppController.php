@@ -7,7 +7,6 @@ namespace App\Modules\WhatsApp\Controllers;
 use App\Application\Contracts\IMediator;
 use App\Http\JsonPayload;
 use App\Http\JsonResponse;
-use App\Http\JsonResult;
 use App\Http\ViewResponse;
 use App\Modules\WhatsApp\Features\CreateConfiguration\Command as CreateConfigurationCommand;
 use App\Modules\WhatsApp\Features\CreateTemplate\Command as CreateTemplateCommand;
@@ -27,59 +26,93 @@ final readonly class AdminWhatsAppController
     public function __construct(private IMediator $mediator)
     {
     }
+
     public function whatsapp(): void
     {
-        ViewResponse::render('admin/whatsapp', $this->mediator->send(new ShowConfigurationsQuery()));
+        ViewResponse::render(
+            'admin/whatsapp',
+            $this->mediator->send(new ShowConfigurationsQuery()),
+        );
     }
+
     public function whatsappMessages(): void
     {
-        ViewResponse::render('admin/whatsapp-messages', $this->mediator->send(new ShowMessagesQuery($_GET)));
+        ViewResponse::render(
+            'admin/whatsapp-messages',
+            $this->mediator->send(new ShowMessagesQuery($_GET)),
+        );
     }
+
     public function sendWhatsappTestMessage(): void
     {
         $result = $this->mediator->send(new SendTestMessageCommand($_POST));
+
         if ($result->statusCode !== null) {
             http_response_code($result->statusCode);
             echo $result->body;
+
             return;
         }
+
         header('Location: ' . UrlHelper::url($result->redirectTo));
         exit;
     }
+
     public function whatsappListJson(): void
     {
-        $this->send($this->mediator->send(new ListConfigurationsQuery()));
+        JsonResponse::sendResult(
+            $this->mediator->send(new ListConfigurationsQuery()),
+        );
     }
+
     public function whatsappCreateJson(): void
     {
-        $this->send($this->mediator->send(new CreateConfigurationCommand(JsonPayload::Get())));
+        JsonResponse::sendResult(
+            $this->mediator->send(
+                new CreateConfigurationCommand(JsonPayload::parse()),
+            ),
+        );
     }
+
     public function whatsappDeleteJson(string $id): void
     {
-        $this->send($this->mediator->send(new DeleteConfigurationCommand($id)));
+        JsonResponse::sendResult(
+            $this->mediator->send(new DeleteConfigurationCommand($id)),
+        );
     }
+
     public function whatsappRegisterJson(string $id): void
     {
-        $this->send($this->mediator->send(new RegisterConfigurationCommand($id)));
+        JsonResponse::sendResult(
+            $this->mediator->send(new RegisterConfigurationCommand($id)),
+        );
     }
+
     public function whatsappStatusJson(string $id): void
     {
-        $this->send($this->mediator->send(new GetConfigurationStatusQuery($id)));
+        JsonResponse::sendResult(
+            $this->mediator->send(new GetConfigurationStatusQuery($id)),
+        );
     }
+
     public function whatsappTemplatesJson(): void
     {
-        $this->send($this->mediator->send(new ListTemplatesQuery()));
+        JsonResponse::sendResult($this->mediator->send(new ListTemplatesQuery()));
     }
+
     public function whatsappTemplateCreateJson(): void
     {
-        $this->send($this->mediator->send(new CreateTemplateCommand(JsonPayload::Get())));
+        JsonResponse::sendResult(
+            $this->mediator->send(
+                new CreateTemplateCommand(JsonPayload::parse()),
+            ),
+        );
     }
+
     public function whatsappTemplateDeleteJson(string $id): void
     {
-        $this->send($this->mediator->send(new DeleteTemplateCommand($id)));
-    }
-    private function send(JsonResult $result): never
-    {
-        JsonResponse::send($result->data, $result->statusCode);
+        JsonResponse::sendResult(
+            $this->mediator->send(new DeleteTemplateCommand($id)),
+        );
     }
 }

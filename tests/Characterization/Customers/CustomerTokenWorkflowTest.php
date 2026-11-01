@@ -102,4 +102,32 @@ final class CustomerTokenWorkflowTest extends CustomerHttpTestCase
 
         self::assertSame(409, $response->getStatusCode());
     }
+
+    public function test_public_token_operations_reject_an_unknown_customer(): void
+    {
+        $current = $this->requestAndRecord(
+            'customers.token.unknown.current',
+            'GET',
+            '/api/customers/token?customerId=unknown-customer',
+            [],
+            ['status' => 404, 'jsonSubset' => ['error' => 'Cliente no encontrado']],
+            false,
+        );
+        self::assertSame(404, $current->getStatusCode());
+
+        $waiting = $this->requestAndRecord(
+            'customers.token.unknown.await',
+            'POST',
+            '/api/customers/token/await',
+            [
+                'json' => [
+                    'customerId' => 'unknown-customer',
+                    'waiting' => true,
+                ],
+            ],
+            ['status' => 404, 'jsonSubset' => ['error' => 'Cliente no encontrado']],
+            false,
+        );
+        self::assertSame(404, $waiting->getStatusCode());
+    }
 }

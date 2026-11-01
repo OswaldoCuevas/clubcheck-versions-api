@@ -24,10 +24,16 @@
     "scripts": {
         "test": [
             "Composer\\Config::disableProcessTimeout",
-            "phpunit"
+            "php -d xdebug.mode=off vendor/bin/phpunit"
         ],
-        "test:unit": "phpunit --testsuite unit",
-        "test:admin-http": "phpunit --testsuite admin-http-characterization",
-        "test:customers-http": "phpunit --testsuite customer-http-characterization"
+        "test:unit": "php -d xdebug.mode=off vendor/bin/phpunit --testsuite unit",
+        "test:admin-http": [
+            "Composer\\Config::disableProcessTimeout",
+            "php -d xdebug.mode=off vendor/bin/phpunit --testsuite admin-http-characterization"
+        ],
+        "test:customers-http": [
+            "Composer\\Config::disableProcessTimeout",
+            "php -d xdebug.mode=off vendor/bin/phpunit --testsuite customer-http-characterization"
+        ]
     }
 }

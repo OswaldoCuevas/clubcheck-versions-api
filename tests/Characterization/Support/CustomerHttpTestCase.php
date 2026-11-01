@@ -26,7 +26,16 @@ abstract class CustomerHttpTestCase extends TestCase
 
         $this->environment = TestEnvironment::instance();
         $this->database = $this->environment->database();
-        $this->database->resetFixtures();
+
+        if ($this->shouldResetFixtures()) {
+            $this->database->resetFixtures($this->fixtureTables());
+        }
+
+        if (!$this->shouldPrepareAuthenticatedCustomer()) {
+            $this->anonymousClient = $this->newClient();
+            return;
+        }
+
         $this->database->insertCustomer();
 
         $jwtSecret = $this->database->serverEnvironment()['JWT_SECRET_KEY'];
@@ -51,6 +60,22 @@ abstract class CustomerHttpTestCase extends TestCase
             'Authorization' => 'Bearer ' . $this->customerJwt,
             'X-Device-Name' => 'CHARACTERIZATION-PC',
         ]);
+    }
+
+    protected function shouldResetFixtures(): bool
+    {
+        return true;
+    }
+
+    /** @return list<string>|null */
+    protected function fixtureTables(): ?array
+    {
+        return null;
+    }
+
+    protected function shouldPrepareAuthenticatedCustomer(): bool
+    {
+        return true;
     }
 
     /**

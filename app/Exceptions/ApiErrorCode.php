@@ -34,6 +34,14 @@ enum ApiErrorCode: string
     case CustomerInactive = 'CUSTOMER_INACTIVE';
     case InvalidJsonPayload = 'INVALID_JSON_PAYLOAD';
     case DesktopSyncValidationFailed = 'DESKTOP_SYNC_VALIDATION_FAILED';
+    case CustomerSessionValidationFailed = 'CUSTOMER_SESSION_VALIDATION_FAILED';
+    case CustomerSessionMetadataTooLarge = 'CUSTOMER_SESSION_METADATA_TOO_LARGE';
+    case CustomerSessionNotFound = 'CUSTOMER_SESSION_NOT_FOUND';
+    case CustomerValidationFailed = 'CUSTOMER_VALIDATION_FAILED';
+    case CustomerResourceNotFound = 'CUSTOMER_RESOURCE_NOT_FOUND';
+    case CustomerConflict = 'CUSTOMER_CONFLICT';
+    case CustomerTooManyAttempts = 'CUSTOMER_TOO_MANY_ATTEMPTS';
+    case CustomerOperationFailed = 'CUSTOMER_OPERATION_FAILED';
 
     case InvalidCredentials = 'INVALID_CREDENTIALS';
     case PlanLimitExceeded = 'PLAN_LIMIT_EXCEEDED';
@@ -69,23 +77,33 @@ enum ApiErrorCode: string
 
             self::NotFound,
             self::RouteNotFound,
+            self::CustomerSessionNotFound,
+            self::CustomerResourceNotFound,
             self::AnnouncementNotFound => 404,
 
             self::MethodNotAllowed => 405,
 
             self::Conflict,
+            self::CustomerConflict,
             self::SubscriptionExists => 409,
+
+            self::CustomerTooManyAttempts => 429,
 
             self::AnnouncementImageMissing,
             self::AnnouncementImageUnsupportedFormat,
             self::AnnouncementImageTooLarge,
             self::AnnouncementValidationFailed,
-            self::DesktopSyncValidationFailed => 422,
+            self::DesktopSyncValidationFailed,
+            self::CustomerSessionValidationFailed,
+            self::CustomerValidationFailed => 422,
+
+            self::CustomerSessionMetadataTooLarge => 413,
 
             self::ServiceError,
             self::WhatsAppUnavailable => 502,
 
             self::InternalError,
+            self::CustomerOperationFailed,
             self::AnnouncementSaveFailed,
             self::AnnouncementImageDirectoryCreationFailed,
             self::AnnouncementImageStorageFailed => 500,
@@ -120,6 +138,14 @@ enum ApiErrorCode: string
             self::CustomerInactive => 'Cliente inactivo',
             self::InvalidJsonPayload => 'Carga JSON inválida',
             self::DesktopSyncValidationFailed => 'Datos de sincronización inválidos',
+            self::CustomerSessionValidationFailed => 'Datos de sesión inválidos',
+            self::CustomerSessionMetadataTooLarge => 'Metadatos de sesión demasiado grandes',
+            self::CustomerSessionNotFound => 'Sesión no encontrada',
+            self::CustomerValidationFailed => 'Datos de cliente inválidos',
+            self::CustomerResourceNotFound => 'Cliente no encontrado',
+            self::CustomerConflict => 'Conflicto con el cliente',
+            self::CustomerTooManyAttempts => 'Demasiados intentos',
+            self::CustomerOperationFailed => 'No se pudo completar la operación del cliente',
             self::InvalidCredentials => 'Credenciales inválidas',
             self::PlanLimitExceeded => 'El plan no permite esta operación',
             self::SubscriptionExists => 'Ya existe una suscripción activa',

@@ -33,6 +33,8 @@ $registerCustomers = require __DIR__ . '/../app/Modules/Customers/services.php';
 $registerCustomers($container);
 $registerCustomerAccess = require __DIR__ . '/../app/Modules/CustomerAccess/services.php';
 $registerCustomerAccess($container);
+$registerCustomerSessions = require __DIR__ . '/../app/Modules/CustomerSessions/services.php';
+$registerCustomerSessions($container);
 $registerCustomerStats = require __DIR__ . '/../app/Modules/CustomerStats/services.php';
 $registerCustomerStats($container);
 $registerDownloads = require __DIR__ . '/../app/Modules/Downloads/services.php';

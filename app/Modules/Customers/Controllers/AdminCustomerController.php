@@ -7,7 +7,6 @@ namespace App\Modules\Customers\Controllers;
 use App\Application\Contracts\IMediator;
 use App\Http\JsonPayload;
 use App\Http\JsonResponse;
-use App\Http\JsonResult;
 use App\Http\ViewResponse;
 use App\Modules\Customers\Features\DeleteCustomer\Command as DeleteCustomerCommand;
 use App\Modules\Customers\Features\ListCustomers\Query as ListCustomersQuery;
@@ -37,21 +36,26 @@ final readonly class AdminCustomerController
 
     public function regenerateAccessKey(): void
     {
-        $this->send($this->mediator->send(new RegenerateAccessKeyCommand(JsonPayload::Get())));
+        JsonResponse::sendResult(
+            $this->mediator->send(
+                new RegenerateAccessKeyCommand(JsonPayload::parse()),
+            ),
+        );
     }
 
     public function deleteCustomerJson(string $customerId): void
     {
-        $this->send($this->mediator->send(new DeleteCustomerCommand($customerId)));
+        JsonResponse::sendResult(
+            $this->mediator->send(new DeleteCustomerCommand($customerId)),
+        );
     }
 
     public function saveCustomerJson(): void
     {
-        $this->send($this->mediator->send(new SaveCustomerCommand(JsonPayload::Get())));
-    }
-
-    private function send(JsonResult $result): never
-    {
-        JsonResponse::send($result->data, $result->statusCode);
+        JsonResponse::sendResult(
+            $this->mediator->send(
+                new SaveCustomerCommand(JsonPayload::parse()),
+            ),
+        );
     }
 }

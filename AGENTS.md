@@ -12,7 +12,8 @@
 
 ## JSON responses from controllers
 
-- New or migrated controller actions must send JSON through `App\Http\JsonResponse::send()`.
+- New or migrated controller actions must send JSON through `App\Http\JsonResponse::send()` or `App\Http\JsonResponse::sendResult()`.
+- Always read JSON request bodies with `App\Http\JsonPayload::parse()` in every controller that is created, modified, or migrated. Do not decode `php://input` directly or duplicate invalid-JSON handling inside controllers.
 - Do not duplicate `http_response_code()`, the JSON `Content-Type` header, `json_encode()`, `echo`, or `exit` inside controllers.
 - Do not extend `Core\Controller` only to reuse its `json()` method. A controller should inherit from it only when it actually needs the other legacy controller behavior.
 - Keep business rules out of `JsonResponse`; it is only an HTTP presentation utility.
@@ -20,6 +21,14 @@
 - Add new error cases to `ApiErrorCode` with their HTTP status and safe public message before using them.
 - Preserve the existing response status, keys, values, and body when migrating an endpoint.
 - After changing a JSON endpoint, run its relevant unit and HTTP characterization tests. Run the complete test suite before completing a migration.
+
+## Controller boundaries and shared HTTP helpers
+
+- Controllers must contain only their constructor and public actions that are registered as router endpoints. Do not add private or protected controller helper methods for reusable behavior.
+- Move reusable HTTP concerns to focused helpers under `App\Http`. Use `JsonPayload` for JSON bodies, `Request` for query parameters, server values, IP addresses, and authorization headers, and `JsonResponse` for JSON output.
+- Do not create loose global functions. Shared behavior must live in a focused class with a clear responsibility and must remain free of business rules.
+- Controller actions should translate HTTP input into a Command or Query, dispatch it through `IMediator`, and translate the result into an HTTP response. Business validation, normalization, persistence, and orchestration belong outside the controller.
+- Before completing a controller change, inspect every modified modular controller and confirm it has no private or protected helper methods and no duplicated JSON parsing or response-sending logic.
 
 ## Commands, Queries, Mediator, and dependency injection
 
@@ -40,5 +49,3 @@
 - Repository contracts belong in `Modules/<Module>/Contracts/` and expose business-oriented persistence operations, not raw SQL or HTTP concepts. Keep Commands, Queries, Handlers, and Controllers unaware of `IDatabaseConnection`; only concrete repositories may depend on it.
 - Commands, Queries, Results, Requests, entities, and value objects contain operation data and must not be registered as singletons.
 - Constructor parameters with scalar configuration require an explicit factory. Do not read global configuration from application Handlers when it can be supplied by the composition root.
-
-JsonPayload siempre se debe usar para recibir el paylod en todos los controllers que se modifiquen o migren apra tenrlo en cuenta

@@ -1,12 +1,14 @@
 {
     "version": 1,
-    "controller": "Controllers\\CustomersController",
-    "routeController": "CustomersController",
-    "description": "Contratos HTTP basales de CustomersController antes de migrarlo al monolito modular.",
+    "controller": "App\\Modules\\Customers\\Controllers\\CustomerController",
+    "routeController": "App\\Modules\\Customers\\Controllers\\CustomerController",
+    "description": "Contratos HTTP del módulo Customers.",
     "endpoints": [
         {
             "id": "customers.sessions.start.required-customer",
             "name": "startSession exige customerId",
+            "controller": "App\\Modules\\CustomerSessions\\Controllers\\CustomerSessionController",
+            "routeController": "App\\Modules\\CustomerSessions\\Controllers\\CustomerSessionController",
             "controllerMethod": "startSession",
             "routeMiddleware": [],
             "authenticated": false,
@@ -23,6 +25,8 @@
         {
             "id": "customers.sessions.heartbeat.required-session",
             "name": "heartbeat exige sessionId",
+            "controller": "App\\Modules\\CustomerSessions\\Controllers\\CustomerSessionController",
+            "routeController": "App\\Modules\\CustomerSessions\\Controllers\\CustomerSessionController",
             "controllerMethod": "heartbeat",
             "routeMiddleware": [],
             "authenticated": false,
@@ -39,6 +43,8 @@
         {
             "id": "customers.sessions.end.required-session",
             "name": "endSession exige sessionId",
+            "controller": "App\\Modules\\CustomerSessions\\Controllers\\CustomerSessionController",
+            "routeController": "App\\Modules\\CustomerSessions\\Controllers\\CustomerSessionController",
             "controllerMethod": "endSession",
             "routeMiddleware": [],
             "authenticated": false,
@@ -55,6 +61,8 @@
         {
             "id": "customers.sessions.active.empty",
             "name": "activeSessions devuelve el inventario de sesiones",
+            "controller": "App\\Modules\\CustomerSessions\\Controllers\\CustomerSessionController",
+            "routeController": "App\\Modules\\CustomerSessions\\Controllers\\CustomerSessionController",
             "controllerMethod": "activeSessions",
             "routeMiddleware": [],
             "authenticated": false,
