@@ -77,7 +77,6 @@ final readonly class DesktopUserProfileRepository implements IDesktopUserProfile
         ?string $to,
     ): int {
         [$where, $parameters] = $this->historyFilter(
-            'AttendancesDesktop',
             '',
             "STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s')",
             $customerId,
@@ -103,7 +102,6 @@ final readonly class DesktopUserProfileRepository implements IDesktopUserProfile
     ): array {
         $date = "STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s')";
         [$where, $parameters] = $this->historyFilter(
-            'AttendancesDesktop',
             '',
             $date,
             $customerId,
@@ -130,7 +128,6 @@ final readonly class DesktopUserProfileRepository implements IDesktopUserProfile
     ): int {
         $date = "STR_TO_DATE(LEFT({$this->normalizedDate('s.StartDate')}, 10), '%Y-%m-%d')";
         [$where, $parameters] = $this->historyFilter(
-            $this->subscriptionTable(),
             's.',
             $date,
             $customerId,
@@ -158,7 +155,6 @@ final readonly class DesktopUserProfileRepository implements IDesktopUserProfile
     ): array {
         $date = "STR_TO_DATE(LEFT({$this->normalizedDate('s.StartDate')}, 10), '%Y-%m-%d')";
         [$where, $parameters] = $this->historyFilter(
-            $this->subscriptionTable(),
             's.',
             $date,
             $customerId,
@@ -264,7 +260,6 @@ final readonly class DesktopUserProfileRepository implements IDesktopUserProfile
     }
 
     private function historyFilter(
-        string $table,
         string $alias,
         string $date,
         string $customerId,

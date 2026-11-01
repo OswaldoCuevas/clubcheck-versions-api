@@ -19,9 +19,13 @@ use App\Modules\DesktopAccess\Controllers\DesktopLoginController;
 use App\Modules\DesktopReporting\Controllers\DesktopReportController;
 use App\Modules\DesktopReporting\Controllers\DesktopUserProfileController;
 use App\Modules\Licenses\Controllers\AdminLicenseController;
+use App\Modules\Notifications\Controllers\NotificationController;
 use App\Modules\PermissionRequests\Controllers\PermissionRequestController;
 use App\Modules\PushNotifications\Controllers\PushNotificationController;
+use App\Modules\Tools\Controllers\ToolsController;
+use App\Modules\UserPhotos\Controllers\UserPhotoController;
 use App\Modules\WhatsApp\Controllers\AdminWhatsAppController;
+use App\Modules\WhatsApp\Controllers\CustomerWhatsAppController;
 use Core\Router;
 
 $container = require __DIR__ . '/../config/services.php';
@@ -90,7 +94,7 @@ $router->post('/api/customers/announcements/viewed', AnnouncementController::cla
 $router->post('/api/customers/announcements/:id/viewed', AnnouncementController::class, 'viewed', ['customer_jwt']);
 $router->post('/api/customers/desktop/pull', CustomerDesktopSyncController::class, 'pullDesktop', ['customer_jwt']);
 $router->post('/api/customers/desktop/push', CustomerDesktopSyncController::class, 'pushDesktop', ['customer_jwt']);
-$router->post('/api/customers/desktop/users/:userId/photo', 'UserPhotosController', 'upload', ['customer_jwt']);
+$router->post('/api/customers/desktop/users/:userId/photo', UserPhotoController::class, 'upload', ['customer_jwt']);
 $router->post('/api/customers', CustomerController::class, 'patchCustomer', ['customer_jwt']);
 $router->patch('/api/customers', CustomerController::class, 'patchCustomer', ['customer_jwt']);
 $router->get('/api/customers/:customerId', CustomerController::class, 'getCustomer', ['customer_jwt']);
@@ -104,8 +108,8 @@ $router->get('/api/desktop/users/:userId', DesktopUserProfileController::class, 
 $router->get('/api/desktop/users/:userId/attendances', DesktopUserProfileController::class, 'attendances', ['desktop_jwt']);
 $router->get('/api/desktop/users/:userId/subscriptions', DesktopUserProfileController::class, 'subscriptions', ['desktop_jwt']);
 $router->get('/api/desktop/users/:userId/statistics', DesktopUserProfileController::class, 'statistics', ['desktop_jwt']);
-$router->get('/api/desktop/users/:userId/photo/original', 'UserPhotosController', 'readOriginal', ['desktop_jwt']);
-$router->get('/api/desktop/users/:userId/photo', 'UserPhotosController', 'read', ['desktop_jwt']);
+$router->get('/api/desktop/users/:userId/photo/original', UserPhotoController::class, 'readOriginal', ['desktop_jwt']);
+$router->get('/api/desktop/users/:userId/photo', UserPhotoController::class, 'read', ['desktop_jwt']);
 $router->get('/api/desktop/memberships', DesktopReportController::class, 'memberships', ['desktop_jwt']);
 $router->get('/api/desktop/membership-sales', DesktopReportController::class, 'membershipSales', ['desktop_jwt']);
 $router->get('/api/desktop/products', DesktopReportController::class, 'products', ['desktop_jwt']);
@@ -120,9 +124,9 @@ $router->get('/api/desktop/charts/attendances', DesktopReportController::class, 
 $router->get('/api/desktop/charts/sales', DesktopReportController::class, 'chartsSales', ['desktop_jwt']);
 $router->get('/api/desktop/permission-requests', PermissionRequestController::class, 'index', ['desktop_jwt']);
 $router->patch('/api/desktop/permission-requests/:id', PermissionRequestController::class, 'resolve', ['desktop_jwt']);
-$router->get('/api/desktop/notifications', 'NotificationsController', 'index', ['desktop_jwt']);
-$router->patch('/api/desktop/notifications/read-all', 'NotificationsController', 'markAllRead', ['desktop_jwt']);
-$router->patch('/api/desktop/notifications/:id/read', 'NotificationsController', 'markRead', ['desktop_jwt']);
+$router->get('/api/desktop/notifications', NotificationController::class, 'index', ['desktop_jwt']);
+$router->patch('/api/desktop/notifications/read-all', NotificationController::class, 'markAllRead', ['desktop_jwt']);
+$router->patch('/api/desktop/notifications/:id/read', NotificationController::class, 'markRead', ['desktop_jwt']);
 
 // Cliente ISAPI de escritorio (customer_jwt): canal persistente basado en cola.
 // WebSocket puede agregarse despues como aviso; estos endpoints conservan entrega y reintentos.
@@ -139,24 +143,27 @@ $router->post('/api/customers/isapi/commands/:id/result', 'IsapiController', 're
 
 // ==================== WHATSAPP ====================
 // Estado del servicio
-$router->get('/api/customers/whatsapp/status', 'WhatsAppController', 'status');
-$router->get('/api/customers/whatsapp/monthly-count/:customerApiId', 'WhatsAppController', 'monthlyCount', ['customer_jwt']);
+$router->get('/api/customers/whatsapp/status', CustomerWhatsAppController::class, 'status');
+$router->get('/api/customers/whatsapp/monthly-count/:customerApiId', CustomerWhatsAppController::class, 'monthlyCount', ['customer_jwt']);
 
 // Listado de mensajes con filtros
-$router->get('/api/customers/whatsapp/messages/:customerApiId', 'WhatsAppController', 'listMessages', ['customer_jwt']);
+$router->get('/api/customers/whatsapp/messages/:customerApiId', CustomerWhatsAppController::class, 'listMessages', ['customer_jwt']);
 
 // Envío de templates individuales
-$router->post('/api/customers/whatsapp/send/subscription', 'WhatsAppController', 'sendSubscription', ['customer_jwt']);
-$router->post('/api/customers/whatsapp/send/warning', 'WhatsAppController', 'sendWarning', ['customer_jwt']);
-$router->post('/api/customers/whatsapp/send/finalized', 'WhatsAppController', 'sendFinalized', ['customer_jwt']);
-$router->post('/api/customers/whatsapp/send/last-day', 'WhatsAppController', 'sendLastDay', ['customer_jwt']);
+$router->post('/api/customers/whatsapp/send/subscription', CustomerWhatsAppController::class, 'sendSubscription', ['customer_jwt']);
+$router->post('/api/customers/whatsapp/send/warning', CustomerWhatsAppController::class, 'sendWarning', ['customer_jwt']);
+$router->post('/api/customers/whatsapp/send/finalized', CustomerWhatsAppController::class, 'sendFinalized', ['customer_jwt']);
+$router->post('/api/customers/whatsapp/send/last-day', CustomerWhatsAppController::class, 'sendLastDay', ['customer_jwt']);
 
 // Envío en bulk
-$router->post('/api/customers/whatsapp/send/bulk', 'WhatsAppController', 'sendBulk', ['customer_jwt']);
+$router->post('/api/customers/whatsapp/send/bulk', CustomerWhatsAppController::class, 'sendBulk', ['customer_jwt']);
 
 // Perfil del negocio
-$router->post('/api/customers/whatsapp/business-profile/register', 'WhatsAppController', 'registerBusinessProfile'); // NO, Administrativo
-$router->get('/api/customers/whatsapp/business-profile', 'WhatsAppController', 'getBusinessProfile'); // NO, Administrativo
+$router->post('/api/customers/whatsapp/business-profile/register', CustomerWhatsAppController::class, 'registerBusinessProfile'); // NO, Administrativo
+$router->get('/api/customers/whatsapp/business-profile', CustomerWhatsAppController::class, 'getBusinessProfile'); // NO, Administrativo
+$router->post('/api/customers/whatsapp/business-profile/:customerId', CustomerWhatsAppController::class, 'registerBusinessProfile');
+$router->post('/api/customers/whatsapp/business-profile/:customerId/register', CustomerWhatsAppController::class, 'registerBusinessProfile');
+$router->get('/api/customers/whatsapp/business-profile/:customerId', CustomerWhatsAppController::class, 'getBusinessProfile');
 
 // Rutas administrativas
 $adminMiddleware = ['auth', 'permission:admin_access'];
@@ -237,9 +244,10 @@ $router->post('/admin/api/isapi/commands', 'IsapiController', 'adminCreate');
 $router->get('/admin/api/isapi/commands/:id', 'IsapiController', 'adminShow');
 
 // Rutas de herramientas
-$router->any('/password-generator', 'ToolsController', 'passwordGenerator');
-$router->any('/quick-hash', 'ToolsController', 'quickHash');
-$router->any('/generate-password', 'ToolsController', 'generatePassword');
+$router->get('/password-generator', ToolsController::class, 'passwordGenerator', $adminMiddleware);
+$router->post('/password-generator', ToolsController::class, 'passwordGenerator', $adminMiddleware);
+$router->get('/quick-hash', ToolsController::class, 'quickHash', $adminMiddleware);
+$router->get('/generate-password', ToolsController::class, 'generatePassword', $adminMiddleware);
 
 // ==================== STRIPE ====================
 // Configuración pública (clave pública para el cliente)

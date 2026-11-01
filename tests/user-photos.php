@@ -1,5 +1,6 @@
 <?php
 // Solo datos temporales: nunca carga config/database.php ni utiliza el esquema de produccion.
+require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../utils/database.php';
 require_once __DIR__ . '/../app/Services/UserPhotoService.php';
 require_once __DIR__ . '/../app/Models/UsersDesktopModel.php';
@@ -39,7 +40,10 @@ function photoCgi(string $schema, string $directory, string $method, string $tok
     $output = stream_get_contents($pipes[1]);
     $error = stream_get_contents($pipes[2]);
     fclose($pipes[1]); fclose($pipes[2]);
-    checkPhoto(proc_close($process) === 0, 'CGI failed: ' . $error);
+    checkPhoto(
+        proc_close($process) === 0,
+        'CGI failed: ' . $error . "\nOutput: " . $output,
+    );
     $parts = explode("\r\n\r\n", $output, 2);
     checkPhoto(count($parts) === 2, 'CGI response missing headers: ' . $output);
     preg_match('/Status: ([0-9]+)/', $parts[0], $status);

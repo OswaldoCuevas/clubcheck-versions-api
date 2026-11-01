@@ -47,10 +47,19 @@ enum ApiErrorCode: string
     case PlanLimitExceeded = 'PLAN_LIMIT_EXCEEDED';
     case SubscriptionExists = 'SUBSCRIPTION_EXISTS';
     case WhatsAppUnavailable = 'WHATSAPP_UNAVAILABLE';
+    case WhatsAppValidationFailed = 'WHATSAPP_VALIDATION_FAILED';
+    case WhatsAppProfileNotFound = 'WHATSAPP_PROFILE_NOT_FOUND';
     case PushNotificationValidationFailed = 'PUSH_NOTIFICATION_VALIDATION_FAILED';
     case PermissionRequestValidationFailed = 'PERMISSION_REQUEST_VALIDATION_FAILED';
     case DesktopUserProfileValidationFailed = 'DESKTOP_USER_PROFILE_VALIDATION_FAILED';
     case DesktopUserProfileNotFound = 'DESKTOP_USER_PROFILE_NOT_FOUND';
+    case NotificationValidationFailed = 'NOTIFICATION_VALIDATION_FAILED';
+    case NotificationNotFound = 'NOTIFICATION_NOT_FOUND';
+    case UserPhotoInvalid = 'USER_PHOTO_INVALID';
+    case UserPhotoTooLarge = 'USER_PHOTO_TOO_LARGE';
+    case UserPhotoUnsupported = 'USER_PHOTO_UNSUPPORTED';
+    case UserPhotoNotFound = 'USER_PHOTO_NOT_FOUND';
+    case UserPhotoConflict = 'USER_PHOTO_CONFLICT';
 
     case AnnouncementNotFound = 'ANNOUNCEMENT_NOT_FOUND';
     case AnnouncementValidationFailed = 'ANNOUNCEMENT_VALIDATION_FAILED';
@@ -85,12 +94,16 @@ enum ApiErrorCode: string
             self::CustomerResourceNotFound,
             self::AnnouncementNotFound => 404,
             self::DesktopUserProfileNotFound => 404,
+            self::NotificationNotFound => 404,
+            self::UserPhotoNotFound => 404,
+            self::WhatsAppProfileNotFound => 404,
 
             self::MethodNotAllowed => 405,
 
             self::Conflict,
             self::CustomerConflict,
             self::SubscriptionExists => 409,
+            self::UserPhotoConflict => 409,
 
             self::CustomerTooManyAttempts => 429,
 
@@ -104,8 +117,13 @@ enum ApiErrorCode: string
             self::PushNotificationValidationFailed,
             self::PermissionRequestValidationFailed => 422,
             self::DesktopUserProfileValidationFailed => 422,
+            self::NotificationValidationFailed => 422,
+            self::WhatsAppValidationFailed => 422,
 
             self::CustomerSessionMetadataTooLarge => 413,
+            self::UserPhotoTooLarge => 413,
+
+            self::UserPhotoUnsupported => 415,
 
             self::ServiceError,
             self::WhatsAppUnavailable => 502,
@@ -119,6 +137,7 @@ enum ApiErrorCode: string
             self::ApiError,
             self::ValidationError,
             self::InvalidJsonPayload => 400,
+            self::UserPhotoInvalid => 400,
         };
     }
 
@@ -158,10 +177,19 @@ enum ApiErrorCode: string
             self::PlanLimitExceeded => 'El plan no permite esta operación',
             self::SubscriptionExists => 'Ya existe una suscripción activa',
             self::WhatsAppUnavailable => 'Servicio de WhatsApp no disponible',
+            self::WhatsAppValidationFailed => 'Datos de WhatsApp inválidos',
+            self::WhatsAppProfileNotFound => 'Configuración de WhatsApp no encontrada',
             self::PushNotificationValidationFailed => 'Datos de notificación push inválidos',
             self::PermissionRequestValidationFailed => 'Datos de solicitud de permiso inválidos',
             self::DesktopUserProfileValidationFailed => 'Filtros de ficha de socio inválidos',
             self::DesktopUserProfileNotFound => 'Socio no accesible',
+            self::NotificationValidationFailed => 'Datos de notificación inválidos',
+            self::NotificationNotFound => 'Notificación no encontrada',
+            self::UserPhotoInvalid => 'Fotografía inválida',
+            self::UserPhotoTooLarge => 'La fotografía excede el límite permitido',
+            self::UserPhotoUnsupported => 'Formato de fotografía no soportado',
+            self::UserPhotoNotFound => 'Fotografía no accesible',
+            self::UserPhotoConflict => 'Conflicto de versión de fotografía',
             self::AnnouncementNotFound => 'Anuncio no encontrado',
             self::AnnouncementValidationFailed => 'Datos de anuncio inválidos',
             self::AnnouncementSaveFailed => 'Error al guardar el anuncio',

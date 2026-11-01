@@ -7,23 +7,36 @@ function checkUserProfile(PhotoTestDatabase $db, App\Services\UserPhotoService $
     $router = require __DIR__ . '/../routes/web.php';
     $reflection = new ReflectionClass($router);
     $routes = $reflection->getProperty('routes')->getValue($router);
-    $matchRoute = $reflection->getMethod('matchRoute');
-    foreach (['' => ['DesktopUserProfileController', 'user'],
-        '/attendances' => ['DesktopUserProfileController', 'attendances'],
-        '/subscriptions' => ['DesktopUserProfileController', 'subscriptions'],
-        '/statistics' => ['DesktopUserProfileController', 'statistics'],
-        '/photo/original' => ['UserPhotosController', 'readOriginal'],
-        '/photo' => ['UserPhotosController', 'read']] as $suffix => $expected) {
+    $matchRoute = $reflection->getMethod('matchRouteUri');
+    $profileController = App\Modules\DesktopReporting\Controllers\DesktopUserProfileController::class;
+    $photoController = App\Modules\UserPhotos\Controllers\UserPhotoController::class;
+    $expectedRoutes = [
+        '' => [$profileController, 'user'],
+        '/attendances' => [$profileController, 'attendances'],
+        '/subscriptions' => [$profileController, 'subscriptions'],
+        '/statistics' => [$profileController, 'statistics'],
+        '/photo/original' => [$photoController, 'readOriginal'],
+        '/photo' => [$photoController, 'read'],
+    ];
+
+    foreach ($expectedRoutes as $suffix => $expected) {
         $selected = null;
+        $parameters = null;
         foreach ($routes as $route) {
-            if ($matchRoute->invoke($router, $route, 'GET', '/api/desktop/users/user-a' . $suffix)) {
+            $matchedParameters = $matchRoute->invoke(
+                $router,
+                $route,
+                '/api/desktop/users/user-a' . $suffix,
+            );
+            if ($matchedParameters !== null && in_array($route['method'], ['GET', 'ANY'], true)) {
                 $selected = $route;
+                $parameters = $matchedParameters;
                 break;
             }
         }
         checkPhoto($selected && [$selected['controller'], $selected['action']] === $expected
             && $selected['middleware'] === ['desktop_jwt']
-            && $reflection->getProperty('routeParams')->getValue($router) === ['user-a'], 'Route/middleware/identity ' . $suffix);
+            && $parameters === ['user-a'], 'Route/middleware/identity ' . $suffix);
     }
     $db->query('ALTER TABLE UsersDesktop ADD COLUMN Email VARCHAR(255) NULL');
     $initial = file_get_contents(__DIR__ . '/../database/schema.sql');

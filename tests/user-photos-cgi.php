@@ -5,8 +5,8 @@ if (PHP_SAPI !== 'cgi-fcgi' || !is_string($schema) || !preg_match('/^clubcheck_p
     http_response_code(404);
     exit;
 }
-require_once __DIR__ . '/../app/Controllers/UserPhotosController.php';
 require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../utils/database.php';
 
 class PhotoCgiDatabase extends Database
 {
@@ -20,7 +20,30 @@ class PhotoCgiDatabase extends Database
 
 $db = new PhotoCgiDatabase($schema);
 $jwt = new App\Services\JwtService('temporary-photo-test-secret');
-$controller = new Controllers\UserPhotosController(new App\Services\UserPhotoService($db, getenv('PHOTO_TEST_DIRECTORY')));
+$container = new Core\Container();
+$container->singleton(
+    App\Infrastructure\Database\IDatabaseConnection::class,
+    static fn (): App\Infrastructure\Database\IDatabaseConnection => $db,
+);
+$container->bind(
+    App\Modules\UserPhotos\Contracts\IUserPhotoRepository::class,
+    App\Modules\UserPhotos\Repositories\UserPhotoRepository::class,
+);
+$container->singleton(
+    App\Modules\UserPhotos\Contracts\IUserPhotoStorage::class,
+    static fn (): App\Modules\UserPhotos\Contracts\IUserPhotoStorage =>
+        new App\Modules\UserPhotos\Services\LocalUserPhotoStorage(
+            (string) getenv('PHOTO_TEST_DIRECTORY'),
+            false,
+        ),
+);
+$container->singleton(
+    App\Application\Contracts\IMediator::class,
+    App\Infrastructure\Mediator\Mediator::class,
+);
+$controller = $container->get(
+    App\Modules\UserPhotos\Controllers\UserPhotoController::class,
+);
 try {
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         // Inyecta dependencias privadas para evitar configuracion o datos reales; valida JWT/BD reales.
@@ -33,20 +56,20 @@ try {
     } else {
         (new App\Middleware\DesktopJwtMiddleware($jwt))->handle();
         if (isset($_GET['profile'])) {
-            $container = new Core\Container();
-            $container->singleton(
+            $profileContainer = new Core\Container();
+            $profileContainer->singleton(
                 App\Infrastructure\Database\IDatabaseConnection::class,
                 static fn (): App\Infrastructure\Database\IDatabaseConnection => $db,
             );
-            $container->bind(
+            $profileContainer->bind(
                 App\Modules\DesktopReporting\Contracts\IDesktopUserProfileRepository::class,
                 App\Modules\DesktopReporting\Repositories\DesktopUserProfileRepository::class,
             );
-            $container->singleton(
+            $profileContainer->singleton(
                 App\Application\Contracts\IMediator::class,
                 App\Infrastructure\Mediator\Mediator::class,
             );
-            $profile = $container->get(
+            $profile = $profileContainer->get(
                 App\Modules\DesktopReporting\Controllers\DesktopUserProfileController::class,
             );
             $action = $_GET['profile'];
@@ -80,5 +103,5 @@ try {
         $controller->read($_GET['userId'] ?? 'user-a');
     }
 } catch (App\Exceptions\ApiException $e) {
-    $e->respond();
+    App\Http\JsonResponse::send($e->toArray(), $e->getStatusCode());
 }
