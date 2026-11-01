@@ -4,6 +4,7 @@ use App\Modules\Announcements\Controllers\AdminAnnouncementController;
 use App\Modules\Announcements\Controllers\AnnouncementController;
 use App\Modules\AdminAccess\Controllers\AdminAuthController;
 use App\Modules\Admin\Controllers\AdminDashboardController;
+use App\Modules\Billing\Controllers\BillingController;
 use App\Modules\ApiDocs\Controllers\AdminApiDocsController;
 use App\Modules\CustomerAccess\Controllers\AdminCustomerAccessController;
 use App\Modules\CustomerSessions\Controllers\CustomerSessionController;
@@ -17,6 +18,8 @@ use App\Modules\Downloads\Controllers\PublicDownloadController;
 use App\Modules\DesktopAccess\Controllers\DesktopLoginController;
 use App\Modules\DesktopReporting\Controllers\DesktopReportController;
 use App\Modules\Licenses\Controllers\AdminLicenseController;
+use App\Modules\PermissionRequests\Controllers\PermissionRequestController;
+use App\Modules\PushNotifications\Controllers\PushNotificationController;
 use App\Modules\WhatsApp\Controllers\AdminWhatsAppController;
 use Core\Router;
 
@@ -76,11 +79,11 @@ $router->post('/api/customers/token/await', CustomerController::class, 'awaitTok
 $router->get('/api/customers/jwt/validate', CustomerController::class, 'validateJwtToken');
 $router->post('/api/customers/jwt/validate', CustomerController::class, 'validateJwtToken');
 $router->post('/api/customers/update-client-version', CustomerController::class, 'updateClientVersion', ['customer_jwt']);
-$router->post('/api/customers/push-tokens', 'PushNotificationsController', 'register', ['push_client_jwt']);
-$router->post('/api/customers/push-tokens/unregister', 'PushNotificationsController', 'unregister', ['push_client_jwt']);
-$router->post('/api/customers/permission-requests', 'PermissionRequestsController', 'create', ['customer_jwt']);
-$router->get('/api/customers/permission-requests/:id', 'PermissionRequestsController', 'status', ['customer_jwt']);
-$router->post('/api/customers/permission-requests/:id/cancel', 'PermissionRequestsController', 'cancel', ['customer_jwt']);
+$router->post('/api/customers/push-tokens', PushNotificationController::class, 'register', ['push_client_jwt']);
+$router->post('/api/customers/push-tokens/unregister', PushNotificationController::class, 'unregister', ['push_client_jwt']);
+$router->post('/api/customers/permission-requests', PermissionRequestController::class, 'create', ['customer_jwt']);
+$router->get('/api/customers/permission-requests/:id', PermissionRequestController::class, 'status', ['customer_jwt']);
+$router->post('/api/customers/permission-requests/:id/cancel', PermissionRequestController::class, 'cancel', ['customer_jwt']);
 $router->get('/api/customers/announcements/current', AnnouncementController::class, 'current', ['customer_jwt']);
 $router->post('/api/customers/announcements/viewed', AnnouncementController::class, 'viewedCurrent', ['customer_jwt']);
 $router->post('/api/customers/announcements/:id/viewed', AnnouncementController::class, 'viewed', ['customer_jwt']);
@@ -114,8 +117,8 @@ $router->get('/api/desktop/charts/memberships', DesktopReportController::class, 
 $router->get('/api/desktop/charts/products', DesktopReportController::class, 'chartsProducts', ['desktop_jwt']);
 $router->get('/api/desktop/charts/attendances', DesktopReportController::class, 'chartsAttendances', ['desktop_jwt']);
 $router->get('/api/desktop/charts/sales', DesktopReportController::class, 'chartsSales', ['desktop_jwt']);
-$router->get('/api/desktop/permission-requests', 'PermissionRequestsController', 'index', ['desktop_jwt']);
-$router->patch('/api/desktop/permission-requests/:id', 'PermissionRequestsController', 'resolve', ['desktop_jwt']);
+$router->get('/api/desktop/permission-requests', PermissionRequestController::class, 'index', ['desktop_jwt']);
+$router->patch('/api/desktop/permission-requests/:id', PermissionRequestController::class, 'resolve', ['desktop_jwt']);
 $router->get('/api/desktop/notifications', 'NotificationsController', 'index', ['desktop_jwt']);
 $router->patch('/api/desktop/notifications/read-all', 'NotificationsController', 'markAllRead', ['desktop_jwt']);
 $router->patch('/api/desktop/notifications/:id/read', 'NotificationsController', 'markRead', ['desktop_jwt']);
@@ -167,8 +170,8 @@ $router->post('/admin/api/customers/regenerate-access-key', AdminCustomerControl
 $router->post('/admin/api/customers/:customerId/delete', AdminCustomerController::class, 'deleteCustomerJson', $adminMiddleware);
 $router->delete('/admin/api/customers/:customerId', AdminCustomerController::class, 'deleteCustomerJson', $adminMiddleware);
 $router->get('/admin/api-docs', AdminApiDocsController::class, 'apiDocs', $adminMiddleware);
-$router->get('/admin/push', 'PushNotificationsController', 'page');
-$router->post('/admin/api/push/send', 'PushNotificationsController', 'send');
+$router->get('/admin/push', PushNotificationController::class, 'page', $adminMiddleware);
+$router->post('/admin/api/push/send', PushNotificationController::class, 'send', $adminMiddleware);
 
 // Announcements Admin
 $router->get('/admin/announcements',AdminAnnouncementController::class,'announcements',$adminMiddleware,);
@@ -219,7 +222,7 @@ $router->get('/admin/api/downloads', AdminDownloadController::class, 'downloadsJ
 $router->get('/admin/api/downloads/ip/:ipAddress', AdminDownloadController::class, 'downloadsByIpJson', $adminMiddleware);
 
 // License Validation (public — no auth required)
-$router->post('/api/licenses/validate', 'StripeController', 'validateLicense');
+$router->post('/api/licenses/validate', BillingController::class, 'validateLicense');
 
 // Licenses Admin
 $router->get('/admin/licenses', AdminLicenseController::class, 'licenses', $adminMiddleware);
@@ -239,37 +242,37 @@ $router->any('/generate-password', 'ToolsController', 'generatePassword');
 
 // ==================== STRIPE ====================
 // Configuración pública (clave pública para el cliente)
-$router->get('/api/customers/stripe/config', 'StripeController', 'getPublicConfig');
+$router->get('/api/customers/stripe/config', BillingController::class, 'getPublicConfig');
 
 // Clientes
-$router->post('/api/customers/stripe/customers', 'StripeController', 'createCustomer', ['customer_jwt']);
-$router->get('/api/customers/stripe/customers/:customerId', 'StripeController', 'getCustomer', ['customer_jwt']);
-$router->put('/api/customers/stripe/customers/:customerId', 'StripeController', 'updateCustomer', ['customer_jwt']);
+$router->post('/api/customers/stripe/customers', BillingController::class, 'createCustomer', ['customer_jwt']);
+$router->get('/api/customers/stripe/customers/:customerId', BillingController::class, 'getCustomer', ['customer_jwt']);
+$router->put('/api/customers/stripe/customers/:customerId', BillingController::class, 'updateCustomer', ['customer_jwt']);
 
 // Tarjetas
-$router->post('/api/customers/stripe/customers/:customerId/cards', 'StripeController', 'addCard', ['customer_jwt']);
-$router->get('/api/customers/stripe/customers/:customerId/cards', 'StripeController', 'listCards', ['customer_jwt']);
-$router->delete('/api/customers/stripe/customers/:customerId/cards/:cardId', 'StripeController', 'deleteCard', ['customer_jwt']);
-$router->put('/api/customers/stripe/customers/:customerId/cards/:cardId/default', 'StripeController', 'setDefaultCard', ['customer_jwt']);
+$router->post('/api/customers/stripe/customers/:customerId/cards', BillingController::class, 'addCard', ['customer_jwt']);
+$router->get('/api/customers/stripe/customers/:customerId/cards', BillingController::class, 'listCards', ['customer_jwt']);
+$router->delete('/api/customers/stripe/customers/:customerId/cards/:cardId', BillingController::class, 'deleteCard', ['customer_jwt']);
+$router->put('/api/customers/stripe/customers/:customerId/cards/:cardId/default', BillingController::class, 'setDefaultCard', ['customer_jwt']);
 
 // Suscripciones
-$router->post('/api/customers/stripe/customers/:customerId/subscriptions', 'StripeController', 'createSubscription', ['customer_jwt']);
-$router->get('/api/customers/stripe/customers/:customerId/subscriptions/active', 'StripeController', 'getActiveSubscription', ['customer_jwt']);
-$router->put('/api/customers/stripe/subscriptions/:subscriptionId', 'StripeController', 'updateSubscription', ['customer_jwt']);
-$router->put('/api/customers/stripe/subscriptions/:subscriptionId/plan', 'StripeController', 'changePlan', ['customer_jwt']);
-$router->post('/api/customers/stripe/license/refresh', 'StripeController', 'refreshLicense', ['customer_jwt']);
+$router->post('/api/customers/stripe/customers/:customerId/subscriptions', BillingController::class, 'createSubscription', ['customer_jwt']);
+$router->get('/api/customers/stripe/customers/:customerId/subscriptions/active', BillingController::class, 'getActiveSubscription', ['customer_jwt']);
+$router->put('/api/customers/stripe/subscriptions/:subscriptionId', BillingController::class, 'updateSubscription', ['customer_jwt']);
+$router->put('/api/customers/stripe/subscriptions/:subscriptionId/plan', BillingController::class, 'changePlan', ['customer_jwt']);
+$router->post('/api/customers/stripe/license/refresh', BillingController::class, 'refreshLicense', ['customer_jwt']);
 
 // Paquetes
-$router->get('/api/customers/stripe/plans', 'StripeController', 'getplans', ['customer_jwt']);
-$router->get('/api/customers/stripe/customers/:customerId/plan', 'StripeController', 'getCurrentPlan', ['customer_jwt']);
+$router->get('/api/customers/stripe/plans', BillingController::class, 'getPlans', ['customer_jwt']);
+$router->get('/api/customers/stripe/customers/:customerId/plan', BillingController::class, 'getCurrentPlan', ['customer_jwt']);
 
 // Precios/Planes
-$router->get('/api/customers/stripe/prices', 'StripeController', 'listPrices', ['customer_jwt']);
-$router->post('/api/customers/stripe/subscriptions/:subscriptionId/preview', 'StripeController', 'previewPlanChange', ['customer_jwt']);
-$router->post('/api/customers/stripe/customers/:customerId/subscriptions/preview', 'StripeController', 'previewNewSubscription', ['customer_jwt']);
+$router->get('/api/customers/stripe/prices', BillingController::class, 'listPrices', ['customer_jwt']);
+$router->post('/api/customers/stripe/subscriptions/:subscriptionId/preview', BillingController::class, 'previewPlanChange', ['customer_jwt']);
+$router->post('/api/customers/stripe/customers/:customerId/subscriptions/preview', BillingController::class, 'previewNewSubscription', ['customer_jwt']);
 
 // Cupones
-$router->post('/api/customers/stripe/coupons/validate', 'StripeController', 'validateCoupon');
+$router->post('/api/customers/stripe/coupons/validate', BillingController::class, 'validateCoupon');
 
 // ==================== EMAIL ====================
 // Estado y tipos

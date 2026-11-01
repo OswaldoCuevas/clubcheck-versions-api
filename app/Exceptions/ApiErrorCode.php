@@ -47,6 +47,8 @@ enum ApiErrorCode: string
     case PlanLimitExceeded = 'PLAN_LIMIT_EXCEEDED';
     case SubscriptionExists = 'SUBSCRIPTION_EXISTS';
     case WhatsAppUnavailable = 'WHATSAPP_UNAVAILABLE';
+    case PushNotificationValidationFailed = 'PUSH_NOTIFICATION_VALIDATION_FAILED';
+    case PermissionRequestValidationFailed = 'PERMISSION_REQUEST_VALIDATION_FAILED';
 
     case AnnouncementNotFound = 'ANNOUNCEMENT_NOT_FOUND';
     case AnnouncementValidationFailed = 'ANNOUNCEMENT_VALIDATION_FAILED';
@@ -96,6 +98,8 @@ enum ApiErrorCode: string
             self::DesktopSyncValidationFailed,
             self::CustomerSessionValidationFailed,
             self::CustomerValidationFailed => 422,
+            self::PushNotificationValidationFailed,
+            self::PermissionRequestValidationFailed => 422,
 
             self::CustomerSessionMetadataTooLarge => 413,
 
@@ -150,6 +154,8 @@ enum ApiErrorCode: string
             self::PlanLimitExceeded => 'El plan no permite esta operación',
             self::SubscriptionExists => 'Ya existe una suscripción activa',
             self::WhatsAppUnavailable => 'Servicio de WhatsApp no disponible',
+            self::PushNotificationValidationFailed => 'Datos de notificación push inválidos',
+            self::PermissionRequestValidationFailed => 'Datos de solicitud de permiso inválidos',
             self::AnnouncementNotFound => 'Anuncio no encontrado',
             self::AnnouncementValidationFailed => 'Datos de anuncio inválidos',
             self::AnnouncementSaveFailed => 'Error al guardar el anuncio',

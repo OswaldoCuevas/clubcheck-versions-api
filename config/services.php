@@ -31,6 +31,8 @@ $registerAdminAccess = require __DIR__ . '/../app/Modules/AdminAccess/services.p
 $registerAdminAccess($container);
 $registerAnnouncements = require __DIR__ . '/../app/Modules/Announcements/services.php';
 $registerAnnouncements($container);
+$registerBilling = require __DIR__ . '/../app/Modules/Billing/services.php';
+$registerBilling($container);
 $registerCustomers = require __DIR__ . '/../app/Modules/Customers/services.php';
 $registerCustomers($container);
 $registerCustomerAccess = require __DIR__ . '/../app/Modules/CustomerAccess/services.php';
@@ -47,6 +49,12 @@ $registerDesktopReporting = require __DIR__ . '/../app/Modules/DesktopReporting/
 $registerDesktopReporting($container);
 $registerLicenses = require __DIR__ . '/../app/Modules/Licenses/services.php';
 $registerLicenses($container);
+$registerNotifications = require __DIR__ . '/../app/Modules/Notifications/services.php';
+$registerNotifications($container);
+$registerPermissionRequests = require __DIR__ . '/../app/Modules/PermissionRequests/services.php';
+$registerPermissionRequests($container);
+$registerPushNotifications = require __DIR__ . '/../app/Modules/PushNotifications/services.php';
+$registerPushNotifications($container);
 $registerWhatsApp = require __DIR__ . '/../app/Modules/WhatsApp/services.php';
 $registerWhatsApp($container);
 
