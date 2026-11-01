@@ -146,6 +146,7 @@ final class MigratedAdminRepositoriesTest extends TestCase
     {
         $root = dirname(__DIR__, 3) . '/app/Modules';
         $modules = [
+            'AdminAccess',
             'Admin',
             'ApiDocs',
             'Customers',

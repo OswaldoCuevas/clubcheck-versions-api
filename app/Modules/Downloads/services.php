@@ -1,10 +1,19 @@
 <?php
 
 declare(strict_types=1);
+
 use App\Modules\Downloads\Contracts\IDownloadRepository;
 use App\Modules\Downloads\Repositories\DownloadRepository;
+use App\Modules\Downloads\Services\DownloadFileLocator;
 use Core\Container;
 
-return static function (Container $c): void {
-    $c->bind(IDownloadRepository::class, DownloadRepository::class);
+return static function (Container $container): void
+{
+    $container->bind(IDownloadRepository::class, DownloadRepository::class);
+    $container->bind(
+        DownloadFileLocator::class,
+        static fn (): DownloadFileLocator => new DownloadFileLocator(
+            dirname(__DIR__, 3) . '/uploads',
+        ),
+    );
 };

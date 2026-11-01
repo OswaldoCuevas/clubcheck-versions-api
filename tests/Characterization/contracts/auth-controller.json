@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "description": "Contrato HTTP basal del AuthController heredado antes de migrarlo.",
+  "endpoints": [
+    {
+      "id": "auth.login.page",
+      "method": "GET",
+      "path": "/login",
+      "status": 200,
+      "bodyContains": [
+        "Iniciar Sesión",
+        "csrf_token"
+      ]
+    },
+    {
+      "id": "auth.login.invalid-csrf",
+      "method": "POST",
+      "path": "/login",
+      "status": 200,
+      "form": {
+        "csrf_token": "invalid",
+        "username": "admin",
+        "password": "admin-test-password"
+      },
+      "bodyContains": [
+        "Token de seguridad inválido"
+      ]
+    }
+  ]
+}

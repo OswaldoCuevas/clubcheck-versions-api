@@ -26,6 +26,34 @@ final readonly class DesktopSyncRepository implements IDesktopSyncRepository
         string $customerApiId,
         bool $includeRemoved,
     ): array {
+        return $this->pullRows(
+            $bulkName,
+            $customerApiId,
+            $includeRemoved,
+            true,
+        );
+    }
+
+    public function pullForAdmin(
+        string $bulkName,
+        string $customerApiId,
+        bool $includeRemoved,
+    ): array {
+        return $this->pullRows(
+            $bulkName,
+            $customerApiId,
+            $includeRemoved,
+            false,
+        );
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function pullRows(
+        string $bulkName,
+        string $customerApiId,
+        bool $includeRemoved,
+        bool $attachUserPhotos,
+    ): array {
         $customerApiId = trim($customerApiId);
 
         if ($customerApiId === '') {
@@ -48,7 +76,7 @@ final readonly class DesktopSyncRepository implements IDesktopSyncRepository
         );
         $rows = $this->db->fetchAll($sql, $parameters);
 
-        if ($bulkName === 'users') {
+        if ($bulkName === 'users' && $attachUserPhotos) {
             return $this->attachUserPhotos($customerApiId, $rows);
         }
 

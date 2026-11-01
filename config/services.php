@@ -27,6 +27,8 @@ $container->singleton(ICurrentUserProvider::class, SessionCurrentUserProvider::c
 $container->singleton(IMediator::class, Mediator::class);
 
 // Cada módulo mantiene sus propios bindings de infraestructura.
+$registerAdminAccess = require __DIR__ . '/../app/Modules/AdminAccess/services.php';
+$registerAdminAccess($container);
 $registerAnnouncements = require __DIR__ . '/../app/Modules/Announcements/services.php';
 $registerAnnouncements($container);
 $registerCustomers = require __DIR__ . '/../app/Modules/Customers/services.php';

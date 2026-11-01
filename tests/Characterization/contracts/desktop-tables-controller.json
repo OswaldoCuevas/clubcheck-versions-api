@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "description": "Contrato HTTP basal del DesktopTablesController heredado antes de migrarlo.",
+  "endpoints": [
+    {
+      "id": "desktop-tables.index",
+      "method": "GET",
+      "path": "/admin/desktop-tables",
+      "status": 200,
+      "bodyContains": [
+        "Tablas Desktop"
+      ]
+    },
+    {
+      "id": "desktop-tables.view.users",
+      "method": "GET",
+      "path": "/admin/desktop-tables/view?table=users",
+      "status": 200,
+      "bodyContains": [
+        "Usuarios",
+        "Seleccionar Cliente"
+      ]
+    },
+    {
+      "id": "desktop-tables.data.unknown-table",
+      "method": "GET",
+      "path": "/admin/desktop-tables/api/data?table=unknown&customer=customer-1",
+      "status": 404,
+      "jsonSubset": {
+        "error": "Tabla no encontrada"
+      }
+    },
+    {
+      "id": "desktop-tables.data.missing-customer",
+      "method": "GET",
+      "path": "/admin/desktop-tables/api/data?table=users",
+      "status": 422,
+      "jsonSubset": {
+        "error": "customerApiId es requerido"
+      }
+    },
+    {
+      "id": "desktop-tables.data.empty",
+      "method": "GET",
+      "path": "/admin/desktop-tables/api/data?table=users&customer=customer-1",
+      "status": 200,
+      "jsonSubset": {
+        "success": true,
+        "table": "Usuarios",
+        "customerApiId": "customer-1",
+        "count": 0,
+        "records": []
+      }
+    }
+  ]
+}

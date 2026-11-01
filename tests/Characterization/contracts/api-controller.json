@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "description": "Contrato HTTP basal del ApiController heredado antes de migrarlo al módulo Downloads.",
+  "endpoints": [
+    {
+      "id": "public-api.version.current",
+      "method": "GET",
+      "path": "/api/version",
+      "status": 200,
+      "jsonSubset": {
+        "latestVersion": "1.1.2.1",
+        "hasUpdate": true,
+        "mandatory": false
+      }
+    },
+    {
+      "id": "public-api.check-update.available",
+      "method": "GET",
+      "path": "/api/check-update?version=1.0.0",
+      "status": 200,
+      "jsonSubset": {
+        "hasUpdate": true,
+        "serverVersion": "1.1.2.1",
+        "clientVersion": "1.0.0",
+        "mandatory": false
+      }
+    },
+    {
+      "id": "public-api.download.info",
+      "method": "GET",
+      "path": "/api/download?info=1",
+      "status": 200,
+      "jsonSubset": {
+        "filename": "ClubCheck-1.1.2.1.exe",
+        "version": "1.1.2.1",
+        "mandatory": false
+      }
+    },
+    {
+      "id": "public-api.download-setup.missing",
+      "method": "GET",
+      "path": "/api/download-setup",
+      "status": 404,
+      "jsonSubset": {
+        "error": "Archivo Setup no encontrado",
+        "version": "1.1.2.1"
+      }
+    },
+    {
+      "id": "public-api.download-zip.missing",
+      "method": "GET",
+      "path": "/api/download-zip",
+      "status": 404,
+      "jsonSubset": {
+        "error": "Archivo Setup no encontrado",
+        "version": "1.1.2.1"
+      }
+    }
+  ]
+}

@@ -219,4 +219,26 @@ final class DesktopSyncRepositoryTest extends TestCase
             $database->allQueries[1]['params'],
         );
     }
+
+    public function test_admin_user_pull_does_not_query_or_attach_photo_metadata(): void
+    {
+        $database = new DesktopSyncDatabaseFake();
+        $database->allRows = [[[
+            'Id' => 'user-1',
+            'Fullname' => 'Socio',
+        ]]];
+        $repository = new DesktopSyncRepository(
+            $database,
+            new DesktopBulkCatalog(),
+        );
+
+        $rows = $repository->pullForAdmin('users', 'customer-1', true);
+
+        self::assertSame([[
+            'Id' => 'user-1',
+            'Fullname' => 'Socio',
+        ]], $rows);
+        self::assertCount(1, $database->allQueries);
+        self::assertArrayNotHasKey('photo', $rows[0]);
+    }
 }

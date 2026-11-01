@@ -2,15 +2,18 @@
 
 use App\Modules\Announcements\Controllers\AdminAnnouncementController;
 use App\Modules\Announcements\Controllers\AnnouncementController;
+use App\Modules\AdminAccess\Controllers\AdminAuthController;
 use App\Modules\Admin\Controllers\AdminDashboardController;
 use App\Modules\ApiDocs\Controllers\AdminApiDocsController;
 use App\Modules\CustomerAccess\Controllers\AdminCustomerAccessController;
 use App\Modules\CustomerSessions\Controllers\CustomerSessionController;
 use App\Modules\Customers\Controllers\AdminCustomerController;
+use App\Modules\Customers\Controllers\AdminDesktopTableController;
 use App\Modules\Customers\Controllers\CustomerController;
 use App\Modules\Customers\Controllers\CustomerDesktopSyncController;
 use App\Modules\CustomerStats\Controllers\AdminCustomerStatsController;
 use App\Modules\Downloads\Controllers\AdminDownloadController;
+use App\Modules\Downloads\Controllers\PublicDownloadController;
 use App\Modules\DesktopAccess\Controllers\DesktopLoginController;
 use App\Modules\DesktopReporting\Controllers\DesktopReportController;
 use App\Modules\Licenses\Controllers\AdminLicenseController;
@@ -30,7 +33,7 @@ $router = new Router($container);
 //   - 'auth': Requiere sesión de usuario autenticado
 // 
 // Ejemplo de rutas protegidas con JWT:
-//   $router->get('/api/protected', 'ApiController', 'protectedMethod', ['jwt']);
+//   $router->get('/api/protected', 'ExampleController', 'protectedMethod', ['jwt']);
 //   $router->post('/api/data', 'DataController', 'store', ['jwt']);
 // 
 // Para acceder al payload del JWT en el controlador:
@@ -45,16 +48,18 @@ $router->get('/home', 'HomeController', 'index');
 $router->post('/home', 'HomeController', 'index');
 
 // Rutas de autenticación
-$router->any('/login', 'AuthController', 'login');
-$router->any('/logout', 'AuthController', 'logout');
+$router->get('/login', AdminAuthController::class, 'show');
+$router->post('/login', AdminAuthController::class, 'login');
+$router->get('/logout', AdminAuthController::class, 'logout');
+$router->post('/logout', AdminAuthController::class, 'logout');
 
 // Rutas de API limpias
-$router->get('/api/version', 'ApiController', 'version');
-$router->get('/api/check-update', 'ApiController', 'checkUpdate');
-$router->get('/api/download', 'ApiController', 'download');
-$router->get('/api/download-setup', 'ApiController', 'downloadSetup'); // Compatibilidad: descarga publica del Setup ZIP
-$router->get('/api/download-zip', 'ApiController', 'downloadZip'); // Descarga publica del Setup ZIP
-$router->get('/api/server/timestamp', 'ApiController', 'timestamp'); // Timestamp del servidor
+$router->get('/api/version', PublicDownloadController::class, 'version');
+$router->get('/api/check-update', PublicDownloadController::class, 'checkUpdate');
+$router->get('/api/download', PublicDownloadController::class, 'download');
+$router->get('/api/download-setup', PublicDownloadController::class, 'downloadSetup');
+$router->get('/api/download-zip', PublicDownloadController::class, 'downloadZip');
+$router->get('/api/server/timestamp', PublicDownloadController::class, 'timestamp');
 
 // Rutas para sesiones de clientes (aplicación de escritorio)
 $router->post('/api/customers/sessions/start', CustomerSessionController::class, 'startSession');
@@ -204,9 +209,9 @@ $router->get('/admin/api/customer-stats', AdminCustomerStatsController::class, '
 $router->get('/admin/api/customer-stats/:customerId', AdminCustomerStatsController::class, 'customerStatsDetailJson', $adminMiddleware);
 
 // Desktop Tables Admin
-$router->get('/admin/desktop-tables', 'DesktopTablesController', 'index');// NO, Administrativo
-$router->get('/admin/desktop-tables/view', 'DesktopTablesController', 'viewTable');// NO, Administrativo
-$router->get('/admin/desktop-tables/api/data', 'DesktopTablesController', 'getData');// NO, Administrativo
+$router->get('/admin/desktop-tables', AdminDesktopTableController::class, 'index', $adminMiddleware);
+$router->get('/admin/desktop-tables/view', AdminDesktopTableController::class, 'viewTable', $adminMiddleware);
+$router->get('/admin/desktop-tables/api/data', AdminDesktopTableController::class, 'getData', $adminMiddleware);
 
 // Downloads History Admin
 $router->get('/admin/downloads', AdminDownloadController::class, 'downloads', $adminMiddleware);
