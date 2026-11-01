@@ -60,6 +60,42 @@ final readonly class DownloadRepository implements IDownloadRepository
         ];
     }
 
+    public function saveVersion(array $version): bool
+    {
+        try {
+            $this->db->execute(
+                'INSERT INTO AppVersions (
+                    Name, Url, Sha256, SetupUrl, SetupSha256, SetupFileSize,
+                    IsMandatory, ReleaseNotes, UploadDate
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                    Url = VALUES(Url),
+                    Sha256 = VALUES(Sha256),
+                    SetupUrl = VALUES(SetupUrl),
+                    SetupSha256 = VALUES(SetupSha256),
+                    SetupFileSize = VALUES(SetupFileSize),
+                    IsMandatory = VALUES(IsMandatory),
+                    ReleaseNotes = VALUES(ReleaseNotes),
+                    UploadDate = VALUES(UploadDate)',
+                [
+                    $version['name'],
+                    $version['url'],
+                    $version['sha256'],
+                    $version['setupUrl'],
+                    $version['setupSha256'],
+                    $version['setupFileSize'],
+                    $version['mandatory'] ? 1 : 0,
+                    $version['releaseNotes'],
+                    $version['uploadDate'],
+                ],
+            );
+
+            return true;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
     public function recordDownload(array $download): void
     {
         $this->db->insert('DownloadLogs', [

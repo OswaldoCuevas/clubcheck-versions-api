@@ -60,6 +60,12 @@ enum ApiErrorCode: string
     case UserPhotoUnsupported = 'USER_PHOTO_UNSUPPORTED';
     case UserPhotoNotFound = 'USER_PHOTO_NOT_FOUND';
     case UserPhotoConflict = 'USER_PHOTO_CONFLICT';
+    case IsapiValidationFailed = 'ISAPI_VALIDATION_FAILED';
+    case IsapiCommandNotFound = 'ISAPI_COMMAND_NOT_FOUND';
+    case IsapiPayloadTooLarge = 'ISAPI_PAYLOAD_TOO_LARGE';
+    case IsapiCsrfInvalid = 'ISAPI_CSRF_INVALID';
+    case EmailValidationFailed = 'EMAIL_VALIDATION_FAILED';
+    case EmailPayloadTooLarge = 'EMAIL_PAYLOAD_TOO_LARGE';
 
     case AnnouncementNotFound = 'ANNOUNCEMENT_NOT_FOUND';
     case AnnouncementValidationFailed = 'ANNOUNCEMENT_VALIDATION_FAILED';
@@ -97,6 +103,7 @@ enum ApiErrorCode: string
             self::NotificationNotFound => 404,
             self::UserPhotoNotFound => 404,
             self::WhatsAppProfileNotFound => 404,
+            self::IsapiCommandNotFound => 404,
 
             self::MethodNotAllowed => 405,
 
@@ -119,9 +126,15 @@ enum ApiErrorCode: string
             self::DesktopUserProfileValidationFailed => 422,
             self::NotificationValidationFailed => 422,
             self::WhatsAppValidationFailed => 422,
+            self::IsapiValidationFailed => 422,
+            self::EmailValidationFailed => 422,
 
             self::CustomerSessionMetadataTooLarge => 413,
             self::UserPhotoTooLarge => 413,
+            self::IsapiPayloadTooLarge => 413,
+            self::EmailPayloadTooLarge => 413,
+
+            self::IsapiCsrfInvalid => 419,
 
             self::UserPhotoUnsupported => 415,
 
@@ -190,6 +203,12 @@ enum ApiErrorCode: string
             self::UserPhotoUnsupported => 'Formato de fotografía no soportado',
             self::UserPhotoNotFound => 'Fotografía no accesible',
             self::UserPhotoConflict => 'Conflicto de versión de fotografía',
+            self::IsapiValidationFailed => 'Datos de orden ISAPI inválidos',
+            self::IsapiCommandNotFound => 'Orden ISAPI no encontrada',
+            self::IsapiPayloadTooLarge => 'Respuesta ISAPI demasiado grande',
+            self::IsapiCsrfInvalid => 'Token CSRF inválido',
+            self::EmailValidationFailed => 'Datos de correo inválidos',
+            self::EmailPayloadTooLarge => 'Adjuntos de correo demasiado grandes',
             self::AnnouncementNotFound => 'Anuncio no encontrado',
             self::AnnouncementValidationFailed => 'Datos de anuncio inválidos',
             self::AnnouncementSaveFailed => 'Error al guardar el anuncio',

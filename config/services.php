@@ -43,12 +43,16 @@ $registerCustomerStats = require __DIR__ . '/../app/Modules/CustomerStats/servic
 $registerCustomerStats($container);
 $registerDownloads = require __DIR__ . '/../app/Modules/Downloads/services.php';
 $registerDownloads($container);
+$registerEmail = require __DIR__ . '/../app/Modules/Email/services.php';
+$registerEmail($container);
 $registerDesktopAccess = require __DIR__ . '/../app/Modules/DesktopAccess/services.php';
 $registerDesktopAccess($container);
 $registerDesktopReporting = require __DIR__ . '/../app/Modules/DesktopReporting/services.php';
 $registerDesktopReporting($container);
 $registerLicenses = require __DIR__ . '/../app/Modules/Licenses/services.php';
 $registerLicenses($container);
+$registerIsapi = require __DIR__ . '/../app/Modules/Isapi/services.php';
+$registerIsapi($container);
 $registerNotifications = require __DIR__ . '/../app/Modules/Notifications/services.php';
 $registerNotifications($container);
 $registerTools = require __DIR__ . '/../app/Modules/Tools/services.php';

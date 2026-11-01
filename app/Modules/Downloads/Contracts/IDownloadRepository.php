@@ -9,6 +9,8 @@ interface IDownloadRepository
     /** @return array<string, mixed> */
     public function latestVersion(): array;
 
+    public function saveVersion(array $version): bool;
+
     /** @param array<string, mixed> $download */
     public function recordDownload(array $download): void;
 

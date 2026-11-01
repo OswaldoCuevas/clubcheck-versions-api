@@ -334,7 +334,7 @@ ob_start();
             
             <!-- Enlaces adicionales -->
             <div class="text-center mt-3">
-                <?php if (isset($userModel) && $userModel->hasPermission('admin_access')): ?>
+                <?php if ($canAdminAccess ?? false): ?>
                     <a href="<?= app_url('/admin') ?>" class="btn btn-outline-primary me-2">
                         <i class="fas fa-shield-alt me-1"></i>
                         Panel Admin

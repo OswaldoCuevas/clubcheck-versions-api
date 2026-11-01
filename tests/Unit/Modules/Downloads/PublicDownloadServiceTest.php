@@ -34,6 +34,13 @@ final class DownloadRepositoryFake implements IDownloadRepository
         return $this->version;
     }
 
+    public function saveVersion(array $version): bool
+    {
+        $this->version = $version;
+
+        return true;
+    }
+
     public function recordDownload(array $download): void
     {
         $this->recordedDownloads[] = $download;

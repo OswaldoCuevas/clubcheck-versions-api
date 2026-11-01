@@ -14,11 +14,14 @@ use App\Modules\Customers\Controllers\CustomerController;
 use App\Modules\Customers\Controllers\CustomerDesktopSyncController;
 use App\Modules\CustomerStats\Controllers\AdminCustomerStatsController;
 use App\Modules\Downloads\Controllers\AdminDownloadController;
+use App\Modules\Downloads\Controllers\HomeController;
 use App\Modules\Downloads\Controllers\PublicDownloadController;
+use App\Modules\Email\Controllers\EmailController;
 use App\Modules\DesktopAccess\Controllers\DesktopLoginController;
 use App\Modules\DesktopReporting\Controllers\DesktopReportController;
 use App\Modules\DesktopReporting\Controllers\DesktopUserProfileController;
 use App\Modules\Licenses\Controllers\AdminLicenseController;
+use App\Modules\Isapi\Controllers\IsapiController;
 use App\Modules\Notifications\Controllers\NotificationController;
 use App\Modules\PermissionRequests\Controllers\PermissionRequestController;
 use App\Modules\PushNotifications\Controllers\PushNotificationController;
@@ -51,9 +54,10 @@ $router = new Router($container);
 // ======================================================
 
 // Rutas principales
-$router->any('/', 'HomeController', 'index');
-$router->get('/home', 'HomeController', 'index');
-$router->post('/home', 'HomeController', 'index');
+$router->get('/', HomeController::class, 'index');
+$router->get('/home', HomeController::class, 'index');
+$router->post('/', HomeController::class, 'upload', ['auth', 'permission:upload_files']);
+$router->post('/home', HomeController::class, 'upload', ['auth', 'permission:upload_files']);
 
 // Rutas de autenticación
 $router->get('/login', AdminAuthController::class, 'show');
@@ -130,16 +134,12 @@ $router->patch('/api/desktop/notifications/:id/read', NotificationController::cl
 
 // Cliente ISAPI de escritorio (customer_jwt): canal persistente basado en cola.
 // WebSocket puede agregarse despues como aviso; estos endpoints conservan entrega y reintentos.
-$router->post('/api/customers/isapi/heartbeat', 'IsapiController', 'heartbeat', ['customer_jwt']);
-$router->post('/api/customers/isapi/commands/claim', 'IsapiController', 'claim', ['customer_jwt']);
-$router->post('/api/customers/isapi/commands/:id/result', 'IsapiController', 'result', ['customer_jwt']);
+$router->post('/api/customers/isapi/heartbeat', IsapiController::class, 'heartbeat', ['customer_jwt']);
+$router->post('/api/customers/isapi/commands/claim', IsapiController::class, 'claim', ['customer_jwt']);
+$router->post('/api/customers/isapi/commands/:id/result', IsapiController::class, 'result', ['customer_jwt']);
 
-// Rutas de mensajes enviados (MessageSent)
-// $router->get('/api/messages-sent', 'MessageSentController', 'index');
-// $router->get('/api/messages-sent/:id', 'MessageSentController', 'show');
-// $router->post('/api/messages-sent', 'MessageSentController', 'store');
-// $router->put('/api/messages-sent/:id', 'MessageSentController', 'update');
-// $router->delete('/api/messages-sent/:id', 'MessageSentController', 'destroy');
+// Los endpoints CRUD de MessageSent permanecen deshabilitados. Su implementación
+// modular está disponible en Modules/WhatsApp/Controllers/MessageLogController.
 
 // ==================== WHATSAPP ====================
 // Estado del servicio
@@ -238,10 +238,10 @@ $router->get('/admin/api/licenses', AdminLicenseController::class, 'licensesJson
 $router->post('/admin/api/licenses/generate', AdminLicenseController::class, 'generateLicenseAdmin', $adminMiddleware);
 
 // Diagnostico remoto ISAPI
-$router->get('/admin/isapi', 'IsapiController', 'page');
-$router->get('/admin/api/isapi', 'IsapiController', 'adminIndex');
-$router->post('/admin/api/isapi/commands', 'IsapiController', 'adminCreate');
-$router->get('/admin/api/isapi/commands/:id', 'IsapiController', 'adminShow');
+$router->get('/admin/isapi', IsapiController::class, 'page', $adminMiddleware);
+$router->get('/admin/api/isapi', IsapiController::class, 'adminIndex', $adminMiddleware);
+$router->post('/admin/api/isapi/commands', IsapiController::class, 'adminCreate', $adminMiddleware);
+$router->get('/admin/api/isapi/commands/:id', IsapiController::class, 'adminShow', $adminMiddleware);
 
 // Rutas de herramientas
 $router->get('/password-generator', ToolsController::class, 'passwordGenerator', $adminMiddleware);
@@ -285,24 +285,24 @@ $router->post('/api/customers/stripe/coupons/validate', BillingController::class
 
 // ==================== EMAIL ====================
 // Estado y tipos
-$router->get('/api/email/status', 'EmailController', 'status');
-$router->get('/api/email/types', 'EmailController', 'types');
+$router->get('/api/email/status', EmailController::class, 'status');
+$router->get('/api/email/types', EmailController::class, 'types');
 
 // Envío de correos
-$router->post('/api/email/send', 'EmailController', 'send', ['customer_jwt']);
-$router->post('/api/email/send/password-reset', 'EmailController', 'sendPasswordReset', ['customer_jwt']);
-$router->post('/api/email/send/email-confirmation', 'EmailController', 'sendEmailConfirmation', ['customer_jwt']);
-$router->post('/api/email/send/welcome', 'EmailController', 'sendWelcome', ['customer_jwt']);
-$router->post('/api/email/send/notification', 'EmailController', 'sendNotification', ['customer_jwt']);
+$router->post('/api/email/send', EmailController::class, 'send', ['customer_jwt']);
+$router->post('/api/email/send/password-reset', EmailController::class, 'sendPasswordReset', ['customer_jwt']);
+$router->post('/api/email/send/email-confirmation', EmailController::class, 'sendEmailConfirmation', ['customer_jwt']);
+$router->post('/api/email/send/welcome', EmailController::class, 'sendWelcome', ['customer_jwt']);
+$router->post('/api/email/send/notification', EmailController::class, 'sendNotification', ['customer_jwt']);
 
 // Verificación de códigos
-$router->post('/api/email/verify', 'EmailController', 'verify', ['customer_jwt']);
-$router->post('/api/email/verify/password-reset', 'EmailController', 'verifyPasswordReset', ['customer_jwt']);
-$router->post('/api/email/verify/email-confirmation', 'EmailController', 'verifyEmailConfirmation', ['customer_jwt']);
+$router->post('/api/email/verify', EmailController::class, 'verify', ['customer_jwt']);
+$router->post('/api/email/verify/password-reset', EmailController::class, 'verifyPasswordReset', ['customer_jwt']);
+$router->post('/api/email/verify/email-confirmation', EmailController::class, 'verifyEmailConfirmation', ['customer_jwt']);
 
 // Historial y estadísticas
-$router->get('/api/email/history/:email', 'EmailController', 'history', ['customer_jwt']);
-$router->get('/api/email/stats', 'EmailController', 'stats', ['customer_jwt']);
-$router->post('/api/email/cleanup', 'EmailController', 'cleanup', ['customer_jwt']);
+$router->get('/api/email/history/:email', EmailController::class, 'history', ['customer_jwt']);
+$router->get('/api/email/stats', EmailController::class, 'stats', ['customer_jwt']);
+$router->post('/api/email/cleanup', EmailController::class, 'cleanup', ['customer_jwt']);
 
 return $router;
