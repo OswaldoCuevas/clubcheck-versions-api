@@ -362,11 +362,49 @@ final readonly class BillingOperations
             return $this->priceRequired();
         }
 
-        return $this->result($this->billing->execute('previewPlanChange', [
+        return $this->previewPlanWithPrice(
             $subscriptionId,
             $priceId,
             $payload['coupon_code'] ?? null,
-        ]));
+        );
+    }
+
+    public function previewActivePlan(string $customerId, array $payload): JsonResult
+    {
+        $priceId = $this->priceId($payload);
+        if ($priceId === null) {
+            return $this->priceRequired();
+        }
+
+        $customer = $this->customers->customer($customerId);
+        if ($customer === null || empty($customer['billingId'])) {
+            return new JsonResult([
+                'success' => false,
+                'error' => 'No se encontró información del cliente',
+            ], 401);
+        }
+
+        $active = $this->billing->execute(
+            'getActiveSubscription',
+            [$customer['billingId']],
+        );
+        if (!($active['success'] ?? false)) {
+            return $this->result($active);
+        }
+
+        $subscriptionId = $active['subscription']['id'] ?? null;
+        if (!($active['has_subscription'] ?? false) || empty($subscriptionId)) {
+            return new JsonResult([
+                'success' => false,
+                'error' => 'No hay suscripción activa',
+            ], 404);
+        }
+
+        return $this->previewPlanWithPrice(
+            (string) $subscriptionId,
+            $priceId,
+            $payload['coupon_code'] ?? null,
+        );
     }
 
     public function previewSubscription(string $customerId, string $routeBillingId, array $payload): JsonResult
@@ -387,6 +425,18 @@ final readonly class BillingOperations
     private function billingId(string $customerId, string $default): string
     {
         return (string) $this->customers->billingId($customerId, $default);
+    }
+
+    private function previewPlanWithPrice(
+        string $subscriptionId,
+        string $priceId,
+        mixed $couponCode,
+    ): JsonResult {
+        return $this->result($this->billing->execute('previewPlanChange', [
+            $subscriptionId,
+            $priceId,
+            $couponCode,
+        ]));
     }
 
     private function priceId(array $payload): ?string

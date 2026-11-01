@@ -277,6 +277,7 @@ $router->get('/api/customers/stripe/customers/:customerId/plan', BillingControll
 
 // Precios/Planes
 $router->get('/api/customers/stripe/prices', BillingController::class, 'listPrices', ['customer_jwt']);
+$router->post('/api/customers/stripe/subscriptions/active/preview', BillingController::class, 'previewActivePlanChange', ['customer_jwt']);
 $router->post('/api/customers/stripe/subscriptions/:subscriptionId/preview', BillingController::class, 'previewPlanChange', ['customer_jwt']);
 $router->post('/api/customers/stripe/customers/:customerId/subscriptions/preview', BillingController::class, 'previewNewSubscription', ['customer_jwt']);
 

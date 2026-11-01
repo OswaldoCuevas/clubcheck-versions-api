@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Modules\Billing\Services\PlanChangeProrationPolicy;
+
 /**
  * Servicio de Stripe para manejo de tarjetas, clientes y suscripciones
  */
@@ -11,12 +13,19 @@ class StripeService
     private string $offlineMessage = 'Verifique su conexión a internet';
 
     private ?string $testClockId = null;
+    private PlanChangeProrationPolicy $planChangeProrationPolicy;
 
-    public function __construct(string $apiKey, ?string $testClockId = null)
+    public function __construct(
+        string $apiKey,
+        ?string $testClockId = null,
+        ?PlanChangeProrationPolicy $planChangeProrationPolicy = null,
+    )
     {
         \Stripe\Stripe::setApiKey($apiKey);
         $this->stripe = new \Stripe\StripeClient($apiKey);
         $this->testClockId = $testClockId;
+        $this->planChangeProrationPolicy = $planChangeProrationPolicy
+            ?? new PlanChangeProrationPolicy();
     }
 
     // ==================== TOKENS ====================
@@ -817,34 +826,49 @@ class StripeService
                     }
                 }
 
-            $subscription = $this->stripe->subscriptions->retrieve($subscriptionId, [
-                'expand' => ['items.data.price']
-            ]);
+            $subscription = $this->stripe->subscriptions->retrieve(
+                $subscriptionId,
+                [
+                    'expand' => [
+                        'items.data.price',
+                    ],
+                ],
+            );
 
             $currentItemId = $subscription->items->data[0]->id ?? null;
 
-            // Determinar si el intervalo de facturación cambia (ej. mensual → anual).
-            // Stripe solo acepta 'unchanged' cuando el intervalo NO cambia.
-            // Si el intervalo cambia se usa 'now' para iniciar el nuevo ciclo inmediatamente.
-            $currentInterval = $subscription->items->data[0]->price->recurring->interval ?? null;
+            // La política determina por separado si hay prorrateo y si el ciclo
+            // debe reiniciarse. Solo los cambios mensual a mensual se prorratean.
+            $currentRecurring = $subscription->items->data[0]->price->recurring ?? null;
+            $currentInterval = $currentRecurring->interval ?? null;
+            $currentIntervalCount = (int) ($currentRecurring->interval_count ?? 1);
             $newPrice = $this->stripe->prices->retrieve($newPriceId);
-            $newInterval = $newPrice->recurring->interval ?? null;
-            $intervalChanges = $currentInterval !== $newInterval;
+            $newRecurring = $newPrice->recurring ?? null;
+            $newInterval = $newRecurring->interval ?? null;
+            $newIntervalCount = (int) ($newRecurring->interval_count ?? 1);
+            $prorationSettings = $this->planChangeProrationPolicy->settings(
+                $currentInterval,
+                $currentIntervalCount,
+                $newInterval,
+                $newIntervalCount,
+            );
 
             $updateOptions = [
-                'proration_behavior' => $intervalChanges ? 'create_prorations' : 'none',
+                'proration_behavior' => $prorationSettings['proration_behavior'],
                 'cancel_at_period_end' => false,
-                'billing_cycle_anchor' => $intervalChanges ? 'now' : 'unchanged',
-                'items' => []
+                'billing_cycle_anchor' => $prorationSettings['billing_cycle_anchor'],
+                'items' => [],
             ];
 
             if ($currentItemId) {
                 $updateOptions['items'][] = [
                     'id' => $currentItemId,
-                    'price' => $newPriceId
+                    'price' => $newPriceId,
                 ];
             } else {
-                $updateOptions['items'][] = ['price' => $newPriceId];
+                $updateOptions['items'][] = [
+                    'price' => $newPriceId,
+                ];
             }
 
             // Aplicar cupón si es válido (usar 'discounts' para compatibilidad con billing_mode flexible)
@@ -858,13 +882,16 @@ class StripeService
                 }
             }
 
-            $updated = $this->stripe->subscriptions->update($subscriptionId, $updateOptions);
+            $updated = $this->stripe->subscriptions->update(
+                $subscriptionId,
+                $updateOptions,
+            );
 
             return [
                 'success' => true,
                 'subscription_id' => $updated->id,
                 'current_period_end' => $updated->current_period_end ?? $updated->items->data[0]->current_period_end ?? null,
-                'status' => $updated->status
+                'status' => $updated->status,
             ];
         } catch (\Stripe\Exception\CardException $e) {
             return [
@@ -1325,11 +1352,21 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId, ?s
 
         // Crear una invoice preview (upcoming invoice) con el nuevo precio
         // Nota: upcoming() es un método especial que no está en StripeClient, usar la clase estática
-        // Si el intervalo cambia (ej. mensual → anual), el ciclo se ancla en 'now'.
-        // Si es el mismo intervalo, se mantiene la fecha actual de facturación.
-        $currentInterval = $currentItem->price->recurring->interval ?? null;
-        $newInterval = $newPrice->recurring->interval ?? null;
-        $intervalChanges = $currentInterval !== $newInterval;
+        // La misma política usada al cambiar el plan debe alimentar el preview
+        // para que Stripe calcule exactamente las condiciones que se aplicarán.
+        $currentRecurring = $currentItem->price->recurring ?? null;
+        $currentInterval = $currentRecurring->interval ?? null;
+        $currentIntervalCount = (int) ($currentRecurring->interval_count ?? 1);
+        $newRecurring = $newPrice->recurring ?? null;
+        $newInterval = $newRecurring->interval ?? null;
+        $newIntervalCount = (int) ($newRecurring->interval_count ?? 1);
+        $prorationSettings = $this->planChangeProrationPolicy->settings(
+            $currentInterval,
+            $currentIntervalCount,
+            $newInterval,
+            $newIntervalCount,
+        );
+        $periodChanges = $prorationSettings['billing_cycle_anchor'] === 'now';
 
         $invoicePreviewOptions = [
             'customer' => $subscription->customer,
@@ -1341,8 +1378,8 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId, ?s
                         'price' => $newPriceId,
                     ],
                 ],
-                'proration_behavior' => $intervalChanges ? 'create_prorations' : 'none',
-                'billing_cycle_anchor' => $intervalChanges ? 'now' : 'unchanged',
+                'proration_behavior' => $prorationSettings['proration_behavior'],
+                'billing_cycle_anchor' => $prorationSettings['billing_cycle_anchor'],
             ],
         ];
 
@@ -1362,7 +1399,14 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId, ?s
         // Calcular el monto del prorrateo
         $prorationAmount = 0;
         foreach ($invoice->lines->data as $line) {
-            if ($line->proration) {
+            $parent = $line->parent ?? null;
+            $subscriptionItemDetails = $parent->subscription_item_details ?? null;
+            $invoiceItemDetails = $parent->invoice_item_details ?? null;
+            $isProration = ($subscriptionItemDetails->proration ?? false)
+                || ($invoiceItemDetails->proration ?? false)
+                || ($line->proration ?? false);
+
+            if ($isProration) {
                 $prorationAmount += $line->amount;
             }
         }
@@ -1391,15 +1435,15 @@ public function previewPlanChange(string $subscriptionId, string $newPriceId, ?s
                 'new_plan_formatted' => $this->formatMoney($newAmount, $currency),
                 'current_plan_amount' => $currentAmount,
                 'current_plan_formatted' => $this->formatMoney($currentAmount, $currency),
-                // Si el intervalo cambia, el cobro es inmediato (billing_cycle_anchor='now')
-                // Si el intervalo es el mismo, se cobra en la próxima fecha de renovación
-                'billing_date' => $intervalChanges
+                // Los cambios de periodo reinician el ciclo; mensual a mensual
+                // conserva la renovación y muestra el ajuste prorrateado.
+                'billing_date' => $periodChanges
                     ? date('Y-m-d')
                     : date('Y-m-d', $invoice->next_payment_attempt ?? time()),
                 'is_upgrade' => $isUpgrade,
-                'immediate_charge' => $intervalChanges && $amountDue > 0,
+                'immediate_charge' => $periodChanges && $amountDue > 0,
                 'new_plan_name' => $newPrice->nickname ?? $newPrice->lookup_key ?? 'Plan',
-            ]
+            ],
         ];
         
         // Agregar información del descuento si hay cupón

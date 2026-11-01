@@ -20,6 +20,7 @@ use App\Modules\Billing\Features\ListCards\Query as ListCardsQuery;
 use App\Modules\Billing\Features\ListPlans\Query as ListPlansQuery;
 use App\Modules\Billing\Features\ListPrices\Query as ListPricesQuery;
 use App\Modules\Billing\Features\PreviewNewSubscription\Command as PreviewNewSubscriptionCommand;
+use App\Modules\Billing\Features\PreviewActivePlanChange\Command as PreviewActivePlanChangeCommand;
 use App\Modules\Billing\Features\PreviewPlanChange\Command as PreviewPlanChangeCommand;
 use App\Modules\Billing\Features\RefreshLicense\Command as RefreshLicenseCommand;
 use App\Modules\Billing\Features\SetDefaultCard\Command as SetDefaultCardCommand;
@@ -237,6 +238,18 @@ final readonly class BillingController
             $this->mediator->send(
                 new PreviewPlanChangeCommand(
                     $subscriptionId,
+                    JsonPayload::parse(),
+                ),
+            ),
+        );
+    }
+
+    public function previewActivePlanChange(): void
+    {
+        JsonResponse::sendResult(
+            $this->mediator->send(
+                new PreviewActivePlanChangeCommand(
+                    $this->context->customerId(),
                     JsonPayload::parse(),
                 ),
             ),
