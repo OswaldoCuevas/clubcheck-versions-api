@@ -33,8 +33,22 @@ try {
     } else {
         (new App\Middleware\DesktopJwtMiddleware($jwt))->handle();
         if (isset($_GET['profile'])) {
-            require_once __DIR__ . '/../app/Controllers/DesktopUserProfileController.php';
-            $profile = new Controllers\DesktopUserProfileController(new App\Services\DesktopUserProfileService($db));
+            $container = new Core\Container();
+            $container->singleton(
+                App\Infrastructure\Database\IDatabaseConnection::class,
+                static fn (): App\Infrastructure\Database\IDatabaseConnection => $db,
+            );
+            $container->bind(
+                App\Modules\DesktopReporting\Contracts\IDesktopUserProfileRepository::class,
+                App\Modules\DesktopReporting\Repositories\DesktopUserProfileRepository::class,
+            );
+            $container->singleton(
+                App\Application\Contracts\IMediator::class,
+                App\Infrastructure\Mediator\Mediator::class,
+            );
+            $profile = $container->get(
+                App\Modules\DesktopReporting\Controllers\DesktopUserProfileController::class,
+            );
             $action = $_GET['profile'];
             if (!in_array($action, ['user', 'attendances', 'subscriptions', 'statistics'], true)) {
                 throw new App\Exceptions\ApiException('Consulta no soportada', 404);
