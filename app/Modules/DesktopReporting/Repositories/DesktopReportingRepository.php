@@ -1,147 +1,43 @@
 <?php
 
-namespace Controllers;
+declare(strict_types=1);
 
-require_once __DIR__ . '/../Core/Controller.php';
-require_once __DIR__ . '/../Helpers/ApiHelper.php';
-require_once __DIR__ . '/../Models/CustomerWebLoginAttemptModel.php';
-require_once __DIR__ . '/../Services/JwtService.php';
-require_once __DIR__ . '/../Services/UserPhotoService.php';
-require_once __DIR__ . '/../Services/MembershipSalesService.php';
-require_once __DIR__ . '/../../utils/database.php';
+namespace App\Modules\DesktopReporting\Repositories;
 
-use ApiHelper;
-use App\Services\JwtService;
-use Core\Controller;
-use Models\CustomerWebLoginAttemptModel;
+use App\Infrastructure\Database\IDatabaseConnection;
+use App\Modules\DesktopReporting\Contracts\IDesktopReportingRepository;
+use App\Services\MembershipSalesService;
+use App\Services\UserPhotoService;
 
-class DesktopApiController extends Controller
+final class DesktopReportingRepository implements IDesktopReportingRepository
 {
-    private const JWT_TTL_SECONDS = 1296000; // 15 dias
-    private const LOGIN_ATTEMPT_WINDOW_SECONDS = 600; // 10 minutos
-    private const LOGIN_ATTEMPT_LIMIT = 5;
+    /** @var array<string, mixed> */
+    private array $query = [];
 
-    private \Database $db;
-    private CustomerWebLoginAttemptModel $loginAttemptModel;
-
-    public function __construct()
-    {
-        parent::__construct();
-        $this->db = new \Database();
-        $this->loginAttemptModel = new CustomerWebLoginAttemptModel();
+    public function __construct(
+        private IDatabaseConnection $db,
+        private MembershipSalesService $membershipSales,
+        private UserPhotoService $userPhotos,
+    ) {
     }
 
-    public function login(): void
+    public function dashboard(string $customerId, array $query): array
     {
-        ApiHelper::respondIfOptions();
-        ApiHelper::allowedMethodsPost();
-
-        $payload = ApiHelper::getJsonBody();
-        $codeAccess = $this->requiredString($payload, 'codeAccess');
-        $login = trim((string) ($payload['login'] ?? $payload['username'] ?? $payload['email'] ?? $payload['administrator'] ?? ''));
-        if ($login === '') {
-            ApiHelper::respond(['error' => 'El campo login es obligatorio'], 422);
-        }
-        $password = $this->requiredString($payload, 'password');
-        $ipAddress = $_SERVER['REMOTE_ADDR'] ?? null;
-        $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? null;
-
-        $lockout = $this->loginAttemptModel->getLockoutStatus(
-            $login,
-            $codeAccess,
-            self::LOGIN_ATTEMPT_WINDOW_SECONDS,
-            self::LOGIN_ATTEMPT_LIMIT
-        );
-
-        if ($lockout['isLocked']) {
-            ApiHelper::respond([
-                'error' => 'Demasiados intentos fallidos. Intenta nuevamente cuando termine la ventana de 10 minutos.',
-                'code' => 'too_many_attempts',
-                'retryAfter' => $lockout['retryAfter'],
-                'lockedUntil' => $lockout['lockedUntil'],
-            ], 429);
-        }
-
-        $row = $this->db->fetchOne(
-            "SELECT c.Id AS CustomerId, c.Name AS CustomerName, c.IsActive, a.Id AS AdminId, a.Username, a.Email, a.Password, a.Role
-             FROM Customers c
-             JOIN AdministratorsDesktop a ON a.CustomerApiId = c.Id
-             WHERE c.CodeAccess = ?
-               AND c.IsActive = 1
-               AND COALESCE(a.Removed, 0) = 0
-               AND a.Role = 2
-               AND (a.Username = ? OR a.Email = ?)
-             LIMIT 1",
-            [$codeAccess, $login, $login]
-        );
-
-        if (!$row || !$this->passwordMatches($password, (string) ($row['Password'] ?? ''))) {
-            $this->loginAttemptModel->record([
-                'loginIdentifier' => $login,
-                'codeAccess' => $codeAccess,
-                'customerId' => $row['CustomerId'] ?? null,
-                'adminId' => $row['AdminId'] ?? null,
-                'ipAddress' => $ipAddress,
-                'userAgent' => $userAgent,
-                'wasSuccessful' => false,
-                'failureReason' => $row ? 'invalid_password' : 'invalid_login',
-            ]);
-
-            ApiHelper::respond(['error' => 'Credenciales invalidas'], 401);
-        }
-
-        $this->loginAttemptModel->record([
-            'loginIdentifier' => $login,
-            'codeAccess' => $codeAccess,
-            'customerId' => $row['CustomerId'] ?? null,
-            'adminId' => $row['AdminId'] ?? null,
-            'ipAddress' => $ipAddress,
-            'userAgent' => $userAgent,
-            'wasSuccessful' => true,
-            'failureReason' => null,
-        ]);
-
-        $jwt = new JwtService();
-        $token = $jwt->createToken([
-            'name' => $row['CustomerName'],
-            'customerId' => $row['CustomerId'],
-            'adminId' => $row['AdminId'],
-            'role' => (int) $row['Role'],
-        ], self::JWT_TTL_SECONDS);
-
-        ApiHelper::respond([
-            'status' => 'success',
-            'token' => $token,
-            'expiresIn' => self::JWT_TTL_SECONDS,
-            'expiresAt' => date('Y-m-d H:i:s', time() + self::JWT_TTL_SECONDS),
-            'customer' => [
-                'name' => $row['CustomerName'],
-                'customerId' => $row['CustomerId'],
-            ],
-            'administrator' => [
-                'id' => $row['AdminId'],
-                'username' => $row['Username'],
-                'email' => $row['Email'],
-                'role' => (int) $row['Role'],
-            ],
-        ]);
-    }
-
-    public function dashboard(): void
-    {
-        ApiHelper::respondIfOptions();
-        ApiHelper::allowedMethodsGet();
-
-        $customerId = $this->customerId();
+        $this->query = $query;
         [$from, $to] = $this->dateRange();
         $expiringDays = $this->intQuery('expiringDays', 3, 1, 365);
         $lowStock = $this->intQuery('lowStock', 5, 0, 100000);
 
-        ApiHelper::respond([
+        return [
             'customerApiId' => $customerId,
             'range' => $this->rangePayload($from, $to),
             'members' => [
-                'total' => $this->scalar("SELECT COUNT(*) FROM UsersDesktop WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0", [$customerId]),
+                'total' => $this->scalar(
+                    'SELECT COUNT(*)
+                     FROM UsersDesktop
+                     WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0',
+                    [$customerId],
+                ),
                 'newInRange' => $this->scalar(
                     "SELECT COUNT(*) FROM UsersDesktop WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0 AND CreatedOn BETWEEN ? AND ?",
                     [$customerId, $from, $to]
@@ -163,19 +59,16 @@ class DesktopApiController extends Controller
             ],
             'attendances' => $this->attendanceSummary($customerId, $from, $to),
             'sales' => $this->salesSummary($customerId, $from, $to),
-        ]);
+        ];
     }
 
     /** Lista socios y metadatos de foto para los avatares protegidos del portal del gimnasio. */
-    public function users(): void
+    public function users(string $customerId, array $query): array
     {
-        ApiHelper::respondIfOptions();
-        ApiHelper::allowedMethodsGet();
-
-        $customerId = $this->customerId();
+        $this->query = $query;
         [$from, $to] = $this->dateRange();
         [$page, $perPage, $offset] = $this->pagination();
-        $search = trim((string) ($_GET['search'] ?? ''));
+        $search = trim((string) ($this->query['search'] ?? ''));
         [$sortColumn, $sortDir] = $this->usersSort();
 
         $where = 'CustomerApiId = ? AND COALESCE(Removed, 0) = 0';
@@ -197,31 +90,38 @@ class DesktopApiController extends Controller
             array_merge($params, [$perPage, $offset])
         );
 
-        ApiHelper::respond([
+        return [
             'summary' => [
-                'totalCurrent' => $this->scalar("SELECT COUNT(*) FROM UsersDesktop WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0", [$customerId]),
+                'totalCurrent' => $this->scalar(
+                    'SELECT COUNT(*)
+                     FROM UsersDesktop
+                     WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0',
+                    [$customerId],
+                ),
                 'newInRange' => $this->scalar(
                     "SELECT COUNT(*) FROM UsersDesktop WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0 AND CreatedOn BETWEEN ? AND ?",
                     [$customerId, $from, $to]
                 ),
                 'dailyNew' => $this->dailyUsers($customerId, $from, $to),
-                'sortBy' => $_GET['sortBy'] ?? 'fullname',
-                'sortDir' => strtolower((string) ($_GET['sortDir'] ?? 'asc')) === 'desc' ? 'desc' : 'asc',
+                'sortBy' => $this->query['sortBy'] ?? 'fullname',
+                'sortDir' => strtolower((string) ($this->query['sortDir'] ?? 'asc')) === 'desc' ? 'desc' : 'asc',
             ],
-            'members' => $this->pagePayload((new \App\Services\UserPhotoService($this->db))->attach($customerId, $members), $total, $page, $perPage),
-        ]);
+            'members' => $this->pagePayload(
+                $this->userPhotos->attach($customerId, $members),
+                $total,
+                $page,
+                $perPage,
+            ),
+        ];
     }
 
     /** Lista membresias y agrega la foto del socio por UserId para los avatares del gimnasio autenticado. */
-    public function memberships(): void
+    public function memberships(string $customerId, array $query): array
     {
-        ApiHelper::respondIfOptions();
-        ApiHelper::allowedMethodsGet();
-
-        $customerId = $this->customerId();
+        $this->query = $query;
         $expiringDays = $this->intQuery('expiringDays', 3, 1, 365);
         [$page, $perPage, $offset] = $this->pagination();
-        $status = strtolower(trim((string) ($_GET['status'] ?? 'all')));
+        $status = strtolower(trim((string) ($this->query['status'] ?? 'all')));
         [$membershipOrderBy, $sortBy, $sortDir] = $this->membershipSort();
 
         $where = 'CustomerApiId = ?';
@@ -268,7 +168,7 @@ class DesktopApiController extends Controller
         }
         unset($row);
 
-        ApiHelper::respond([
+        return [
             'summary' => [
                 'activeToday' => $this->activeMemberships($customerId),
                 'activeTotal' => $this->activeMemberships($customerId),
@@ -277,24 +177,28 @@ class DesktopApiController extends Controller
                 'sortBy' => $sortBy,
                 'sortDir' => $sortDir,
             ],
-            'memberships' => $this->pagePayload((new \App\Services\UserPhotoService($this->db))->attach($customerId, $rows, 'UserId'), $total, $page, $perPage),
-        ]);
+            'memberships' => $this->pagePayload(
+                $this->userPhotos->attach($customerId, $rows, 'UserId'),
+                $total,
+                $page,
+                $perPage,
+            ),
+        ];
     }
 
     /** Entrega el historial paginado de partidas de membresia del gimnasio autenticado, incluidas canceladas. */
-    public function membershipSales(): void
+    public function membershipSales(string $customerId, array $query): array
     {
-        ApiHelper::respondIfOptions();
-        ApiHelper::allowedMethodsGet();
-        ApiHelper::respond((new \App\Services\MembershipSalesService($this->db))->listing($this->customerId(), $_GET));
+        $this->query = $query;
+        return $this->membershipSales->listing(
+            $customerId,
+            $this->query,
+        );
     }
 
-    public function products(): void
+    public function products(string $customerId, array $query): array
     {
-        ApiHelper::respondIfOptions();
-        ApiHelper::allowedMethodsGet();
-
-        $customerId = $this->customerId();
+        $this->query = $query;
         [$from, $to] = $this->dateRange();
         $lowStock = $this->intQuery('lowStock', 5, 0, 100000);
         $lowStockOnly = $this->boolQuery('lowStockOnly');
@@ -327,7 +231,13 @@ class DesktopApiController extends Controller
         $historySearchWhere = '';
         $historySearchParams = [];
         if ($search !== '') {
-            $historySearchWhere = ' AND (p.Name LIKE ? OR p.Code LIKE ? OR p.Description LIKE ? OR ps.Notes LIKE ? OR ps.MovementType LIKE ?)';
+            $historySearchWhere = ' AND (
+                p.Name LIKE ?
+                OR p.Code LIKE ?
+                OR p.Description LIKE ?
+                OR ps.Notes LIKE ?
+                OR ps.MovementType LIKE ?
+            )';
             $like = '%' . $search . '%';
             $historySearchParams = [$like, $like, $like, $like, $like];
         }
@@ -350,7 +260,7 @@ class DesktopApiController extends Controller
             array_merge([$customerId, $from, $to], $historySearchParams, [$historyPerPage, $historyOffset])
         );
 
-        ApiHelper::respond([
+        return [
             'range' => $this->rangePayload($from, $to),
             'filters' => [
                 'search' => $search,
@@ -363,22 +273,23 @@ class DesktopApiController extends Controller
             ],
             'products' => $this->pagePayload($products, $total, $page, $perPage),
             'stockHistory' => $this->pagePayload($history, $historyTotal, $historyPage, $historyPerPage),
-        ]);
+        ];
     }
 
     /** Consulta asistencias y fotos opcionales del mismo gimnasio para los avatares del reporte. */
-    public function attendances(): void
+    public function attendances(string $customerId, array $query): array
     {
-        ApiHelper::respondIfOptions();
-        ApiHelper::allowedMethodsGet();
-
-        $customerId = $this->customerId();
+        $this->query = $query;
         [$from, $to] = $this->dateRange();
         [$page, $perPage, $offset] = $this->pagination();
         [$memberPage, $memberPerPage, $memberOffset] = $this->pagination('memberPage', 'memberPerPage');
         $reentriesOnly = $this->boolQuery('reentriesOnly');
         $memberHaving = $reentriesOnly ? 'HAVING COUNT(*) >= 2' : '';
-        $memberSearch = trim((string) ($_GET['search'] ?? $_GET['memberSearch'] ?? ''));
+        $memberSearch = trim((string) (
+            $this->query['search']
+                ?? $this->query['memberSearch']
+                ?? ''
+        ));
         $memberSearchWhere = '';
         $memberSearchParams = [];
         if ($memberSearch !== '') {
@@ -388,8 +299,12 @@ class DesktopApiController extends Controller
         }
 
         $total = $this->scalar(
-            "SELECT COUNT(*) FROM AttendancesDesktop WHERE CustomerApiId = ? AND COALESCE(Removed, 0) = 0 AND STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?",
-            [$customerId, $from, $to]
+            "SELECT COUNT(*)
+             FROM AttendancesDesktop
+             WHERE CustomerApiId = ?
+               AND COALESCE(Removed, 0) = 0
+               AND STR_TO_DATE(CheckIn, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?",
+            [$customerId, $from, $to],
         );
         $rows = $this->db->fetchAll(
             "SELECT a.Id, a.CheckIn, a.Active, a.UserId, u.Fullname, u.Code, v.EndingDate
@@ -452,24 +367,31 @@ class DesktopApiController extends Controller
         }
         unset($memberRow);
 
-        ApiHelper::respond([
+        return [
             'range' => $this->rangePayload($from, $to),
             'filters' => [
                 'reentriesOnly' => $reentriesOnly,
                 'search' => $memberSearch,
             ],
             'summary' => $this->attendanceSummary($customerId, $from, $to),
-            'attendances' => $this->pagePayload((new \App\Services\UserPhotoService($this->db))->attach($customerId, $rows, 'UserId'), $total, $page, $perPage),
-            'memberAccess' => $this->pagePayload((new \App\Services\UserPhotoService($this->db))->attach($customerId, $memberRows, 'UserId'), $memberTotal, $memberPage, $memberPerPage),
-        ]);
+            'attendances' => $this->pagePayload(
+                $this->userPhotos->attach($customerId, $rows, 'UserId'),
+                $total,
+                $page,
+                $perPage,
+            ),
+            'memberAccess' => $this->pagePayload(
+                $this->userPhotos->attach($customerId, $memberRows, 'UserId'),
+                $memberTotal,
+                $memberPage,
+                $memberPerPage,
+            ),
+        ];
     }
 
-    public function sales(): void
+    public function sales(string $customerId, array $query): array
     {
-        ApiHelper::respondIfOptions();
-        ApiHelper::allowedMethodsGet();
-
-        $customerId = $this->customerId();
+        $this->query = $query;
         [$from, $to] = $this->dateRange();
         [$page, $perPage, $offset] = $this->pagination();
         $cashRegisterRangeWhere = $this->cashRegisterRangeWhere();
@@ -534,22 +456,19 @@ class DesktopApiController extends Controller
         }
         unset($cashRegister, $ticket);
 
-        ApiHelper::respond([
+        return [
             'range' => $this->rangePayload($from, $to),
             'summary' => $this->salesSummary($customerId, $from, $to),
             'cashRegisters' => $this->pagePayload($cashRegisters, $cashTotal, $page, $perPage),
-        ]);
+        ];
     }
 
-    public function admins(): void
+    public function admins(string $customerId, array $query): array
     {
-        ApiHelper::respondIfOptions();
-        ApiHelper::allowedMethodsGet();
-
-        $customerId = $this->customerId();
+        $this->query = $query;
         [$from, $to] = $this->dateRange();
         [$page, $perPage, $offset] = $this->pagination();
-        $search = trim((string) ($_GET['search'] ?? ''));
+        $search = trim((string) ($this->query['search'] ?? ''));
 
         $where = 'CustomerApiId = ? AND COALESCE(Removed, 0) = 0';
         $params = [$customerId];
@@ -570,8 +489,10 @@ class DesktopApiController extends Controller
         );
 
         [$historyPage, $historyPerPage, $historyOffset] = $this->pagination('historyPage', 'historyPerPage');
-        $historySearch = trim((string) ($_GET['historySearch'] ?? ''));
-        $historyWhere = "h.CustomerApiId = ? AND COALESCE(h.Removed, 0) = 0 AND STR_TO_DATE(h.DatetimeOperation, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?";
+        $historySearch = trim((string) ($this->query['historySearch'] ?? ''));
+        $historyWhere = "h.CustomerApiId = ?
+            AND COALESCE(h.Removed, 0) = 0
+            AND STR_TO_DATE(h.DatetimeOperation, '%Y-%m-%d %H:%i:%s') BETWEEN ? AND ?";
         $historyParams = [$customerId, $from, $to];
         if ($historySearch !== '') {
             $historyWhere .= ' AND (h.Operation LIKE ? OR a.Username LIKE ? OR a.Email LIKE ?)';
@@ -596,23 +517,20 @@ class DesktopApiController extends Controller
             array_merge($historyParams, [$historyPerPage, $historyOffset])
         );
 
-        ApiHelper::respond([
+        return [
             'range' => $this->rangePayload($from, $to),
             'admins' => $this->pagePayload($admins, $total, $page, $perPage),
             'history' => $this->pagePayload($history, $historyTotal, $historyPage, $historyPerPage),
-        ]);
+        ];
     }
 
-    public function chartsOverview(): void
+    public function chartsOverview(string $customerId, array $query): array
     {
-        ApiHelper::respondIfOptions();
-        ApiHelper::allowedMethodsGet();
-
-        $customerId = $this->customerId();
+        $this->query = $query;
         [$from, $to] = $this->dateRange();
         $expiringDays = $this->intQuery('expiringDays', 3, 1, 365);
 
-        ApiHelper::respond([
+        return [
             'customerApiId' => $customerId,
             'range' => $this->rangePayload($from, $to),
             'users' => $this->usersChartPayload($customerId, $from, $to),
@@ -620,145 +538,83 @@ class DesktopApiController extends Controller
             'products' => $this->categoryChartPayload($customerId, $from, $to, 'product'),
             'attendances' => $this->attendancesChartPayload($customerId, $from, $to),
             'sales' => $this->salesChartPayload($customerId, $from, $to),
-        ]);
+        ];
     }
 
-    public function chartsUsers(): void
+    public function chartsUsers(string $customerId, array $query): array
     {
-        ApiHelper::respondIfOptions();
-        ApiHelper::allowedMethodsGet();
-
-        $customerId = $this->customerId();
+        $this->query = $query;
         [$from, $to] = $this->dateRange();
 
-        ApiHelper::respond([
+        return [
             'customerApiId' => $customerId,
             'range' => $this->rangePayload($from, $to),
             'users' => $this->usersChartPayload($customerId, $from, $to),
-        ]);
+        ];
     }
 
-    public function chartsMemberships(): void
+    public function chartsMemberships(string $customerId, array $query): array
     {
-        ApiHelper::respondIfOptions();
-        ApiHelper::allowedMethodsGet();
-
-        $customerId = $this->customerId();
+        $this->query = $query;
         [$from, $to] = $this->dateRange();
         $expiringDays = $this->intQuery('expiringDays', 3, 1, 365);
 
-        ApiHelper::respond([
+        return [
             'customerApiId' => $customerId,
             'range' => $this->rangePayload($from, $to),
             'memberships' => $this->categoryChartPayload($customerId, $from, $to, 'membership', $expiringDays),
-        ]);
+        ];
     }
 
-    public function chartsProducts(): void
+    public function chartsProducts(string $customerId, array $query): array
     {
-        ApiHelper::respondIfOptions();
-        ApiHelper::allowedMethodsGet();
-
-        $customerId = $this->customerId();
+        $this->query = $query;
         [$from, $to] = $this->dateRange();
 
-        ApiHelper::respond([
+        return [
             'customerApiId' => $customerId,
             'range' => $this->rangePayload($from, $to),
             'products' => $this->categoryChartPayload($customerId, $from, $to, 'product'),
-        ]);
+        ];
     }
 
-    public function chartsAttendances(): void
+    public function chartsAttendances(string $customerId, array $query): array
     {
-        ApiHelper::respondIfOptions();
-        ApiHelper::allowedMethodsGet();
-
-        $customerId = $this->customerId();
+        $this->query = $query;
         [$from, $to] = $this->dateRange();
 
-        ApiHelper::respond([
+        return [
             'customerApiId' => $customerId,
             'range' => $this->rangePayload($from, $to),
             'attendances' => $this->attendancesChartPayload($customerId, $from, $to),
-        ]);
+        ];
     }
 
-    public function chartsSales(): void
+    public function chartsSales(string $customerId, array $query): array
     {
-        ApiHelper::respondIfOptions();
-        ApiHelper::allowedMethodsGet();
-
-        $customerId = $this->customerId();
+        $this->query = $query;
         [$from, $to] = $this->dateRange();
 
-        ApiHelper::respond([
+        return [
             'customerApiId' => $customerId,
             'range' => $this->rangePayload($from, $to),
             'sales' => $this->salesChartPayload($customerId, $from, $to),
-        ]);
-    }
-
-    private function requiredString(array $payload, string $key): string
-    {
-        $value = isset($payload[$key]) ? trim((string) $payload[$key]) : '';
-        if ($value === '') {
-            ApiHelper::respond(['error' => "El campo {$key} es obligatorio"], 422);
-        }
-
-        return $value;
-    }
-
-    private function passwordMatches(string $plain, string $stored): bool
-    {
-        if ($stored === '') {
-            return false;
-        }
-
-        $info = password_get_info($stored);
-        if (($info['algo'] ?? 0) !== 0 && password_verify($plain, $stored)) {
-            return true;
-        }
-
-        if (hash_equals($stored, $plain)) {
-            return true;
-        }
-
-        $sha256Utf8Hex = $this->hashSha256Utf8Hex($plain);
-        return hash_equals(strtolower($stored), $sha256Utf8Hex);
-    }
-
-    private function hashSha256Utf8Hex(string $password): string
-    {
-        return hash('sha256', $password);
-    }
-
-    private function customerId(): string
-    {
-        $customerId = $GLOBALS['desktop_jwt_customer_id'] ?? '';
-        if ($customerId === '') {
-            ApiHelper::respond(['error' => 'Token sin customerId'], 401);
-        }
-
-        return (string) $customerId;
+        ];
     }
 
     private function dateRange(): array
     {
-        $range = strtolower(trim((string) ($_GET['range'] ?? 'today')));
+        $range = strtolower(trim((string) ($this->query['range'] ?? 'today')));
         $todayStart = strtotime(date('Y-m-d 00:00:00'));
         $todayEnd = strtotime(date('Y-m-d 23:59:59'));
 
         if ($range === 'custom') {
-            $from = isset($_GET['from']) ? strtotime((string) $_GET['from']) : false;
-            $to = isset($_GET['to']) ? strtotime((string) $_GET['to']) : false;
-            if ($from === false || $to === false) {
-                ApiHelper::respond(['error' => 'from y to son obligatorios para range=custom'], 422);
-            }
-            if ($from > $to) {
-                ApiHelper::respond(['error' => 'from no puede ser mayor que to'], 422);
-            }
-
+            $from = isset($this->query['from'])
+                ? strtotime((string) $this->query['from'])
+                : false;
+            $to = isset($this->query['to'])
+                ? strtotime((string) $this->query['to'])
+                : false;
             return [date('Y-m-d 00:00:00', $from), date('Y-m-d 23:59:59', $to)];
         }
 
@@ -795,8 +651,8 @@ class DesktopApiController extends Controller
 
     private function membershipSort(): array
     {
-        $sortBy = strtolower(trim((string) ($_GET['sortBy'] ?? 'expiration'), " \t\n\r\0\x0B+"));
-        $sortDirSql = strtolower(trim((string) ($_GET['sortDir'] ?? 'asc'))) === 'desc' ? 'DESC' : 'ASC';
+        $sortBy = strtolower(trim((string) ($this->query['sortBy'] ?? 'expiration'), " \t\n\r\0\x0B+"));
+        $sortDirSql = strtolower(trim((string) ($this->query['sortDir'] ?? 'asc'))) === 'desc' ? 'DESC' : 'ASC';
         $sortDirLabel = $sortDirSql === 'DESC' ? 'desc' : 'asc';
 
         if (in_array($sortBy, ['expiration', 'expiation'], true)) {
@@ -824,8 +680,8 @@ class DesktopApiController extends Controller
 
     private function usersSort(): array
     {
-        $sortBy = strtolower(trim((string) ($_GET['sortBy'] ?? 'fullname')));
-        $sortDir = strtolower(trim((string) ($_GET['sortDir'] ?? 'asc'))) === 'desc' ? 'DESC' : 'ASC';
+        $sortBy = strtolower(trim((string) ($this->query['sortBy'] ?? 'fullname')));
+        $sortDir = strtolower(trim((string) ($this->query['sortDir'] ?? 'asc'))) === 'desc' ? 'DESC' : 'ASC';
 
         $columns = [
             'fullname' => 'Fullname',
@@ -876,8 +732,8 @@ class DesktopApiController extends Controller
 
     private function queryValue(string $key, $default = null)
     {
-        if (array_key_exists($key, $_GET)) {
-            return $_GET[$key];
+        if (array_key_exists($key, $this->query)) {
+            return $this->query[$key];
         }
 
         $filters = $this->queryFilters();
@@ -887,18 +743,12 @@ class DesktopApiController extends Controller
 
     private function queryFilters(): array
     {
-        static $filters = null;
-
-        if ($filters !== null) {
-            return $filters;
-        }
-
         $filters = [];
-        if (!isset($_GET['filters'])) {
+        if (!isset($this->query['filters'])) {
             return $filters;
         }
 
-        $rawFilters = $_GET['filters'];
+        $rawFilters = $this->query['filters'];
         if (is_array($rawFilters)) {
             $filters = $rawFilters;
             return $filters;
@@ -942,7 +792,12 @@ class DesktopApiController extends Controller
 
     private function expiringMemberships(string $customerId, int $days): float
     {
-        return $this->scalar('SELECT COUNT(*) FROM ViewSubscriptions WHERE CustomerApiId = ? AND Expiration BETWEEN 1 AND ?', [$customerId, $days]);
+        return $this->scalar(
+            'SELECT COUNT(*)
+             FROM ViewSubscriptions
+             WHERE CustomerApiId = ? AND Expiration BETWEEN 1 AND ?',
+            [$customerId, $days],
+        );
     }
 
     private function lowStockCount(string $customerId, int $threshold): float
@@ -1272,8 +1127,28 @@ class DesktopApiController extends Controller
         );
 
         return [
-            'dailyTickets' => $this->completeDailySeries($from, $to, $dailySalesRows, ['tickets', 'cancelledTickets', 'income', 'totalDiscounted']),
-            'dailyCategories' => $this->completeDailySeries($from, $to, $dailyCategoryRows, ['memberships', 'membershipIncome', 'products', 'productIncome']),
+            'dailyTickets' => $this->completeDailySeries(
+                $from,
+                $to,
+                $dailySalesRows,
+                [
+                    'tickets',
+                    'cancelledTickets',
+                    'income',
+                    'totalDiscounted',
+                ],
+            ),
+            'dailyCategories' => $this->completeDailySeries(
+                $from,
+                $to,
+                $dailyCategoryRows,
+                [
+                    'memberships',
+                    'membershipIncome',
+                    'products',
+                    'productIncome',
+                ],
+            ),
         ];
     }
 
@@ -1421,8 +1296,18 @@ class DesktopApiController extends Controller
 
         return [
             'total' => $total,
-            'allowed' => $this->scalar("SELECT COUNT(*) FROM AttendancesDesktop a WHERE {$base} AND {$latestCondition} AND a.Active = 1", $params),
-            'denied' => $this->scalar("SELECT COUNT(*) FROM AttendancesDesktop a WHERE {$base} AND {$latestCondition} AND a.Active = 0", $params),
+            'allowed' => $this->scalar(
+                "SELECT COUNT(*)
+                 FROM AttendancesDesktop a
+                 WHERE {$base} AND {$latestCondition} AND a.Active = 1",
+                $params,
+            ),
+            'denied' => $this->scalar(
+                "SELECT COUNT(*)
+                 FROM AttendancesDesktop a
+                 WHERE {$base} AND {$latestCondition} AND a.Active = 0",
+                $params,
+            ),
             'rawAttempts' => $this->scalar("SELECT COUNT(*) FROM AttendancesDesktop a WHERE {$base}", $params),
             'reentryUsers' => $this->reentryUsersCount($customerId, $from, $to),
             'totalReentries' => $this->totalReentriesCount($customerId, $from, $to),
@@ -1447,8 +1332,18 @@ class DesktopApiController extends Controller
         return [
             'tickets' => $this->scalar("SELECT COUNT(*) FROM SaleTicketDesktop WHERE {$ticketWhere} AND Active = 1", $params),
             'cancelledTickets' => $this->scalar("SELECT COUNT(*) FROM SaleTicketDesktop WHERE {$ticketWhere} AND Active = 0", $params),
-            'income' => $this->scalar("SELECT COALESCE(SUM(TotalAmount), 0) FROM SaleTicketDesktop WHERE {$ticketWhere} AND Active = 1", $params),
-            'totalDiscounted' => $this->scalar("SELECT COALESCE(SUM(DiscountAmount), 0) FROM SaleTicketDesktop WHERE {$ticketWhere} AND Active = 1", $params),
+            'income' => $this->scalar(
+                "SELECT COALESCE(SUM(TotalAmount), 0)
+                 FROM SaleTicketDesktop
+                 WHERE {$ticketWhere} AND Active = 1",
+                $params,
+            ),
+            'totalDiscounted' => $this->scalar(
+                "SELECT COALESCE(SUM(DiscountAmount), 0)
+                 FROM SaleTicketDesktop
+                 WHERE {$ticketWhere} AND Active = 1",
+                $params,
+            ),
             'membershipTickets' => $this->scalar(
                 "SELECT COUNT(DISTINCT t.Id) FROM SaleTicketDesktop t JOIN SaleTicketItemDesktop i ON i.SaleTicketId = t.Id
                  WHERE t.CustomerApiId = ? AND t.Active = 1 AND COALESCE(t.IsDeleted, 0) = 0 AND COALESCE(i.IsDeleted, 0) = 0

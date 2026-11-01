@@ -39,6 +39,10 @@ $registerCustomerStats = require __DIR__ . '/../app/Modules/CustomerStats/servic
 $registerCustomerStats($container);
 $registerDownloads = require __DIR__ . '/../app/Modules/Downloads/services.php';
 $registerDownloads($container);
+$registerDesktopAccess = require __DIR__ . '/../app/Modules/DesktopAccess/services.php';
+$registerDesktopAccess($container);
+$registerDesktopReporting = require __DIR__ . '/../app/Modules/DesktopReporting/services.php';
+$registerDesktopReporting($container);
 $registerLicenses = require __DIR__ . '/../app/Modules/Licenses/services.php';
 $registerLicenses($container);
 $registerWhatsApp = require __DIR__ . '/../app/Modules/WhatsApp/services.php';

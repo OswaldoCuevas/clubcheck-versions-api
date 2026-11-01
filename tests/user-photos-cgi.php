@@ -6,6 +6,7 @@ if (PHP_SAPI !== 'cgi-fcgi' || !is_string($schema) || !preg_match('/^clubcheck_p
     exit;
 }
 require_once __DIR__ . '/../app/Controllers/UserPhotosController.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 
 class PhotoCgiDatabase extends Database
 {
@@ -45,15 +46,22 @@ try {
             exit;
         }
         if (in_array($_GET['report'] ?? '', ['memberships', 'membership-sales'], true)) {
-            require_once __DIR__ . '/../app/Controllers/DesktopApiController.php';
-            // Reutiliza el reporte real sin ejecutar constructores que conectan a datos operativos.
-            $reflection = new ReflectionClass(Controllers\DesktopApiController::class);
-            $report = $reflection->newInstanceWithoutConstructor();
-            $reflection->getProperty('db')->setValue($report, $db);
+            $report = new App\Modules\DesktopReporting\Repositories\DesktopReportingRepository(
+                $db,
+                new App\Services\MembershipSalesService($db),
+                new App\Services\UserPhotoService($db),
+            );
+            $customerId = App\Middleware\DesktopJwtMiddleware::getCurrentCustomerId();
+
             if ($_GET['report'] === 'membership-sales') {
-                $report->membershipSales();
+                App\Http\JsonResponse::send(
+                    $report->membershipSales($customerId, $_GET),
+                );
             }
-            $report->memberships();
+
+            App\Http\JsonResponse::send(
+                $report->memberships($customerId, $_GET),
+            );
         }
         $controller->read($_GET['userId'] ?? 'user-a');
     }

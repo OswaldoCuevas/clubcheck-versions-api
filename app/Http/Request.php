@@ -6,6 +6,12 @@ namespace App\Http;
 
 final class Request
 {
+    /** @return array<string, mixed> */
+    public static function queryParameters(): array
+    {
+        return $_GET;
+    }
+
     public static function query(string $key): ?string
     {
         $value = $_GET[$key] ?? null;

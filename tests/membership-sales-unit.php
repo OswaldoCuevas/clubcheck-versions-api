@@ -114,7 +114,8 @@ $reflection = new ReflectionClass($router);
 $routes = $reflection->getProperty('routes')->getValue($router);
 $matches = array_values(array_filter($routes, fn(array $route): bool => $route['uri'] === '/api/desktop/membership-sales'));
 checkSalesUnit(count($matches) === 1 && $matches[0]['method'] === 'GET'
-    && $matches[0]['controller'] === 'DesktopApiController' && $matches[0]['action'] === 'membershipSales'
+    && $matches[0]['controller'] === App\Modules\DesktopReporting\Controllers\DesktopReportController::class
+    && $matches[0]['action'] === 'membershipSales'
     && $matches[0]['middleware'] === ['desktop_jwt'], 'Route registration and desktop JWT protection');
 $jwt = new App\Services\JwtService('temporary-membership-sales-unit-secret');
 $middleware = new App\Middleware\DesktopJwtMiddleware($jwt);

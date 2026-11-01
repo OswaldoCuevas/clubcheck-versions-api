@@ -1,0 +1,23 @@
+{
+    "version": 1,
+    "controller": "App\\Modules\\DesktopReporting\\Controllers\\DesktopReportController",
+    "routeController": "App\\Modules\\DesktopReporting\\Controllers\\DesktopReportController",
+    "description": "Contratos HTTP basales de DesktopApiController antes de migrarlo.",
+    "endpoints": [
+        {"id":"desktop.login","controller":"App\\Modules\\DesktopAccess\\Controllers\\DesktopLoginController","routeController":"App\\Modules\\DesktopAccess\\Controllers\\DesktopLoginController","controllerMethod":"login","routeMiddleware":[],"authenticated":false,"request":{"method":"POST","path":"/api/desktop/login","options":{"json":{}}},"expected":{"status":422,"keys":["error"]}},
+        {"id":"desktop.dashboard","controllerMethod":"dashboard","routeMiddleware":["desktop_jwt"],"authenticated":true,"request":{"method":"GET","path":"/api/desktop/dashboard"},"expected":{"status":200,"keys":["customerApiId","range","members","memberships","products","attendances","sales"]}},
+        {"id":"desktop.users","controllerMethod":"users","routeMiddleware":["desktop_jwt"],"authenticated":true,"request":{"method":"GET","path":"/api/desktop/users"},"expected":{"status":200,"keys":["summary","members"]}},
+        {"id":"desktop.memberships","controllerMethod":"memberships","routeMiddleware":["desktop_jwt"],"authenticated":true,"request":{"method":"GET","path":"/api/desktop/memberships"},"expected":{"status":200,"keys":["summary","memberships"]}},
+        {"id":"desktop.membership-sales","controllerMethod":"membershipSales","routeMiddleware":["desktop_jwt"],"authenticated":true,"request":{"method":"GET","path":"/api/desktop/membership-sales"},"expected":{"status":200,"keys":["summary","byPlan","items","pagination"]}},
+        {"id":"desktop.products","controllerMethod":"products","routeMiddleware":["desktop_jwt"],"authenticated":true,"request":{"method":"GET","path":"/api/desktop/products"},"expected":{"status":200,"keys":["range","filters","summary","products","stockHistory"]}},
+        {"id":"desktop.attendances","controllerMethod":"attendances","routeMiddleware":["desktop_jwt"],"authenticated":true,"request":{"method":"GET","path":"/api/desktop/attendances"},"expected":{"status":200,"keys":["range","filters","summary","attendances","memberAccess"]}},
+        {"id":"desktop.sales","controllerMethod":"sales","routeMiddleware":["desktop_jwt"],"authenticated":true,"request":{"method":"GET","path":"/api/desktop/sales"},"expected":{"status":200,"keys":["range","summary","cashRegisters"]}},
+        {"id":"desktop.admins","controllerMethod":"admins","routeMiddleware":["desktop_jwt"],"authenticated":true,"request":{"method":"GET","path":"/api/desktop/admins"},"expected":{"status":200,"keys":["range","admins","history"]}},
+        {"id":"desktop.charts.overview","controllerMethod":"chartsOverview","routeMiddleware":["desktop_jwt"],"authenticated":true,"request":{"method":"GET","path":"/api/desktop/charts"},"expected":{"status":200,"keys":["customerApiId","range","users","memberships","products","attendances","sales"]}},
+        {"id":"desktop.charts.users","controllerMethod":"chartsUsers","routeMiddleware":["desktop_jwt"],"authenticated":true,"request":{"method":"GET","path":"/api/desktop/charts/users"},"expected":{"status":200,"keys":["customerApiId","range","users"]}},
+        {"id":"desktop.charts.memberships","controllerMethod":"chartsMemberships","routeMiddleware":["desktop_jwt"],"authenticated":true,"request":{"method":"GET","path":"/api/desktop/charts/memberships"},"expected":{"status":200,"keys":["customerApiId","range","memberships"]}},
+        {"id":"desktop.charts.products","controllerMethod":"chartsProducts","routeMiddleware":["desktop_jwt"],"authenticated":true,"request":{"method":"GET","path":"/api/desktop/charts/products"},"expected":{"status":200,"keys":["customerApiId","range","products"]}},
+        {"id":"desktop.charts.attendances","controllerMethod":"chartsAttendances","routeMiddleware":["desktop_jwt"],"authenticated":true,"request":{"method":"GET","path":"/api/desktop/charts/attendances"},"expected":{"status":200,"keys":["customerApiId","range","attendances"]}},
+        {"id":"desktop.charts.sales","controllerMethod":"chartsSales","routeMiddleware":["desktop_jwt"],"authenticated":true,"request":{"method":"GET","path":"/api/desktop/charts/sales"},"expected":{"status":200,"keys":["customerApiId","range","sales"]}}
+    ]
+}
