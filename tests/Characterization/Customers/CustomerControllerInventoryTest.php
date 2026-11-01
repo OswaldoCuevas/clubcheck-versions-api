@@ -92,6 +92,8 @@ final class CustomerControllerInventoryTest extends CustomerHttpTestCase
             '/api/customers/customer-test-1' => '/api/customers/:customerId',
             '/api/customers/messages-sends-at-month/customer-test-1'
                 => '/api/customers/messages-sends-at-month/:customerId',
+            '/api/customers/announcements/announcement-missing/viewed'
+                => '/api/customers/announcements/:id/viewed',
             default => $path,
         };
     }

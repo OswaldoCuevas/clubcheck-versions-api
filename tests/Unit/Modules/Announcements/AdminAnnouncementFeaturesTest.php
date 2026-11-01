@@ -8,6 +8,7 @@ use App\Exceptions\ApiErrorCode;
 use App\Exceptions\ApiException;
 use App\Modules\Announcements\Contracts\IAnnouncementRepository;
 use App\Modules\Announcements\Contracts\ICurrentUserProvider;
+use App\Modules\Announcements\Domain\AnnouncementWritePolicy;
 use App\Modules\Announcements\Features\ActivateAnnouncement\Command as ActivateCommand;
 use App\Modules\Announcements\Features\ActivateAnnouncement\Handler as ActivateHandler;
 use App\Modules\Announcements\Features\DeleteAnnouncement\Command as DeleteCommand;
@@ -52,12 +53,37 @@ final class FakeAnnouncementRepository implements IAnnouncementRepository
         }
         $this->savedPayload = $data;
         $this->savedBy = $username;
-        return ['id' => $data['id'] ?? 'generated'];
+        return $data;
     }
 
     public function find(string $id): ?array
     {
         return $this->found;
+    }
+
+    public function findPendingForCustomer(string $customerId): ?array
+    {
+        return null;
+    }
+
+    public function findActive(): ?array
+    {
+        return null;
+    }
+
+    public function customerClientVersion(string $customerId): ?string
+    {
+        return null;
+    }
+
+    public function recordView(
+        string $announcementId,
+        string $customerId,
+        ?string $clientVersion,
+        ?string $ipAddress,
+        ?string $userAgent,
+    ): void
+    {
     }
 
     public function viewsForAnnouncement(string $id): array
@@ -119,23 +145,44 @@ final class AdminAnnouncementFeaturesTest extends TestCase
     public function test_save_command_passes_payload_and_authenticated_username(): void
     {
         $repository = new FakeAnnouncementRepository();
-        $handler = new SaveHandler($repository, new FakeCurrentUserProvider(['username' => 'admin']));
+        $handler = new SaveHandler(
+            $repository,
+            new FakeCurrentUserProvider(['username' => 'admin']),
+            new AnnouncementWritePolicy(),
+        );
+        $result = $handler->handle(new SaveCommand([
+            'id' => ' Announcement One ',
+            'version' => ' 1.0 ',
+            'title' => ' Anuncio ',
+            'slides' => [
+                [
+                    'title' => ' Paso 1 ',
+                    'text' => ' Contenido ',
+                ],
+            ],
+        ]));
 
-        $result = $handler->handle(new SaveCommand(['id' => 'announcement-one']));
-
-        self::assertSame(['id' => 'announcement-one'], $repository->savedPayload);
+        self::assertSame('announcement-one', $repository->savedPayload['id']);
+        self::assertSame('1.0', $repository->savedPayload['version']);
+        self::assertSame('Anuncio', $repository->savedPayload['title']);
+        self::assertSame('Paso 1', $repository->savedPayload['slides'][0]['title']);
         self::assertSame('admin', $repository->savedBy);
-        self::assertSame(['id' => 'announcement-one'], $result);
+        self::assertSame($repository->savedPayload, $result);
     }
 
-    public function test_save_maps_model_validation_to_a_controlled_422_error(): void
+    public function test_save_maps_business_validation_to_a_controlled_422_error(): void
     {
         $repository = new FakeAnnouncementRepository();
-        $repository->saveException = new InvalidArgumentException('Version y titulo son obligatorios.');
-        $handler = new SaveHandler($repository, new FakeCurrentUserProvider(['username' => 'admin']));
+        $handler = new SaveHandler(
+            $repository,
+            new FakeCurrentUserProvider(['username' => 'admin']),
+            new AnnouncementWritePolicy(),
+        );
 
         $this->assertApiError(
-            static fn () => $handler->handle(new SaveCommand([])),
+            static fn () => $handler->handle(new SaveCommand([
+                'slides' => [['title' => 'Paso 1']],
+            ])),
             ApiErrorCode::AnnouncementValidationFailed,
             422,
             'Version y titulo son obligatorios.',
@@ -216,7 +263,8 @@ final class AdminAnnouncementFeaturesTest extends TestCase
         ApiErrorCode $code,
         int $status,
         string $message,
-    ): void {
+    ): void
+    {
         try {
             $operation();
             self::fail('Se esperaba ApiException.');

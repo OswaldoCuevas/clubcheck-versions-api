@@ -299,6 +299,57 @@
                 "status": 422,
                 "jsonSubset": {"error": "El parámetro version es obligatorio"}
             }
+        },
+        {
+            "id": "announcements.current.empty",
+            "name": "current devuelve que no hay anuncio activo",
+            "controller": "App\\Modules\\Announcements\\Controllers\\AnnouncementController",
+            "routeController": "App\\Modules\\Announcements\\Controllers\\AnnouncementController",
+            "controllerMethod": "current",
+            "routeMiddleware": ["customer_jwt"],
+            "authenticated": true,
+            "request": {
+                "method": "GET",
+                "path": "/api/customers/announcements/current"
+            },
+            "expected": {
+                "status": 200,
+                "jsonSubset": {"hasAnnouncement": false, "announcement": null}
+            }
+        },
+        {
+            "id": "announcements.viewed.missing",
+            "name": "viewed rechaza un anuncio inexistente",
+            "controller": "App\\Modules\\Announcements\\Controllers\\AnnouncementController",
+            "routeController": "App\\Modules\\Announcements\\Controllers\\AnnouncementController",
+            "controllerMethod": "viewed",
+            "routeMiddleware": ["customer_jwt"],
+            "authenticated": true,
+            "request": {
+                "method": "POST",
+                "path": "/api/customers/announcements/announcement-missing/viewed"
+            },
+            "expected": {
+                "status": 404,
+                "jsonSubset": {"error": "Anuncio no encontrado"}
+            }
+        },
+        {
+            "id": "announcements.viewed-current.empty",
+            "name": "viewedCurrent rechaza cuando no hay anuncio activo",
+            "controller": "App\\Modules\\Announcements\\Controllers\\AnnouncementController",
+            "routeController": "App\\Modules\\Announcements\\Controllers\\AnnouncementController",
+            "controllerMethod": "viewedCurrent",
+            "routeMiddleware": ["customer_jwt"],
+            "authenticated": true,
+            "request": {
+                "method": "POST",
+                "path": "/api/customers/announcements/viewed"
+            },
+            "expected": {
+                "status": 404,
+                "jsonSubset": {"error": "No hay anuncio activo para este cliente"}
+            }
         }
     ]
 }

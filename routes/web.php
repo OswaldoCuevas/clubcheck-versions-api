@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Announcements\Controllers\AdminAnnouncementController;
+use App\Modules\Announcements\Controllers\AnnouncementController;
 use App\Modules\Admin\Controllers\AdminDashboardController;
 use App\Modules\ApiDocs\Controllers\AdminApiDocsController;
 use App\Modules\CustomerAccess\Controllers\AdminCustomerAccessController;
@@ -73,9 +74,9 @@ $router->post('/api/customers/push-tokens/unregister', 'PushNotificationsControl
 $router->post('/api/customers/permission-requests', 'PermissionRequestsController', 'create', ['customer_jwt']);
 $router->get('/api/customers/permission-requests/:id', 'PermissionRequestsController', 'status', ['customer_jwt']);
 $router->post('/api/customers/permission-requests/:id/cancel', 'PermissionRequestsController', 'cancel', ['customer_jwt']);
-$router->get('/api/customers/announcements/current', 'AnnouncementsController', 'current', ['customer_jwt']);
-$router->post('/api/customers/announcements/viewed', 'AnnouncementsController', 'viewedCurrent', ['customer_jwt']);
-$router->post('/api/customers/announcements/:id/viewed', 'AnnouncementsController', 'viewed', ['customer_jwt']);
+$router->get('/api/customers/announcements/current', AnnouncementController::class, 'current', ['customer_jwt']);
+$router->post('/api/customers/announcements/viewed', AnnouncementController::class, 'viewedCurrent', ['customer_jwt']);
+$router->post('/api/customers/announcements/:id/viewed', AnnouncementController::class, 'viewed', ['customer_jwt']);
 $router->post('/api/customers/desktop/pull', CustomerDesktopSyncController::class, 'pullDesktop', ['customer_jwt']);
 $router->post('/api/customers/desktop/push', CustomerDesktopSyncController::class, 'pushDesktop', ['customer_jwt']);
 $router->post('/api/customers/desktop/users/:userId/photo', 'UserPhotosController', 'upload', ['customer_jwt']);

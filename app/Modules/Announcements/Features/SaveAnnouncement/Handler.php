@@ -8,6 +8,7 @@ use App\Exceptions\ApiErrorCode;
 use App\Exceptions\ApiException;
 use App\Modules\Announcements\Contracts\IAnnouncementRepository;
 use App\Modules\Announcements\Contracts\ICurrentUserProvider;
+use App\Modules\Announcements\Domain\AnnouncementWritePolicy;
 use InvalidArgumentException;
 use Throwable;
 
@@ -16,6 +17,7 @@ final readonly class Handler
     public function __construct(
         private IAnnouncementRepository $announcements,
         private ICurrentUserProvider $currentUser,
+        private AnnouncementWritePolicy $policy,
     ) {
     }
 
@@ -23,7 +25,12 @@ final readonly class Handler
     public function handle(Command $command): array
     {
         try {
-            return $this->announcements->save($command->payload, $this->currentUser->username());
+            $announcement = $this->policy->normalize($command->payload);
+
+            return $this->announcements->save(
+                $announcement,
+                $this->currentUser->username(),
+            );
         } catch (InvalidArgumentException $exception) {
             throw ApiException::fromErrorCode(
                 ApiErrorCode::AnnouncementValidationFailed,

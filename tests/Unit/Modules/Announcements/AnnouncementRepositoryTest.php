@@ -105,22 +105,26 @@ final class AnnouncementRepositoryTest extends TestCase
         self::assertSame(4, $announcements[0]['viewsCount']);
     }
 
-    public function test_save_inserts_a_normalized_announcement_and_commits(): void
+    public function test_save_persists_a_normalized_announcement_and_commits(): void
     {
         $database = new FakeAnnouncementDatabase();
         $database->oneRows = [null, $this->row(['Id' => 'release-1', 'IsActive' => 1])];
         $repository = new AnnouncementRepository($database);
 
         $announcement = $repository->save([
-            'id' => ' Release 1 ',
-            'version' => ' 2.0 ',
-            'title' => ' Nuevo anuncio ',
-            'subtitle' => ' ',
+            'id' => 'release-1',
+            'version' => '2.0',
+            'title' => 'Nuevo anuncio',
+            'subtitle' => null,
+            'minClientVersion' => null,
             'isActive' => true,
             'slides' => [
-                'ignored',
-                ['title' => ' Paso 1 ', 'text' => ' Contenido '],
-                ['title' => '', 'text' => ''],
+                [
+                    'title' => 'Paso 1',
+                    'text' => 'Contenido',
+                    'imageUrl' => '',
+                    'imageAlt' => '',
+                ],
             ],
         ], 'admin');
 
@@ -157,7 +161,17 @@ final class AnnouncementRepositoryTest extends TestCase
                 'id' => 'broken',
                 'version' => '1',
                 'title' => 'Broken',
-                'slides' => [['title' => 'Slide']],
+                'subtitle' => null,
+                'minClientVersion' => null,
+                'isActive' => false,
+                'slides' => [
+                    [
+                        'title' => 'Slide',
+                        'text' => '',
+                        'imageUrl' => '',
+                        'imageAlt' => '',
+                    ],
+                ],
             ]);
             self::fail('Expected the insert failure to be rethrown.');
         } catch (RuntimeException $exception) {
@@ -187,22 +201,52 @@ final class AnnouncementRepositoryTest extends TestCase
         self::assertSame('admin', $database->updates[0]['data']['UpdatedBy']);
     }
 
-    public function test_save_validates_before_opening_a_transaction(): void
+    public function test_customer_queries_map_candidates_and_client_version(): void
     {
         $database = new FakeAnnouncementDatabase();
+        $database->oneRows = [
+            $this->row(['Id' => 'pending-announcement']),
+            $this->row(['Id' => 'active-announcement']),
+            ['ClientVersion' => '2.5.0'],
+        ];
+        $repository = new AnnouncementRepository($database);
 
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('Debes agregar al menos una seccion al anuncio.');
+        $pending = $repository->findPendingForCustomer('customer-1');
+        $active = $repository->findActive();
+        $clientVersion = $repository->customerClientVersion('customer-1');
 
-        try {
-            (new AnnouncementRepository($database))->save([
-                'version' => '1',
-                'title' => 'Sin diapositivas',
-                'slides' => [],
-            ]);
-        } finally {
-            self::assertSame(0, $database->begins);
-        }
+        self::assertSame('pending-announcement', $pending['id']);
+        self::assertSame('active-announcement', $active['id']);
+        self::assertSame('2.5.0', $clientVersion);
+    }
+
+    public function test_record_view_executes_the_idempotent_insert(): void
+    {
+        $database = new FakeAnnouncementDatabase();
+        $repository = new AnnouncementRepository($database);
+
+        $repository->recordView(
+            'announcement-1',
+            'customer-1',
+            '2.5.0',
+            '127.0.0.1',
+            'Test Agent',
+        );
+
+        self::assertStringContainsString(
+            'ON DUPLICATE KEY UPDATE ViewedAt = ViewedAt',
+            $database->executions[0]['sql'],
+        );
+        self::assertSame(
+            [
+                'announcement-1',
+                'customer-1',
+                '2.5.0',
+                '127.0.0.1',
+                'Test Agent',
+            ],
+            $database->executions[0]['params'],
+        );
     }
 
     /** @param array<string, mixed> $overrides @return array<string, mixed> */

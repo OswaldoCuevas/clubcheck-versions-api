@@ -5,14 +5,15 @@ declare(strict_types=1);
 namespace App\Modules\Announcements\Controllers;
 
 use App\Application\Contracts\IMediator;
+use App\Http\JsonPayload;
 use App\Http\JsonResponse;
 use App\Http\ViewResponse;
-use App\Modules\Announcements\Controllers\Requests\SaveAnnouncementRequest;
 use App\Modules\Announcements\Controllers\Requests\UploadAnnouncementImageRequest;
 use App\Modules\Announcements\Features\ActivateAnnouncement\Command as ActivateAnnouncementCommand;
 use App\Modules\Announcements\Features\DeleteAnnouncement\Command as DeleteAnnouncementCommand;
 use App\Modules\Announcements\Features\GetAnnouncementViews\Query as GetAnnouncementViewsQuery;
 use App\Modules\Announcements\Features\ListAnnouncements\Query as ListAnnouncementsQuery;
+use App\Modules\Announcements\Features\SaveAnnouncement\Command as SaveAnnouncementCommand;
 use App\Modules\Announcements\Features\ShowAnnouncementsPage\Query as ShowAnnouncementsPageQuery;
 
 final readonly class AdminAnnouncementController
@@ -35,8 +36,9 @@ final readonly class AdminAnnouncementController
 
     public function save(): void
     {
-        $request = SaveAnnouncementRequest::fromJsonBody();
-        $announcement = $this->mediator->send($request->toCommand());
+        $announcement = $this->mediator->send(
+            new SaveAnnouncementCommand(JsonPayload::parse()),
+        );
 
         JsonResponse::send([
             'success' => true,

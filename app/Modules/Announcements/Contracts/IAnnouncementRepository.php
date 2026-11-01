@@ -15,6 +15,22 @@ interface IAnnouncementRepository
     /** @return array<string, mixed>|null */
     public function find(string $id): ?array;
 
+    /** @return array<string, mixed>|null */
+    public function findPendingForCustomer(string $customerId): ?array;
+
+    /** @return array<string, mixed>|null */
+    public function findActive(): ?array;
+
+    public function customerClientVersion(string $customerId): ?string;
+
+    public function recordView(
+        string $announcementId,
+        string $customerId,
+        ?string $clientVersion,
+        ?string $ipAddress,
+        ?string $userAgent,
+    ): void;
+
     /** @return list<array<string, mixed>> */
     public function viewsForAnnouncement(string $id): array;
 

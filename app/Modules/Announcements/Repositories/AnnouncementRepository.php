@@ -7,7 +7,7 @@ namespace App\Modules\Announcements\Repositories;
 use App\Infrastructure\Database\IDatabaseConnection;
 use App\Modules\Announcements\Contracts\IAnnouncementRepository;
 
-/** Persistencia de anuncios administrativos. */
+/** Persistencia de anuncios. */
 final readonly class AnnouncementRepository implements IAnnouncementRepository
 {
     private const TABLE = 'Announcements';
@@ -33,40 +33,23 @@ final readonly class AnnouncementRepository implements IAnnouncementRepository
 
     public function save(array $data, ?string $username = null): array
     {
-        $id = $this->slug((string) ($data['id'] ?? ''));
-        if ($id === '') {
-            $id = $this->slug(($data['title'] ?? 'anuncio') . '-' . ($data['version'] ?? date('YmdHis')));
-        }
-
-        $slides = $this->normalizeSlides($data['slides'] ?? []);
-        if ($slides === []) {
-            throw new \InvalidArgumentException('Debes agregar al menos una seccion al anuncio.');
-        }
-
+        $id = (string) $data['id'];
         $isActive = !empty($data['isActive']) ? 1 : 0;
         $now = date('Y-m-d H:i:s');
         $payload = [
             'Id' => $id,
-            'Version' => trim((string) ($data['version'] ?? '')),
-            'Title' => trim((string) ($data['title'] ?? '')),
-            'Subtitle' => trim((string) ($data['subtitle'] ?? '')),
-            'MinClientVersion' => trim((string) ($data['minClientVersion'] ?? '')),
-            'SlidesJson' => json_encode($slides, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'Version' => $data['version'],
+            'Title' => $data['title'],
+            'Subtitle' => $data['subtitle'],
+            'MinClientVersion' => $data['minClientVersion'],
+            'SlidesJson' => json_encode(
+                $data['slides'],
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+            ),
             'IsActive' => $isActive,
             'UpdatedAt' => $now,
             'UpdatedBy' => $username,
         ];
-
-        if ($payload['Version'] === '' || $payload['Title'] === '') {
-            throw new \InvalidArgumentException('Version y titulo son obligatorios.');
-        }
-
-        if ($payload['Subtitle'] === '') {
-            $payload['Subtitle'] = null;
-        }
-        if ($payload['MinClientVersion'] === '') {
-            $payload['MinClientVersion'] = null;
-        }
 
         $this->db->begin();
         try {
@@ -104,6 +87,73 @@ final readonly class AnnouncementRepository implements IAnnouncementRepository
         );
 
         return $row === null ? null : $this->mapAnnouncement($row);
+    }
+
+    public function findPendingForCustomer(string $customerId): ?array
+    {
+        $row = $this->db->fetchOne(
+            'SELECT a.*
+             FROM ' . self::TABLE . ' a
+             LEFT JOIN ' . self::VIEWS_TABLE . ' v
+               ON v.AnnouncementId = a.Id
+              AND v.CustomerId = ?
+             WHERE a.IsActive = 1
+               AND v.Id IS NULL
+             LIMIT 1',
+            [$customerId],
+        );
+
+        return $row === null ? null : $this->mapAnnouncement($row);
+    }
+
+    public function findActive(): ?array
+    {
+        $row = $this->db->fetchOne(
+            'SELECT *
+             FROM ' . self::TABLE . '
+             WHERE IsActive = 1
+             LIMIT 1',
+        );
+
+        return $row === null ? null : $this->mapAnnouncement($row);
+    }
+
+    public function customerClientVersion(string $customerId): ?string
+    {
+        $customer = $this->db->fetchOne(
+            'SELECT ClientVersion
+             FROM Customers
+             WHERE Id = ?
+             LIMIT 1',
+            [$customerId],
+        );
+
+        return isset($customer['ClientVersion'])
+            ? (string) $customer['ClientVersion']
+            : null;
+    }
+
+    public function recordView(
+        string $announcementId,
+        string $customerId,
+        ?string $clientVersion,
+        ?string $ipAddress,
+        ?string $userAgent,
+    ): void
+    {
+        $this->db->execute(
+            'INSERT INTO ' . self::VIEWS_TABLE . '
+                (AnnouncementId, CustomerId, ClientVersion, IpAddress, UserAgent)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE ViewedAt = ViewedAt',
+            [
+                $announcementId,
+                $customerId,
+                $clientVersion,
+                $ipAddress,
+                $userAgent,
+            ],
+        );
     }
 
     public function viewsForAnnouncement(string $id): array
@@ -158,32 +208,6 @@ final readonly class AnnouncementRepository implements IAnnouncementRepository
         return $this->db->delete(self::TABLE, 'Id = ?', [$id], 1);
     }
 
-    /** @param list<mixed> $slides @return list<array<string, string>> */
-    private function normalizeSlides(array $slides): array
-    {
-        $normalized = [];
-        foreach ($slides as $slide) {
-            if (!is_array($slide)) {
-                continue;
-            }
-
-            $title = trim((string) ($slide['title'] ?? ''));
-            $text = trim((string) ($slide['text'] ?? ''));
-            if ($title === '' && $text === '') {
-                continue;
-            }
-
-            $normalized[] = [
-                'title' => $title,
-                'text' => $text,
-                'imageUrl' => trim((string) ($slide['imageUrl'] ?? '')),
-                'imageAlt' => trim((string) ($slide['imageAlt'] ?? '')),
-            ];
-        }
-
-        return $normalized;
-    }
-
     /** @param array<string, mixed> $row @return array<string, mixed> */
     private function mapAnnouncement(array $row): array
     {
@@ -206,12 +230,4 @@ final readonly class AnnouncementRepository implements IAnnouncementRepository
         ];
     }
 
-    private function slug(string $value): string
-    {
-        $value = strtolower(trim($value));
-        $value = preg_replace('/[^a-z0-9._-]+/', '-', $value);
-        $value = trim((string) $value, '-');
-
-        return substr($value, 0, 120);
-    }
 }
