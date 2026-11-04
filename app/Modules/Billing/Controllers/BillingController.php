@@ -8,6 +8,7 @@ use App\Application\Contracts\IMediator;
 use App\Http\JsonPayload;
 use App\Http\JsonResponse;
 use App\Modules\Billing\Features\AddCard\Command as AddCardCommand;
+use App\Modules\Billing\Features\ChangeActivePlan\Command as ChangeActivePlanCommand;
 use App\Modules\Billing\Features\ChangePlan\Command as ChangePlanCommand;
 use App\Modules\Billing\Features\CreateCustomer\Command as CreateCustomerCommand;
 use App\Modules\Billing\Features\CreateSubscription\Command as CreateSubscriptionCommand;
@@ -171,6 +172,18 @@ final readonly class BillingController
                 new ChangePlanCommand(
                     $this->context->customerId(),
                     $subscriptionId,
+                    JsonPayload::parse(),
+                ),
+            ),
+        );
+    }
+
+    public function changeActivePlan(): void
+    {
+        JsonResponse::sendResult(
+            $this->mediator->send(
+                new ChangeActivePlanCommand(
+                    $this->context->customerId(),
                     JsonPayload::parse(),
                 ),
             ),

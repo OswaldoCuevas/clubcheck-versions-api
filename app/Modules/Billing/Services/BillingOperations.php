@@ -227,6 +227,46 @@ final readonly class BillingOperations
         return $this->result($result);
     }
 
+    public function changeActivePlan(string $customerId, array $payload): JsonResult
+    {
+        $priceId = $this->priceId($payload);
+        if ($priceId === null) {
+            return $this->priceRequired();
+        }
+
+        $customer = $this->customers->customer($customerId);
+        if ($customer === null || empty($customer['billingId'])) {
+            return new JsonResult([
+                'success' => false,
+                'error' => 'No se encontró información del cliente',
+            ], 401);
+        }
+
+        $active = $this->billing->execute(
+            'getActiveSubscription',
+            [$customer['billingId']],
+        );
+        if (!($active['success'] ?? false)) {
+            return $this->result($active);
+        }
+
+        $subscriptionId = $active['subscription']['id'] ?? null;
+        if (!($active['has_subscription'] ?? false) || empty($subscriptionId)) {
+            return new JsonResult([
+                'success' => false,
+                'error' => 'No hay suscripción activa',
+            ], 404);
+        }
+
+        $payload['price_id'] = $priceId;
+
+        return $this->changePlan(
+            $customerId,
+            (string) $subscriptionId,
+            $payload,
+        );
+    }
+
     public function refreshLicense(string $customerId, array $payload): JsonResult
     {
         if (!isset($payload['subscription_date'])) {

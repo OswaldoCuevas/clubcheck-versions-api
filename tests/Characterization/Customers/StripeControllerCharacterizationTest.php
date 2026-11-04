@@ -110,6 +110,14 @@ final class StripeControllerCharacterizationTest extends CustomerHttpTestCase
                 400,
                 ['success' => false, 'error' => 'Se requiere price_id o plan_lookup_key válido'],
             ],
+            'change active plan' => [
+                'stripe-change-active-plan-price-required',
+                'PUT',
+                '/api/customers/stripe/subscriptions/active/plan',
+                [],
+                400,
+                ['success' => false, 'error' => 'Se requiere price_id o plan_lookup_key válido'],
+            ],
             'refresh license' => [
                 'stripe-refresh-date-required',
                 'POST',

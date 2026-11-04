@@ -268,6 +268,7 @@ $router->put('/api/customers/stripe/customers/:customerId/cards/:cardId/default'
 $router->post('/api/customers/stripe/customers/:customerId/subscriptions', BillingController::class, 'createSubscription', ['customer_jwt']);
 $router->get('/api/customers/stripe/customers/:customerId/subscriptions/active', BillingController::class, 'getActiveSubscription', ['customer_jwt']);
 $router->put('/api/customers/stripe/subscriptions/:subscriptionId', BillingController::class, 'updateSubscription', ['customer_jwt']);
+$router->put('/api/customers/stripe/subscriptions/active/plan', BillingController::class, 'changeActivePlan', ['customer_jwt']);
 $router->put('/api/customers/stripe/subscriptions/:subscriptionId/plan', BillingController::class, 'changePlan', ['customer_jwt']);
 $router->post('/api/customers/stripe/license/refresh', BillingController::class, 'refreshLicense', ['customer_jwt']);
 
