@@ -68,7 +68,7 @@ final class Request
 
     public static function absoluteBaseUrl(): string
     {
-        return UrlHelper::absoluteUrl('');
+        return rtrim(UrlHelper::absoluteUrl(''), '/');
     }
 
     /** @return array<string, mixed> */
