@@ -10,11 +10,12 @@ use App\Exceptions\ApiException;
 final class JsonPayload
 {
     /** @return array<string, mixed> */
-    public static function parse(): array
+    public static function parse(?string &$rawPayload = null): array
     {
-        $rawPayload = file_get_contents('php://input');
+        $input = file_get_contents('php://input');
+        $rawPayload = $input === false ? '' : $input;
 
-        if ($rawPayload === false || $rawPayload === '') {
+        if ($rawPayload === '') {
             return [];
         }
 

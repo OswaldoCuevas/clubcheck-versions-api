@@ -7,10 +7,13 @@ use App\Modules\WhatsApp\Contracts\IMessageLogRepository;
 use App\Modules\WhatsApp\Contracts\IWhatsAppCustomerRepository;
 use App\Modules\WhatsApp\Contracts\IWhatsAppGateway;
 use App\Modules\WhatsApp\Contracts\IWhatsAppPermitChecker;
+use App\Modules\WhatsApp\Contracts\IWhatsAppProspectRepository;
 use App\Modules\WhatsApp\Repositories\WhatsAppAdminRepository;
 use App\Modules\WhatsApp\Repositories\MessageLogRepository;
+use App\Modules\WhatsApp\Repositories\WhatsAppProspectRepository;
 use App\Modules\WhatsApp\Repositories\WhatsAppCustomerRepository;
 use App\Modules\WhatsApp\Services\CustomerPermitChecker;
+use App\Modules\WhatsApp\Services\MetaWhatsAppSettings;
 use App\Modules\WhatsApp\Services\WhatsAppServiceGateway;
 use Core\Container;
 
@@ -21,4 +24,13 @@ return static function (Container $container): void
     $container->bind(IWhatsAppCustomerRepository::class, WhatsAppCustomerRepository::class);
     $container->bind(IWhatsAppGateway::class, WhatsAppServiceGateway::class);
     $container->bind(IWhatsAppPermitChecker::class, CustomerPermitChecker::class);
+    $container->bind(IWhatsAppProspectRepository::class, WhatsAppProspectRepository::class);
+
+    $configuration = require __DIR__ . '/../../../config/meta_whatsapp.php';
+    $container->singleton(
+        MetaWhatsAppSettings::class,
+        static fn (Container $container): MetaWhatsAppSettings => new MetaWhatsAppSettings(
+            $configuration,
+        ),
+    );
 };

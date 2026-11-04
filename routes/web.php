@@ -29,6 +29,8 @@ use App\Modules\Tools\Controllers\ToolsController;
 use App\Modules\UserPhotos\Controllers\UserPhotoController;
 use App\Modules\WhatsApp\Controllers\AdminWhatsAppController;
 use App\Modules\WhatsApp\Controllers\CustomerWhatsAppController;
+use App\Modules\WhatsApp\Controllers\MetaWhatsAppWebhookController;
+use App\Modules\WhatsApp\Controllers\WhatsAppProspectController;
 use Core\Router;
 
 $container = require __DIR__ . '/../config/services.php';
@@ -142,6 +144,10 @@ $router->post('/api/customers/isapi/commands/:id/result', IsapiController::class
 // modular está disponible en Modules/WhatsApp/Controllers/MessageLogController.
 
 // ==================== WHATSAPP ====================
+// Webhook público de WhatsApp Business Cloud API (validado por firma Meta).
+$router->get('/api/webhooks/whatsapp', MetaWhatsAppWebhookController::class, 'verify');
+$router->post('/api/webhooks/whatsapp', MetaWhatsAppWebhookController::class, 'receive');
+
 // Estado del servicio
 $router->get('/api/customers/whatsapp/status', CustomerWhatsAppController::class, 'status');
 $router->get('/api/customers/whatsapp/monthly-count/:customerApiId', CustomerWhatsAppController::class, 'monthlyCount', ['customer_jwt']);
@@ -205,6 +211,11 @@ $router->post('/admin/api/whatsapp/:id/register', AdminWhatsAppController::class
 $router->get('/admin/api/whatsapp/:id/status', AdminWhatsAppController::class, 'whatsappStatusJson', $adminMiddleware);
 $router->delete('/admin/api/whatsapp/:id', AdminWhatsAppController::class, 'whatsappDeleteJson', $adminMiddleware);
 $router->post('/admin/api/whatsapp', AdminWhatsAppController::class, 'whatsappCreateJson', $adminMiddleware);
+$router->get('/admin/api/whatsapp/prospects', WhatsAppProspectController::class, 'index', $adminMiddleware);
+$router->get('/admin/api/whatsapp/prospects/:id', WhatsAppProspectController::class, 'show', $adminMiddleware);
+$router->patch('/admin/api/whatsapp/prospects/:id/status', WhatsAppProspectController::class, 'updateStatus', $adminMiddleware);
+$router->post('/admin/api/whatsapp/prospects/:id/events', WhatsAppProspectController::class, 'recordEvent', $adminMiddleware);
+$router->post('/admin/api/whatsapp/conversions/dispatch', WhatsAppProspectController::class, 'dispatchConversions', $adminMiddleware);
 
 // JWT Tokens Admin
 $router->get('/admin/jwt-tokens', AdminCustomerAccessController::class, 'jwtTokens', $adminMiddleware);

@@ -22,7 +22,8 @@ final class Request
 
     public static function query(string $key): ?string
     {
-        $value = $_GET[$key] ?? null;
+        $normalizedKey = str_replace(['.', ' '], '_', $key);
+        $value = $_GET[$key] ?? $_GET[$normalizedKey] ?? null;
 
         return is_scalar($value) ? (string) $value : null;
     }

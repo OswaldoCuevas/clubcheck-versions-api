@@ -67,6 +67,7 @@ try {
         '/api/version',
         '/api/check-update', 
         '/api/download',
+        '/api/webhooks/whatsapp',
         '/uploads',  // Permitir acceso a archivos de uploads
         '/api/customers/sessions/start',
         '/api/customers/sessions/heartbeat',

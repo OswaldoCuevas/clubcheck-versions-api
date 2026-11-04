@@ -21,6 +21,7 @@ class AuthMiddleware
         '/api/version',
         '/api/check-update',
         '/api/download',
+        '/api/webhooks/whatsapp',
         '/api/customers/sessions/start',
         '/api/customers/sessions/heartbeat',
         '/api/customers/sessions/end',
