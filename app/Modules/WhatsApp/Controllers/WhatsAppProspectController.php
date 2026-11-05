@@ -8,6 +8,7 @@ use App\Application\Contracts\IMediator;
 use App\Http\JsonPayload;
 use App\Http\JsonResponse;
 use App\Http\Request;
+use App\Http\ViewResponse;
 use App\Modules\WhatsApp\Features\DispatchConversions\Command as DispatchConversionsCommand;
 use App\Modules\WhatsApp\Features\GetProspect\Query as GetProspectQuery;
 use App\Modules\WhatsApp\Features\ListProspects\Query as ListProspectsQuery;
@@ -18,6 +19,11 @@ final readonly class WhatsAppProspectController
 {
     public function __construct(private IMediator $mediator)
     {
+    }
+
+    public function prospects(): void
+    {
+        ViewResponse::render('admin/whatsapp-prospects');
     }
 
     public function index(): never

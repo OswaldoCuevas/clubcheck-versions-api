@@ -211,6 +211,7 @@ $router->post('/admin/api/whatsapp/:id/register', AdminWhatsAppController::class
 $router->get('/admin/api/whatsapp/:id/status', AdminWhatsAppController::class, 'whatsappStatusJson', $adminMiddleware);
 $router->delete('/admin/api/whatsapp/:id', AdminWhatsAppController::class, 'whatsappDeleteJson', $adminMiddleware);
 $router->post('/admin/api/whatsapp', AdminWhatsAppController::class, 'whatsappCreateJson', $adminMiddleware);
+$router->get('/admin/whatsapp/prospects', WhatsAppProspectController::class, 'prospects', $adminMiddleware);
 $router->get('/admin/api/whatsapp/prospects', WhatsAppProspectController::class, 'index', $adminMiddleware);
 $router->get('/admin/api/whatsapp/prospects/:id', WhatsAppProspectController::class, 'show', $adminMiddleware);
 $router->patch('/admin/api/whatsapp/prospects/:id/status', WhatsAppProspectController::class, 'updateStatus', $adminMiddleware);

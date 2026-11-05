@@ -198,12 +198,17 @@ ob_start();
                                                     </span>
                                                     <div>
                                                         <h5 class="card-title mb-1">WhatsApp Business</h5>
-                                                        <small class="text-muted">Administra números y configuraciones de WhatsApp</small>
+                                                        <small class="text-muted">Administra WhatsApp y da seguimiento a prospectos</small>
                                                     </div>
                                                 </div>
-                                                <a href="<?= app_url('/admin/whatsapp') ?>" class="btn mt-auto" style="background-color: #25D366; color: white;">
-                                                    Gestionar WhatsApp <i class="fab fa-whatsapp ms-2"></i>
-                                                </a>
+                                                <div class="d-flex flex-wrap gap-2 mt-auto">
+                                                    <a href="<?= app_url('/admin/whatsapp/prospects') ?>" class="btn btn-success">
+                                                        Ver prospectos <i class="fas fa-user-group ms-2"></i>
+                                                    </a>
+                                                    <a href="<?= app_url('/admin/whatsapp') ?>" class="btn btn-outline-success">
+                                                        Configurar WhatsApp <i class="fab fa-whatsapp ms-2"></i>
+                                                    </a>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>

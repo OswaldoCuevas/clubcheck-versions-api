@@ -13,6 +13,9 @@ ob_start();
                     <p class="text-muted mb-0">Administra los números de WhatsApp registrados para cada cliente.</p>
                 </div>
                 <div class="d-flex gap-2">
+                    <a href="<?= app_url('/admin/whatsapp/prospects') ?>" class="btn btn-success">
+                        <i class="fas fa-user-group me-2"></i>Prospectos
+                    </a>
                     <a href="<?= app_url('/admin/whatsapp/messages') ?>" class="btn btn-outline-success">
                         <i class="fas fa-list me-2"></i>Historial de mensajes
                     </a>
