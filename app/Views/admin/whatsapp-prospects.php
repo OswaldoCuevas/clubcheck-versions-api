@@ -163,6 +163,60 @@ ob_start();
                                 <div><dt>Campaña</dt><dd id="detailCampaignId">No proporcionada</dd></div>
                                 <div><dt>Conversión</dt><dd id="detailConversion">Aún no es cliente</dd></div>
                             </dl>
+                            <button type="button" class="btn btn-sm btn-outline-success mt-3 d-none" id="editManualProspectButton">
+                                <i class="fas fa-pen me-1"></i>Editar datos ingresados manualmente
+                            </button>
+                            <form id="editManualProspectForm" class="d-none mt-3 border-top pt-3">
+                                <div id="editManualProspectAlert" aria-live="polite"></div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold" for="editManualProspectName">Nombre</label>
+                                    <input type="text" class="form-control" id="editManualProspectName" maxlength="255">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold" for="editManualCountryCode">País y teléfono</label>
+                                    <div class="row g-2">
+                                        <div class="col-5">
+                                            <select class="form-select" id="editManualCountryCode" required></select>
+                                        </div>
+                                        <div class="col-7">
+                                            <input type="tel" class="form-control" id="editManualPhone" inputmode="numeric" pattern="[0-9]{10}" maxlength="10" required>
+                                        </div>
+                                    </div>
+                                    <div class="form-text" id="editManualPhoneHelp">Para México, captura 10 dígitos sin el código de país ni el 1 de WhatsApp.</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold" for="editManualContactDate">Fecha del primer contacto</label>
+                                    <input type="datetime-local" class="form-control" id="editManualContactDate">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold" for="editManualOrigin">Origen</label>
+                                    <select class="form-select" id="editManualOrigin" required>
+                                        <option value="unknown">Origen desconocido</option>
+                                        <option value="click_to_whatsapp">Anuncio de Meta a WhatsApp (confirmado)</option>
+                                    </select>
+                                </div>
+                                <div class="d-none mb-3" id="editManualAttributionFields">
+                                    <label class="form-label fw-semibold" for="editManualCtwaClid">CTWA click ID</label>
+                                    <input type="text" class="form-control mb-2" id="editManualCtwaClid" maxlength="255">
+                                    <label class="form-label fw-semibold" for="editManualAdId">ID del anuncio</label>
+                                    <input type="text" class="form-control mb-2" id="editManualAdId" maxlength="128">
+                                    <label class="form-label fw-semibold" for="editManualCampaignId">ID de campaña</label>
+                                    <input type="text" class="form-control" id="editManualCampaignId" maxlength="128">
+                                    <div class="form-text">Edita estos datos solo si puedes confirmar la atribución.</div>
+                                </div>
+                                <div class="d-none mb-3" id="editManualPurchaseFields">
+                                    <label class="form-label fw-semibold" for="editManualPurchaseDate">Fecha de compra</label>
+                                    <input type="datetime-local" class="form-control mb-2" id="editManualPurchaseDate">
+                                    <label class="form-label fw-semibold" for="editManualSaleValue">Valor de compra</label>
+                                    <input type="number" class="form-control" id="editManualSaleValue" min="0" max="9999999999.99" step="0.01">
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button type="submit" class="btn btn-success" id="saveManualProspect">
+                                        <i class="fas fa-floppy-disk me-1"></i>Guardar cambios
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary" id="cancelManualProspectEdit">Cancelar</button>
+                                </div>
+                            </form>
                             <details class="attribution-details mt-3 d-none" id="attributionDetails">
                                 <summary>Ver datos originales de atribución</summary>
                                 <pre class="attribution-json mb-0" id="detailAttribution"></pre>
@@ -735,15 +789,37 @@ document.addEventListener('DOMContentLoaded', function() {
     const manualAttributionFields = document.getElementById('manualAttributionFields');
     const manualCountryCode = document.getElementById('manualCountryCode');
     const manualCustomerPhone = document.getElementById('manualCustomerPhone');
+    const editManualProspectButton = document.getElementById('editManualProspectButton');
+    const editManualProspectForm = document.getElementById('editManualProspectForm');
+    const editManualCountryCode = document.getElementById('editManualCountryCode');
+    const editManualPhone = document.getElementById('editManualPhone');
+    const editManualOrigin = document.getElementById('editManualOrigin');
+    const editManualAttributionFields = document.getElementById('editManualAttributionFields');
+    const editManualPurchaseFields = document.getElementById('editManualPurchaseFields');
     const dispatchButton = document.getElementById('dispatchConversions');
 
     manualCustomerPhone.maxLength = 10;
     manualCustomerPhone.pattern = '[0-9]{10}';
+    editManualCountryCode.innerHTML = manualCountryCode.innerHTML;
+
+    editManualCountryCode.addEventListener('change', function() {
+        const isMexico = editManualCountryCode.value === '52';
+        editManualPhone.maxLength = isMexico ? 10 : 14;
+        editManualPhone.pattern = isMexico ? '[0-9]{10}' : '[0-9]{4,14}';
+        document.getElementById('editManualPhoneHelp').textContent = isMexico
+            ? 'Para México, captura 10 dígitos sin el código de país ni el 1 de WhatsApp.'
+            : 'Escribe el número nacional sin el código de país ni separadores.';
+    });
+
+    editManualPhone.addEventListener('input', function() {
+        editManualPhone.value = editManualPhone.value.replace(/\D/g, '');
+    });
 
     let prospects = [];
     let offset = 0;
     let hasMore = false;
     let selectedProspectId = null;
+    let selectedProspect = null;
     let currentMessages = [];
     let currentHistory = [];
 
@@ -807,6 +883,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function toUtcIsoString(value) {
         return value ? new Date(value).toISOString() : null;
+    }
+
+    function toLocalDateTimeValue(value) {
+        if (!value) {
+            return '';
+        }
+
+        const dateString = String(value);
+        const normalized = dateString.includes('T')
+            ? dateString
+            : `${dateString.replace(' ', 'T')}Z`;
+        const date = new Date(normalized);
+
+        return Number.isNaN(date.getTime()) ? '' : toLocalDateTimeInput(date);
     }
 
     function showAlert(message, type = 'danger', target = 'prospectAlerts') {
@@ -1060,6 +1150,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error('No se encontró la ficha del prospecto.');
             }
 
+            selectedProspect = prospect;
             document.getElementById('prospectDetailTitle').textContent =
                 prospect.Name || 'Nombre no disponible';
             document.getElementById('detailAvatar').innerHTML =
@@ -1097,6 +1188,69 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('detailMarketingConsent').checked =
                 Number(prospect.MarketingConsent) === 1 || prospect.MarketingConsent === true;
             document.getElementById('detailSaleValue').value = prospect.SaleValue ?? '';
+            editManualProspectButton.classList.toggle(
+                'd-none',
+                Number(prospect.IsManualEntry) !== 1 && prospect.IsManualEntry !== true,
+            );
+            editManualProspectForm.classList.add('d-none');
+            document.getElementById('editManualProspectAlert').innerHTML = '';
+            editManualProspectButton.innerHTML =
+                '<i class="fas fa-pen me-1"></i>Editar datos ingresados manualmente';
+            document.getElementById('editManualProspectName').value = prospect.Name || '';
+            document.getElementById('editManualContactDate').value =
+                toLocalDateTimeValue(prospect.FirstContactAt);
+            editManualOrigin.value = prospect.Origin || 'unknown';
+
+            const phoneDigitsForEdit = String(prospect.PhoneNumber || prospect.WaId || '')
+                .replace(/\D/g, '');
+            const countryOptions = Array.from(editManualCountryCode.options)
+                .sort(function(first, second) {
+                    return second.value.length - first.value.length;
+                });
+            const phoneCountry = countryOptions.find(function(option) {
+                return phoneDigitsForEdit.startsWith(option.value);
+            });
+
+            if (phoneCountry) {
+                editManualCountryCode.value = phoneCountry.value;
+                let nationalDigits = phoneDigitsForEdit.slice(phoneCountry.value.length);
+
+                if (
+                    phoneCountry.value === '52'
+                    && nationalDigits.startsWith('1')
+                    && nationalDigits.length === 11
+                ) {
+                    nationalDigits = nationalDigits.slice(1);
+                }
+
+                editManualPhone.value = nationalDigits;
+            } else {
+                editManualCountryCode.value = '52';
+                editManualPhone.value = phoneDigitsForEdit;
+            }
+
+            editManualCountryCode.dispatchEvent(new Event('change'));
+
+            const editableAttribution = parseAttribution(prospect.AttributionJson) || {};
+            document.getElementById('editManualCtwaClid').value =
+                editableAttribution.ctwa_clid || '';
+            document.getElementById('editManualAdId').value = prospect.AdId || '';
+            document.getElementById('editManualCampaignId').value =
+                prospect.CampaignId || '';
+            editManualAttributionFields.classList.toggle(
+                'd-none',
+                editManualOrigin.value !== 'click_to_whatsapp',
+            );
+            editManualPurchaseFields.classList.toggle(
+                'd-none',
+                prospect.Status !== 'customer',
+            );
+            document.getElementById('editManualPurchaseDate').value =
+                toLocalDateTimeValue(prospect.ConvertedAt);
+            document.getElementById('editManualPurchaseDate').required =
+                prospect.Status === 'customer';
+            document.getElementById('editManualSaleValue').value =
+                prospect.SaleValue ?? '';
 
             renderMessages(payload.messages);
             renderHistory(payload.status_history);
@@ -1127,6 +1281,98 @@ document.addEventListener('DOMContentLoaded', function() {
         if (row) {
             event.preventDefault();
             openProspect(row.dataset.prospectId);
+        }
+    });
+
+    editManualProspectButton.addEventListener('click', function() {
+        editManualProspectForm.classList.toggle('d-none');
+        editManualProspectButton.innerHTML = editManualProspectForm.classList.contains('d-none')
+            ? '<i class="fas fa-pen me-1"></i>Editar datos ingresados manualmente'
+            : '<i class="fas fa-xmark me-1"></i>Cancelar edición';
+    });
+
+    document.getElementById('cancelManualProspectEdit').addEventListener('click', function() {
+        editManualProspectForm.classList.add('d-none');
+        editManualProspectButton.innerHTML =
+            '<i class="fas fa-pen me-1"></i>Editar datos ingresados manualmente';
+        if (selectedProspectId) {
+            openProspect(selectedProspectId);
+        }
+    });
+
+    editManualOrigin.addEventListener('change', function() {
+        editManualAttributionFields.classList.toggle(
+            'd-none',
+            editManualOrigin.value !== 'click_to_whatsapp',
+        );
+    });
+
+    editManualProspectForm.addEventListener('submit', async function(event) {
+        event.preventDefault();
+
+        if (!selectedProspectId || !selectedProspect) {
+            return;
+        }
+
+        const saveButton = document.getElementById('saveManualProspect');
+        const isCustomer = selectedProspect.Status === 'customer';
+        const payload = {
+            name: document.getElementById('editManualProspectName').value.trim() || null,
+            country_calling_code: editManualCountryCode.value,
+            national_phone_number: editManualPhone.value.trim(),
+            contact_at: toUtcIsoString(
+                document.getElementById('editManualContactDate').value,
+            ),
+            origin: editManualOrigin.value,
+            ctwa_clid: document.getElementById('editManualCtwaClid').value.trim() || null,
+            source_id: document.getElementById('editManualAdId').value.trim() || null,
+            campaign_id: document.getElementById('editManualCampaignId').value.trim() || null,
+            converted_at: isCustomer
+                ? toUtcIsoString(document.getElementById('editManualPurchaseDate').value)
+                : null,
+            sale_value: isCustomer
+                && document.getElementById('editManualSaleValue').value !== ''
+                ? Number(document.getElementById('editManualSaleValue').value)
+                : null,
+            notes: document.getElementById('detailNotes').value,
+            marketing_consent: document.getElementById('detailMarketingConsent').checked,
+        };
+
+        if (!editManualProspectForm.reportValidity()) {
+            return;
+        }
+
+        saveButton.disabled = true;
+        saveButton.innerHTML =
+            '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
+        document.getElementById('editManualProspectAlert').innerHTML = '';
+
+        try {
+            const response = await fetch(
+                `${endpoints.detail}/${encodeURIComponent(selectedProspectId)}/manual`,
+                {
+                    method: 'PATCH',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify(payload),
+                },
+            );
+            await readJsonResponse(response);
+            editManualProspectForm.classList.add('d-none');
+            editManualProspectButton.innerHTML =
+                '<i class="fas fa-pen me-1"></i>Editar datos ingresados manualmente';
+            await loadProspects();
+            await openProspect(selectedProspectId);
+            showAlert('Los datos del registro manual se actualizaron.', 'success', 'detailAlert');
+        } catch (error) {
+            showAlert(error.message, 'danger', 'editManualProspectAlert');
+        } finally {
+            saveButton.disabled = false;
+            saveButton.innerHTML =
+                '<i class="fas fa-floppy-disk me-1"></i>Guardar cambios';
         }
     });
 

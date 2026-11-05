@@ -25,7 +25,7 @@ El webhook guarda mensajes en la misma solicitud después de validar la firma. L
 
 2. `META_DATASET_ID` debe ser el ID del dataset/pixel configurado en Events Manager para Conversions API. Para enviar `value` en una compra, establece `META_CAPI_CURRENCY` con la moneda ISO 4217 real de la venta (por ejemplo, `MXN` solo si esa es efectivamente la moneda). No se presupone el ID ni la moneda.
 
-3. Aplica en orden las migraciones `database/migrations/017_create_whatsapp_prospects.sql` y `database/migrations/018_allow_manual_whatsapp_prospects_without_message_dates.sql` a la base de ClubCheck después de respaldarla. La segunda permite dejar vacías las fechas de contacto cuando se importa un cliente manualmente y no se conocen. Las pruebas de caracterización del proyecto aplican las migraciones automáticamente en su esquema temporal.
+3. Aplica en orden las migraciones `database/migrations/017_create_whatsapp_prospects.sql`, `database/migrations/018_allow_manual_whatsapp_prospects_without_message_dates.sql` y `database/migrations/019_add_manual_entry_flag_to_whatsapp_prospects.sql` a la base de ClubCheck después de respaldarla. La segunda permite dejar vacías las fechas de contacto cuando se importa un cliente manualmente y no se conocen. La tercera marca los registros manuales para permitir su edición en la ficha. Las pruebas de caracterización del proyecto aplican las migraciones automáticamente en su esquema temporal.
 
 ## Inicio local y túnel HTTPS
 
@@ -83,10 +83,13 @@ Todos estos endpoints requieren la autenticación y permiso administrativo exist
 - `GET /admin/api/whatsapp/prospects?limit=50&offset=0&status=new`
 - `GET /admin/api/whatsapp/prospects/{id}`: incluye mensajes e historial de estados.
 - `PATCH /admin/api/whatsapp/prospects/{id}/status`
+- `PATCH /admin/api/whatsapp/prospects/{id}/manual`: edita datos de registros creados manualmente.
 - `POST /admin/api/whatsapp/prospects/manual`: registra un cliente anterior y una compra.
 - `POST /admin/api/whatsapp/prospects/{id}/events`: registra eventos comerciales explícitos.
 
 En `/admin/whatsapp/prospects` también se pueden registrar clientes anteriores manualmente. El teléfono se normaliza al formato internacional y se usa como clave para actualizar un prospecto existente en lugar de duplicarlo. La conversación no se inventa: las fechas de contacto quedan vacías cuando no se conocen. Al registrarlo como cliente se crea un único evento interno `Purchase`.
+
+Los registros ingresados manualmente muestran **Editar datos ingresados manualmente** en su ficha. Desde ahí se puede corregir nombre, teléfono, fecha de contacto, origen y atribución; en clientes también se puede corregir fecha y valor de compra. Las notas y el consentimiento se editan desde el formulario de seguimiento. El teléfono se valida contra otros prospectos antes de guardar, y la edición no está habilitada para contactos creados por webhook. Si una compra aún está pendiente de envío, al corregir la fecha también se actualiza su evento interno sin duplicarlo.
 
 El formulario separa el código de país del número nacional. Para México, captura exactamente 10 dígitos, sin `+52` ni el `1` adicional que puede aparecer en el `wa_id` de WhatsApp. ClubCheck conserva el teléfono en E.164 (por ejemplo, `+526131210267`) y compara también el alias `wa_id` mexicano (`5216131210267`) para evitar prospectos duplicados. Para otros países, captura el número sin el código de país y omite el `0` inicial si se usa como prefijo nacional.
 

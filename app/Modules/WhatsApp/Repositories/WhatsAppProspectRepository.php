@@ -218,13 +218,14 @@ final readonly class WhatsAppProspectRepository implements IWhatsAppProspectRepo
                         AdId,
                         CampaignId,
                         AttributionJson,
+                        IsManualEntry,
                         Status,
                         Notes,
                         MarketingConsent,
                         MarketingConsentAt,
                         ConvertedAt,
                         SaleValue
-                    ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)',
                     [
                         $prospectId,
                         $customer['wa_id'],
@@ -455,7 +456,7 @@ final readonly class WhatsAppProspectRepository implements IWhatsAppProspectRepo
     public function listProspects(int $limit, int $offset, ?string $status): array
     {
         $sql = 'SELECT Id, WaId, PhoneNumber, Name, FirstContactAt, LastContactAt,
-                   Origin, AdId, CampaignId, Status, Notes, MarketingConsent,
+                   Origin, AdId, CampaignId, IsManualEntry, Status, Notes, MarketingConsent,
                    MarketingConsentAt, ConvertedAt, SaleValue
                 FROM WhatsAppProspects';
         $parameters = [];
@@ -476,13 +477,165 @@ final readonly class WhatsAppProspectRepository implements IWhatsAppProspectRepo
     {
         return $this->database->fetchOne(
             'SELECT Id, WaId, PhoneNumber, Name, FirstContactAt, LastContactAt,
-                    Origin, AdId, CampaignId, AttributionJson, Status, Notes,
+                    Origin, AdId, CampaignId, AttributionJson, IsManualEntry, Status, Notes,
                     MarketingConsent, MarketingConsentAt, ConvertedAt, SaleValue
              FROM WhatsAppProspects
              WHERE Id = ?
              LIMIT 1',
             [$id],
         );
+    }
+
+    public function updateManualProspect(string $id, array $change): ?array
+    {
+        $this->database->begin();
+
+        try {
+            $prospect = $this->database->fetchOne(
+                'SELECT Id, IsManualEntry, Status
+                 FROM WhatsAppProspects
+                 WHERE Id = ?
+                 LIMIT 1
+                 FOR UPDATE',
+                [$id],
+            );
+
+            if ($prospect === null) {
+                $this->database->commitTransaction();
+
+                return null;
+            }
+
+            if ((int) $prospect['IsManualEntry'] !== 1) {
+                $this->database->commitTransaction();
+
+                return [
+                    'updated' => false,
+                    'reason' => 'not_manual',
+                ];
+            }
+
+            if (
+                (string) $prospect['Status'] === WhatsAppProspectStatus::Customer->value
+                && !is_string($change['converted_at'] ?? null)
+            ) {
+                $this->database->commitTransaction();
+
+                return [
+                    'updated' => false,
+                    'reason' => 'purchase_date_required',
+                ];
+            }
+
+            $phoneMatch = $this->findProspectByPhone(
+                (string) $change['wa_id'],
+                'Id',
+                true,
+            );
+
+            if ($phoneMatch !== null && (string) $phoneMatch['Id'] !== $id) {
+                $this->database->commitTransaction();
+
+                return [
+                    'updated' => false,
+                    'reason' => 'phone_in_use',
+                ];
+            }
+
+            $this->database->execute(
+                'UPDATE WhatsAppProspects
+                 SET WaId = ?,
+                     PhoneNumber = ?,
+                     Name = ?,
+                     FirstContactAt = ?,
+                     Origin = ?,
+                     AdId = ?,
+                     CampaignId = ?,
+                     AttributionJson = ?,
+                     Notes = ?,
+                     MarketingConsent = ?,
+                     MarketingConsentAt = CASE
+                         WHEN ? = 1 THEN COALESCE(MarketingConsentAt, UTC_TIMESTAMP())
+                         ELSE NULL
+                     END
+                 WHERE Id = ?',
+                [
+                    $change['wa_id'],
+                    $change['phone_number'],
+                    $change['name'],
+                    $change['contact_at'],
+                    $change['origin'],
+                    $change['ad_id'],
+                    $change['campaign_id'],
+                    $change['attribution_json'],
+                    $change['notes'],
+                    $change['marketing_consent'] ? 1 : 0,
+                    $change['marketing_consent'] ? 1 : 0,
+                    $id,
+                ],
+            );
+
+            if ((string) $prospect['Status'] === WhatsAppProspectStatus::Customer->value) {
+                $this->database->execute(
+                    'UPDATE WhatsAppProspects
+                     SET ConvertedAt = ?,
+                         SaleValue = ?
+                     WHERE Id = ?',
+                    [
+                        $change['converted_at'],
+                        $change['sale_value'],
+                        $id,
+                    ],
+                );
+
+                $eventTimestamp = strtotime($change['converted_at'] . ' UTC');
+
+                if ($eventTimestamp !== false) {
+                    $isWithinMetaWindow = $eventTimestamp >= time() - (7 * 24 * 60 * 60);
+                    $this->database->execute(
+                        'UPDATE WhatsAppConversionEvents
+                         SET EventTime = ?,
+                             EventJson = JSON_SET(EventJson, \'$.event_time\', ?),
+                             LastError = IF(
+                                 DeliveryStatus = \'failed\'
+                                     AND AttemptCount = 0
+                                     AND ? = 1,
+                                 NULL,
+                                 LastError
+                             ),
+                             DeliveryStatus = IF(
+                                 DeliveryStatus = \'failed\'
+                                     AND AttemptCount = 0
+                                     AND ? = 1,
+                                 \'pending\',
+                                 DeliveryStatus
+                             )
+                         WHERE ProspectId = ?
+                           AND EventName = \'Purchase\'
+                           AND DeliveryStatus IN (\'pending\', \'failed\')
+                           AND AttemptCount = 0',
+                        [
+                            $change['converted_at'],
+                            $eventTimestamp,
+                            $isWithinMetaWindow ? 1 : 0,
+                            $isWithinMetaWindow ? 1 : 0,
+                            $id,
+                        ],
+                    );
+                }
+            }
+
+            $updatedProspect = $this->findProspect($id);
+            $this->database->commitTransaction();
+
+            return [
+                'updated' => true,
+                'prospect' => $updatedProspect,
+            ];
+        } catch (Throwable $error) {
+            $this->database->rollbackTransaction();
+            throw $error;
+        }
     }
 
     public function listMessages(string $prospectId, int $limit, int $offset): array

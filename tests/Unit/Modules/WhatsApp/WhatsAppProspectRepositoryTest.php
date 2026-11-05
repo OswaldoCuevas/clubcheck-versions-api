@@ -117,6 +117,117 @@ final class WhatsAppProspectRepositoryTest extends TestCase
         self::assertSame('prospect-manual', $executions[1]['parameters'][1]);
     }
 
+    public function testManualProspectCanBeUpdatedWithoutChangingItsIdentity(): void
+    {
+        $updatedProspect = [
+            'Id' => 'prospect-manual',
+            'WaId' => '5216131210267',
+            'PhoneNumber' => '+526131210267',
+            'IsManualEntry' => 1,
+        ];
+        $database = $this->createMock(IDatabaseConnection::class);
+        $database->expects(self::exactly(3))
+            ->method('fetchOne')
+            ->willReturnCallback(
+                static function (string $sql) use ($updatedProspect): ?array {
+                    if (str_contains($sql, 'SELECT Id, IsManualEntry, Status')) {
+                        return [
+                            'Id' => 'prospect-manual',
+                            'IsManualEntry' => 1,
+                            'Status' => 'customer',
+                        ];
+                    }
+
+                    if (str_contains($sql, 'WaId IN')) {
+                        return ['Id' => 'prospect-manual'];
+                    }
+
+                    return $updatedProspect;
+                },
+            );
+        $executions = [];
+        $database->expects(self::exactly(3))
+            ->method('execute')
+            ->willReturnCallback(
+                static function (string $sql, array $parameters) use (&$executions): void {
+                    $executions[] = [
+                        'sql' => $sql,
+                        'parameters' => $parameters,
+                    ];
+                },
+            );
+
+        $repository = new WhatsAppProspectRepository($database);
+        $result = $repository->updateManualProspect('prospect-manual', [
+            'wa_id' => '5216131210267',
+            'phone_number' => '+526131210267',
+            'name' => 'Cliente corregido',
+            'contact_at' => null,
+            'origin' => 'unknown',
+            'ad_id' => null,
+            'campaign_id' => null,
+            'attribution_json' => null,
+            'notes' => 'Nota corregida',
+            'marketing_consent' => false,
+            'converted_at' => '2026-11-04 18:00:00',
+            'sale_value' => 1200.00,
+        ]);
+
+        self::assertTrue($result['updated']);
+        self::assertSame('prospect-manual', $result['prospect']['Id']);
+        self::assertSame('+526131210267', $executions[0]['parameters'][1]);
+        self::assertSame('Cliente corregido', $executions[0]['parameters'][2]);
+        self::assertStringContainsString('JSON_SET(EventJson', $executions[2]['sql']);
+    }
+
+    public function testManualProspectUpdateRejectsPhoneAlreadyOwnedByAnotherProspect(): void
+    {
+        $database = $this->createMock(IDatabaseConnection::class);
+        $database->method('fetchOne')
+            ->willReturnOnConsecutiveCalls(
+                [
+                    'Id' => 'prospect-manual',
+                    'IsManualEntry' => 1,
+                    'Status' => 'customer',
+                ],
+                ['Id' => 'prospect-webhook'],
+            );
+        $database->expects(self::never())->method('execute');
+
+        $result = (new WhatsAppProspectRepository($database))->updateManualProspect(
+            'prospect-manual',
+            [
+                'wa_id' => '5216131210267',
+                'phone_number' => '+526131210267',
+                'converted_at' => '2026-11-04 18:00:00',
+            ],
+        );
+
+        self::assertFalse($result['updated']);
+        self::assertSame('phone_in_use', $result['reason']);
+    }
+
+    public function testWebhookProspectCannotBeEditedThroughManualUpdate(): void
+    {
+        $database = $this->createMock(IDatabaseConnection::class);
+        $database->expects(self::once())
+            ->method('fetchOne')
+            ->willReturn([
+                'Id' => 'prospect-webhook',
+                'IsManualEntry' => 0,
+                'Status' => 'new',
+            ]);
+        $database->expects(self::never())->method('execute');
+
+        $result = (new WhatsAppProspectRepository($database))->updateManualProspect(
+            'prospect-webhook',
+            [],
+        );
+
+        self::assertFalse($result['updated']);
+        self::assertSame('not_manual', $result['reason']);
+    }
+
     public function testMessageStatusesAreAppliedOnlyWhenTheirTimestampIsCurrentOrNewer(): void
     {
         $database = $this->createMock(IDatabaseConnection::class);

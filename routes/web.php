@@ -216,6 +216,7 @@ $router->post('/admin/api/whatsapp/prospects/manual', WhatsAppProspectController
 $router->get('/admin/api/whatsapp/prospects', WhatsAppProspectController::class, 'index', $adminMiddleware);
 $router->get('/admin/api/whatsapp/prospects/:id', WhatsAppProspectController::class, 'show', $adminMiddleware);
 $router->patch('/admin/api/whatsapp/prospects/:id/status', WhatsAppProspectController::class, 'updateStatus', $adminMiddleware);
+$router->patch('/admin/api/whatsapp/prospects/:id/manual', WhatsAppProspectController::class, 'updateManualProspect', $adminMiddleware);
 $router->post('/admin/api/whatsapp/prospects/:id/events', WhatsAppProspectController::class, 'recordEvent', $adminMiddleware);
 $router->post('/admin/api/whatsapp/conversions/dispatch', WhatsAppProspectController::class, 'dispatchConversions', $adminMiddleware);
 

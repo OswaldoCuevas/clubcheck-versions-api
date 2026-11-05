@@ -22,6 +22,14 @@ interface IWhatsAppProspectRepository
      */
     public function registerManualCustomer(array $customer): array;
 
+    /**
+     * @param array<string, mixed> $change
+     * @return array{updated: true, prospect: array<string, mixed>|null}
+     *     |array{updated: false, reason: string}
+     *     |null
+     */
+    public function updateManualProspect(string $id, array $change): ?array;
+
     /** @param array<string, mixed> $status */
     public function recordMessageStatus(array $status): void;
 
