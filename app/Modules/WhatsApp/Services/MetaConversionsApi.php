@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\WhatsApp\Services;
 
+use App\Modules\WhatsApp\Domain\WhatsAppPhoneNumber;
 use JsonException;
 
 final readonly class MetaConversionsApi
@@ -24,8 +25,25 @@ final readonly class MetaConversionsApi
     public function send(array $queuedEvent): array
     {
         $event = json_decode((string) $queuedEvent['EventJson'], true, 512, JSON_THROW_ON_ERROR);
-        $phoneNumber = preg_replace('/\D+/', '', (string) $queuedEvent['PhoneNumber']);
-        $phoneNumber = is_string($phoneNumber) ? ltrim($phoneNumber, '0') : '';
+        $eventTimestamp = strtotime((string) ($queuedEvent['EventTime'] ?? '') . ' UTC');
+
+        if (
+            $eventTimestamp === false
+            || $eventTimestamp < time() - (7 * 24 * 60 * 60)
+        ) {
+            return $this->failure(
+                'Meta solo acepta eventos de conversión ocurridos en los últimos 7 días.',
+                [],
+                false,
+            );
+        }
+
+        $normalizedPhone = WhatsAppPhoneNumber::normalizeForMeta(
+            (string) $queuedEvent['PhoneNumber'],
+        );
+        $phoneNumber = $normalizedPhone === null
+            ? ''
+            : substr($normalizedPhone, 1);
 
         if ($phoneNumber === '') {
             return $this->failure(

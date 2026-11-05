@@ -19,6 +19,12 @@ ob_start();
             <a href="<?= app_url('/admin/whatsapp') ?>" class="btn btn-outline-secondary">
                 <i class="fas fa-arrow-left me-2"></i>WhatsApp
             </a>
+            <button type="button" class="btn btn-outline-success" id="dispatchConversions">
+                <i class="fas fa-paper-plane me-2"></i>Enviar pendientes a Meta
+            </button>
+            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#manualCustomerModal">
+                <i class="fas fa-user-plus me-2"></i>Registrar cliente anterior
+            </button>
             <button type="button" class="btn btn-success" id="refreshProspects">
                 <i class="fas fa-rotate me-2"></i>Actualizar
             </button>
@@ -235,10 +241,154 @@ ob_start();
     </div>
 </div>
 
+<div class="modal fade" id="manualCustomerModal" tabindex="-1" aria-labelledby="manualCustomerTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content prospect-modal">
+            <div class="modal-header border-0">
+                <div>
+                    <div class="small text-success fw-semibold">IMPORTACIÓN MANUAL</div>
+                    <h2 class="modal-title h4 mb-0" id="manualCustomerTitle">Registrar cliente anterior</h2>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body pt-0 manual-customer-modal-body">
+                <form id="manualCustomerForm">
+                    <div id="manualCustomerAlert" aria-live="polite"></div>
+                    <p class="text-muted">
+                        Registra a alguien que ya compró y escribió a tu WhatsApp antes de activar este CRM.
+                        No se enviará ningún mensaje de WhatsApp.
+                    </p>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="manualCustomerName">Nombre</label>
+                            <input type="text" class="form-control" id="manualCustomerName" maxlength="255" autocomplete="name" placeholder="Nombre del cliente">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="manualCountryCode">País y teléfono de WhatsApp <span class="text-danger">*</span></label>
+                            <div class="row g-2">
+                                <div class="col-5">
+                                    <select class="form-select" id="manualCountryCode" autocomplete="country" required>
+                                        <option value="52" data-country="MX" selected>México +52</option>
+                                        <option value="1" data-country="US">EE. UU. +1</option>
+                                        <option value="1" data-country="CA">Canadá +1</option>
+                                        <option value="54" data-country="AR">Argentina +54</option>
+                                        <option value="591" data-country="BO">Bolivia +591</option>
+                                        <option value="55" data-country="BR">Brasil +55</option>
+                                        <option value="56" data-country="CL">Chile +56</option>
+                                        <option value="57" data-country="CO">Colombia +57</option>
+                                        <option value="506" data-country="CR">Costa Rica +506</option>
+                                        <option value="53" data-country="CU">Cuba +53</option>
+                                        <option value="593" data-country="EC">Ecuador +593</option>
+                                        <option value="503" data-country="SV">El Salvador +503</option>
+                                        <option value="34" data-country="ES">España +34</option>
+                                        <option value="502" data-country="GT">Guatemala +502</option>
+                                        <option value="504" data-country="HN">Honduras +504</option>
+                                        <option value="353" data-country="IE">Irlanda +353</option>
+                                        <option value="39" data-country="IT">Italia +39</option>
+                                        <option value="505" data-country="NI">Nicaragua +505</option>
+                                        <option value="507" data-country="PA">Panamá +507</option>
+                                        <option value="595" data-country="PY">Paraguay +595</option>
+                                        <option value="51" data-country="PE">Perú +51</option>
+                                        <option value="1" data-country="PR">Puerto Rico +1</option>
+                                        <option value="1" data-country="DO">Rep. Dominicana +1</option>
+                                        <option value="44" data-country="GB">Reino Unido +44</option>
+                                        <option value="598" data-country="UY">Uruguay +598</option>
+                                        <option value="58" data-country="VE">Venezuela +58</option>
+                                    </select>
+                                </div>
+                                <div class="col-7">
+                                    <input type="tel" class="form-control" id="manualCustomerPhone" maxlength="10" inputmode="numeric" pattern="[0-9]{10}" autocomplete="tel-national" placeholder="10 dígitos" required>
+                                </div>
+                            </div>
+                            <div class="form-text" id="manualPhoneHelp">Escribe los 10 dígitos, sin el código de país ni el 1 de WhatsApp.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="manualPurchaseDate">Fecha de compra <span class="text-danger">*</span></label>
+                            <input type="datetime-local" class="form-control" id="manualPurchaseDate" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="manualContactDate">Fecha aproximada del primer mensaje</label>
+                            <input type="datetime-local" class="form-control" id="manualContactDate">
+                            <div class="form-text">Déjala vacía si no recuerdas la fecha; no se inventará una.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="manualSaleValue">Valor de compra</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" class="form-control" id="manualSaleValue" min="0" max="9999999999.99" step="0.01" placeholder="Opcional">
+                            </div>
+                            <div class="form-text">La moneda configurada para CAPI se utilizará al reportar el valor.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="manualCustomerOrigin">Origen del prospecto <span class="text-danger">*</span></label>
+                            <select class="form-select" id="manualCustomerOrigin" required>
+                                <option value="unknown" selected>No estoy seguro / origen desconocido</option>
+                                <option value="click_to_whatsapp">Confirmo que llegó desde un anuncio Meta a WhatsApp</option>
+                            </select>
+                            <div class="form-text">No confirmes un anuncio si no sabes que ese fue el origen.</div>
+                        </div>
+                        <div class="col-12 d-none" id="manualAttributionFields">
+                            <div class="border rounded-3 bg-light p-3">
+                                <div class="fw-semibold small mb-2">Atribución del anuncio (opcional)</div>
+                                <p class="text-muted small mb-3">
+                                    Captura estos datos solo si los tienes. `ctwa_clid` ayuda a atribuir la conversación; no lo inventes.
+                                </p>
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label small" for="manualCtwaClickId">CTWA click ID</label>
+                                        <input type="text" class="form-control form-control-sm" id="manualCtwaClickId" maxlength="255">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small" for="manualAdId">ID del anuncio</label>
+                                        <input type="text" class="form-control form-control-sm" id="manualAdId" maxlength="128">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small" for="manualCampaignId">ID de campaña</label>
+                                        <input type="text" class="form-control form-control-sm" id="manualCampaignId" maxlength="128">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="manualCustomerNotes">Notas internas</label>
+                            <textarea class="form-control" id="manualCustomerNotes" rows="2" maxlength="5000" placeholder="Contexto útil para el equipo comercial"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check consent-check">
+                                <input class="form-check-input" type="checkbox" value="1" id="manualMarketingConsent">
+                                <label class="form-check-label" for="manualMarketingConsent">
+                                    Tengo registro del consentimiento para compartir sus datos con Meta para medición de esta compra
+                                </label>
+                                <div class="form-text">
+                                    Desmarcado por defecto. Sin consentimiento, el evento se guarda en ClubCheck pero no se envía.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-warning small mt-3 mb-0">
+                        <i class="fas fa-clock me-1"></i>
+                        Meta acepta eventos recientes, dentro de los últimos 7 días. Una compra anterior puede guardarse aquí,
+                        pero no se enviará a Meta. El teléfono se enviará normalizado y hasheado; la coincidencia no está garantizada.
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-success" id="saveManualCustomer" form="manualCustomerForm">
+                    <i class="fas fa-floppy-disk me-2"></i>Guardar cliente
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?php
 $endpointsJson = json_encode([
     'list' => app_url('/admin/api/whatsapp/prospects'),
     'detail' => app_url('/admin/api/whatsapp/prospects'),
+    'manual' => app_url('/admin/api/whatsapp/prospects/manual'),
+    'dispatch' => app_url('/admin/api/whatsapp/conversions/dispatch'),
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
 $customStyles = <<<CSS
@@ -381,6 +531,10 @@ $customStyles = <<<CSS
 .prospect-modal {
     border: 0;
     border-radius: 16px;
+}
+
+.manual-customer-modal-body {
+    overscroll-behavior: contain;
 }
 
 .prospect-avatar {
@@ -574,6 +728,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const detailModalElement = document.getElementById('prospectDetailModal');
     const detailModal = bootstrap.Modal.getOrCreateInstance(detailModalElement);
     const updateForm = document.getElementById('prospectUpdateForm');
+    const manualCustomerForm = document.getElementById('manualCustomerForm');
+    const manualCustomerModalElement = document.getElementById('manualCustomerModal');
+    const manualCustomerModal = bootstrap.Modal.getOrCreateInstance(manualCustomerModalElement);
+    const manualCustomerOrigin = document.getElementById('manualCustomerOrigin');
+    const manualAttributionFields = document.getElementById('manualAttributionFields');
+    const manualCountryCode = document.getElementById('manualCountryCode');
+    const manualCustomerPhone = document.getElementById('manualCustomerPhone');
+    const dispatchButton = document.getElementById('dispatchConversions');
+
+    manualCustomerPhone.maxLength = 10;
+    manualCustomerPhone.pattern = '[0-9]{10}';
 
     let prospects = [];
     let offset = 0;
@@ -632,6 +797,16 @@ document.addEventListener('DOMContentLoaded', function() {
             dateStyle: 'medium',
             timeStyle: 'short',
         }).format(date);
+    }
+
+    function toLocalDateTimeInput(date) {
+        const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+
+        return localDate.toISOString().slice(0, 16);
+    }
+
+    function toUtcIsoString(value) {
+        return value ? new Date(value).toISOString() : null;
     }
 
     function showAlert(message, type = 'danger', target = 'prospectAlerts') {
@@ -964,6 +1139,151 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     loadMoreButton.addEventListener('click', function() {
         loadProspects(false);
+    });
+
+    manualCustomerOrigin.addEventListener('change', function() {
+        manualAttributionFields.classList.toggle(
+            'd-none',
+            manualCustomerOrigin.value !== 'click_to_whatsapp',
+        );
+    });
+
+    manualCountryCode.addEventListener('change', function() {
+        const isMexico = manualCountryCode.value === '52';
+        manualCustomerPhone.maxLength = isMexico ? 10 : 14;
+        manualCustomerPhone.pattern = isMexico ? '[0-9]{10}' : '[0-9]{4,14}';
+        manualCustomerPhone.placeholder = isMexico ? '10 dígitos' : 'Solo dígitos nacionales';
+        document.getElementById('manualPhoneHelp').textContent = isMexico
+            ? 'Escribe los 10 dígitos, sin el código de país ni el 1 de WhatsApp.'
+            : 'Escribe el número sin código de país ni separadores; si tu país usa 0 como prefijo nacional, omítelo.';
+    });
+
+    manualCustomerPhone.addEventListener('input', function() {
+        manualCustomerPhone.value = manualCustomerPhone.value.replace(/\D/g, '');
+    });
+
+    manualCustomerModalElement.addEventListener('show.bs.modal', function() {
+        document.getElementById('manualPurchaseDate').value = toLocalDateTimeInput(new Date());
+        document.getElementById('manualCustomerAlert').innerHTML = '';
+    });
+
+    manualCustomerForm.addEventListener('submit', async function(event) {
+        event.preventDefault();
+
+        const saveButton = document.getElementById('saveManualCustomer');
+        const payload = {
+            name: document.getElementById('manualCustomerName').value.trim() || null,
+            country_calling_code: manualCountryCode.value,
+            national_phone_number: manualCustomerPhone.value.trim(),
+            converted_at: toUtcIsoString(document.getElementById('manualPurchaseDate').value),
+            contact_at: toUtcIsoString(document.getElementById('manualContactDate').value),
+            sale_value: document.getElementById('manualSaleValue').value === ''
+                ? null
+                : Number(document.getElementById('manualSaleValue').value),
+            origin: manualCustomerOrigin.value,
+            ctwa_clid: document.getElementById('manualCtwaClickId').value.trim() || null,
+            source_id: document.getElementById('manualAdId').value.trim() || null,
+            campaign_id: document.getElementById('manualCampaignId').value.trim() || null,
+            notes: document.getElementById('manualCustomerNotes').value.trim() || null,
+            marketing_consent: document.getElementById('manualMarketingConsent').checked,
+        };
+
+        if (!manualCustomerForm.reportValidity()) {
+            return;
+        }
+
+        saveButton.disabled = true;
+        saveButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
+        document.getElementById('manualCustomerAlert').innerHTML = '';
+
+        try {
+            const response = await fetch(endpoints.manual, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify(payload),
+            });
+            const result = await readJsonResponse(response);
+            manualCustomerForm.reset();
+            manualAttributionFields.classList.add('d-none');
+            manualCustomerModal.hide();
+            await loadProspects();
+
+            if (result.purchase_event_status === 'sent') {
+                showAlert(
+                    'Este cliente ya tenía registrada su compra en Meta; no se creó un evento duplicado.',
+                    'success',
+                );
+            } else if (result.purchase_event_status === 'failed') {
+                showAlert(
+                    result.purchase_event_error
+                        || 'El cliente quedó guardado, pero su compra no se enviará a Meta.',
+                    'warning',
+                );
+            } else if (result.origin !== 'click_to_whatsapp') {
+                showAlert(
+                    'El cliente quedó guardado. No se enviará a Meta porque no se confirmó que llegó desde un anuncio de WhatsApp.',
+                    'success',
+                );
+            } else if (!result.marketing_consent) {
+                showAlert(
+                    'El cliente quedó guardado. No se enviará información a Meta porque no se indicó consentimiento.',
+                    'success',
+                );
+            } else {
+                const action = result.created ? 'registrado' : 'actualizado sin duplicar';
+                showAlert(
+                    `Cliente ${action}. La compra está en cola; usa "Enviar pendientes a Meta" cuando quieras despacharla.`,
+                    'success',
+                );
+            }
+
+            if (result.prospect_id) {
+                await openProspect(result.prospect_id);
+            }
+        } catch (error) {
+            showAlert(error.message, 'danger', 'manualCustomerAlert');
+        } finally {
+            saveButton.disabled = false;
+            saveButton.innerHTML = '<i class="fas fa-floppy-disk me-2"></i>Guardar cliente';
+        }
+    });
+
+    dispatchButton.addEventListener('click', async function() {
+        const confirmed = window.confirm(
+            'Se enviarán a Meta hasta 50 eventos pendientes con origen Click-to-WhatsApp confirmado y consentimiento. Los eventos rechazados no se volverán a enviar automáticamente. ¿Continuar?',
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        dispatchButton.disabled = true;
+        dispatchButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Enviando...';
+
+        try {
+            const response = await fetch(endpoints.dispatch, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                },
+                credentials: 'same-origin',
+            });
+            const payload = await readJsonResponse(response);
+            const results = payload.results || {};
+            showAlert(
+                `Resultado de Meta: ${results.sent || 0} enviadas, ${results.pending || 0} pendientes para reintento y ${results.failed || 0} rechazadas.`,
+                results.failed ? 'warning' : 'success',
+            );
+        } catch (error) {
+            showAlert(error.message, 'danger');
+        } finally {
+            dispatchButton.disabled = false;
+            dispatchButton.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Enviar pendientes a Meta';
+        }
     });
 
     updateForm.addEventListener('submit', async function(event) {

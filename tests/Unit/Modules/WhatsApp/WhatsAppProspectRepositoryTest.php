@@ -45,6 +45,7 @@ final class WhatsAppProspectRepositoryTest extends TestCase
         ]);
 
         self::assertSame('prospect-1', $prospectId);
+        self::assertSame('+525550101234', $executions[0]['parameters'][2]);
         self::assertStringContainsString('ON DUPLICATE KEY UPDATE', $executions[1]['sql']);
         self::assertSame('wamid.duplicate-test', $executions[1]['parameters'][2]);
 
@@ -57,6 +58,63 @@ final class WhatsAppProspectRepositoryTest extends TestCase
             'UNIQUE KEY `uq_WhatsAppProspectMessages_WaMessageId` (`WhatsAppMessageId`)',
             $migration,
         );
+    }
+
+    public function testIncomingMessageFindsProspectByEquivalentMexicanPhoneNumber(): void
+    {
+        $database = $this->createMock(IDatabaseConnection::class);
+        $database->expects(self::once())
+            ->method('fetchOne')
+            ->with(
+                self::callback(
+                    static fn (string $sql): bool => str_contains($sql, 'WaId IN')
+                        && str_contains($sql, 'PhoneNumber IN'),
+                ),
+                self::callback(
+                    static fn (array $parameters): bool => in_array(
+                        '5216131210267',
+                        $parameters,
+                        true,
+                    ) && in_array(
+                        '526131210267',
+                        $parameters,
+                        true,
+                    ),
+                ),
+            )
+            ->willReturn([
+                'Id' => 'prospect-manual',
+                'WaId' => '5216131210267',
+            ]);
+        $executions = [];
+        $database->expects(self::exactly(2))
+            ->method('execute')
+            ->willReturnCallback(
+                static function (string $sql, array $parameters) use (&$executions): void {
+                    $executions[] = [
+                        'sql' => $sql,
+                        'parameters' => $parameters,
+                    ];
+                },
+            );
+
+        $repository = new WhatsAppProspectRepository($database);
+        $prospectId = $repository->recordMessage([
+            'wa_id' => '526131210267',
+            'phone_number' => '526131210267',
+            'direction' => 'incoming',
+            'wamid' => 'wamid.alias-match',
+            'message_type' => 'text',
+            'content' => 'Hola',
+            'message_at' => '2026-10-28 16:00:00',
+            'delivery_status' => 'received',
+            'origin' => 'unknown',
+        ]);
+
+        self::assertSame('prospect-manual', $prospectId);
+        self::assertStringContainsString('UPDATE WhatsAppProspects', $executions[0]['sql']);
+        self::assertSame('+526131210267', $executions[0]['parameters'][0]);
+        self::assertSame('prospect-manual', $executions[1]['parameters'][1]);
     }
 
     public function testMessageStatusesAreAppliedOnlyWhenTheirTimestampIsCurrentOrNewer(): void
@@ -100,6 +158,9 @@ final class WhatsAppProspectRepositoryTest extends TestCase
                     static fn (string $sql): bool => str_contains(
                         $sql,
                         'AND p.MarketingConsent = 1',
+                    ) && str_contains(
+                        $sql,
+                        'AND p.Origin = \'click_to_whatsapp\'',
                     ),
                 ),
                 [50],
@@ -109,6 +170,61 @@ final class WhatsAppProspectRepositoryTest extends TestCase
         $repository = new WhatsAppProspectRepository($database);
 
         self::assertSame([], $repository->pendingConversions(50));
+    }
+
+    public function testManualPurchaseOlderThanMetaWindowIsStoredButNotQueuedForSending(): void
+    {
+        $database = $this->createMock(IDatabaseConnection::class);
+        $database->expects(self::once())->method('begin');
+        $database->expects(self::once())->method('commitTransaction');
+        $database->expects(self::never())->method('rollbackTransaction');
+        $database->method('fetchOne')
+            ->willReturnOnConsecutiveCalls(
+                null,
+                [
+                    'DeliveryStatus' => 'failed',
+                    'LastError' => 'Meta solo acepta eventos de conversión ocurridos en los últimos 7 días.',
+                ],
+            );
+        $executions = [];
+        $database->expects(self::exactly(2))
+            ->method('execute')
+            ->willReturnCallback(
+                static function (string $sql, array $parameters) use (&$executions): void {
+                    $executions[] = [
+                        'sql' => $sql,
+                        'parameters' => $parameters,
+                    ];
+                },
+            );
+
+        $repository = new WhatsAppProspectRepository($database);
+        $purchaseDate = gmdate('Y-m-d H:i:s', time() - (10 * 24 * 60 * 60));
+        $result = $repository->registerManualCustomer([
+            'wa_id' => '525512345678',
+            'phone_number' => '+525512345678',
+            'name' => 'Cliente histórico',
+            'origin' => 'click_to_whatsapp',
+            'ad_id' => null,
+            'campaign_id' => null,
+            'attribution_json' => null,
+            'converted_at' => $purchaseDate,
+            'contact_at' => null,
+            'sale_value' => null,
+            'notes' => null,
+            'marketing_consent' => true,
+        ]);
+
+        self::assertTrue($result['created']);
+        self::assertSame('failed', $result['purchase_event_status']);
+        self::assertStringContainsString('últimos 7 días', $result['purchase_event_error']);
+        self::assertNull($executions[0]['parameters'][4]);
+        self::assertSame($purchaseDate, $executions[1]['parameters'][3]);
+        self::assertSame('failed', $executions[1]['parameters'][5]);
+        self::assertStringContainsString(
+            'DeliveryStatus',
+            $executions[1]['sql'],
+        );
     }
 
     public function testMarketingEventUsesStableIdempotencyForRepeatedRequests(): void

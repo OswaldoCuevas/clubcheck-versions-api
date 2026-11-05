@@ -25,7 +25,7 @@ El webhook guarda mensajes en la misma solicitud después de validar la firma. L
 
 2. `META_DATASET_ID` debe ser el ID del dataset/pixel configurado en Events Manager para Conversions API. Para enviar `value` en una compra, establece `META_CAPI_CURRENCY` con la moneda ISO 4217 real de la venta (por ejemplo, `MXN` solo si esa es efectivamente la moneda). No se presupone el ID ni la moneda.
 
-3. Aplica la migración `database/migrations/017_create_whatsapp_prospects.sql` a la base de ClubCheck después de respaldarla. Las pruebas de caracterización del proyecto aplican las migraciones automáticamente en su esquema temporal.
+3. Aplica en orden las migraciones `database/migrations/017_create_whatsapp_prospects.sql` y `database/migrations/018_allow_manual_whatsapp_prospects_without_message_dates.sql` a la base de ClubCheck después de respaldarla. La segunda permite dejar vacías las fechas de contacto cuando se importa un cliente manualmente y no se conocen. Las pruebas de caracterización del proyecto aplican las migraciones automáticamente en su esquema temporal.
 
 ## Inicio local y túnel HTTPS
 
@@ -83,7 +83,37 @@ Todos estos endpoints requieren la autenticación y permiso administrativo exist
 - `GET /admin/api/whatsapp/prospects?limit=50&offset=0&status=new`
 - `GET /admin/api/whatsapp/prospects/{id}`: incluye mensajes e historial de estados.
 - `PATCH /admin/api/whatsapp/prospects/{id}/status`
+- `POST /admin/api/whatsapp/prospects/manual`: registra un cliente anterior y una compra.
 - `POST /admin/api/whatsapp/prospects/{id}/events`: registra eventos comerciales explícitos.
+
+En `/admin/whatsapp/prospects` también se pueden registrar clientes anteriores manualmente. El teléfono se normaliza al formato internacional y se usa como clave para actualizar un prospecto existente en lugar de duplicarlo. La conversación no se inventa: las fechas de contacto quedan vacías cuando no se conocen. Al registrarlo como cliente se crea un único evento interno `Purchase`.
+
+El formulario separa el código de país del número nacional. Para México, captura exactamente 10 dígitos, sin `+52` ni el `1` adicional que puede aparecer en el `wa_id` de WhatsApp. ClubCheck conserva el teléfono en E.164 (por ejemplo, `+526131210267`) y compara también el alias `wa_id` mexicano (`5216131210267`) para evitar prospectos duplicados. Para otros países, captura el número sin el código de país y omite el `0` inicial si se usa como prefijo nacional.
+
+El origen debe confirmarse como anuncio Click-to-WhatsApp para que el evento se pueda despachar con `action_source: business_messaging`. Los eventos de origen desconocido se conservan en ClubCheck, pero no se envían a Meta con una atribución que no se conoce. `ctwa_clid`, ID de anuncio e ID de campaña son opcionales y solo deben capturarse cuando se tengan. Para los registros manuales, el JSON de atribución indica que los datos fueron ingresados por un administrador y no recibidos originalmente en el webhook.
+
+La opción de consentimiento está desmarcada por defecto. Solo los prospectos con consentimiento y origen Click-to-WhatsApp confirmado entran al despacho. El botón **Enviar pendientes a Meta** despacha hasta 50 eventos; guardar un cliente no los envía automáticamente. Meta limita `event_time` a los últimos siete días. Las compras anteriores sí quedan en el CRM, pero su evento queda marcado como fallido y no se envía.
+
+Ejemplo de alta manual:
+
+```json
+{
+  "name": "Cliente anterior",
+  "country_calling_code": "52",
+  "national_phone_number": "5512345678",
+  "origin": "click_to_whatsapp",
+  "ctwa_clid": "identificador-proporcionado-por-meta",
+  "source_id": "id-del-anuncio",
+  "campaign_id": "id-de-la-campana",
+  "converted_at": "2026-11-04T20:00:00Z",
+  "contact_at": null,
+  "sale_value": 12000,
+  "notes": "Cliente importado manualmente",
+  "marketing_consent": true
+}
+```
+
+`origin` acepta `click_to_whatsapp` o `unknown`. Usa `unknown` si no puedes confirmar que el contacto llegó desde un anuncio de WhatsApp; en ese caso el registro no se despachará a Meta. El endpoint manual recibe `country_calling_code` y `national_phone_number`; para México el número nacional debe tener exactamente 10 dígitos. El teléfono solo se envía hasheado a Meta. El envío no garantiza que Meta identifique o atribuya la compra a una persona o campaña.
 
 Ejemplo para cambiar el estado:
 
@@ -113,7 +143,7 @@ La recepción de mensajes no genera por sí sola eventos CAPI `Lead`, `Contact` 
 
 ## Meta Conversions API
 
-Los eventos se envían a `POST https://graph.facebook.com/{META_GRAPH_API_VERSION}/{META_DATASET_ID}/events`, el endpoint de Conversions API para un dataset; no se usa el endpoint de administración de campañas de Marketing API. Los eventos `Lead`, `Contact`, `Schedule` y `Purchase` usan `action_source: business_messaging`, el teléfono normalizado y hasheado con SHA-256, y `ctwa_clid` sin hash solamente cuando Meta lo proporcionó en la referencia original. Consulta la [guía oficial de envío de eventos](https://developers.facebook.com/documentation/ads-commerce/conversions-api/using-the-api) y los [parámetros de eventos](https://developers.facebook.com/documentation/ads-commerce/conversions-api/parameters/server-event).
+Los eventos se envían a `POST https://graph.facebook.com/{META_GRAPH_API_VERSION}/{META_DATASET_ID}/events`, el endpoint de Conversions API para un dataset; no se usa el endpoint de administración de campañas de Marketing API. Los eventos `Lead`, `Contact`, `Schedule` y `Purchase` usan `action_source: business_messaging`, el teléfono normalizado y hasheado con SHA-256, y `ctwa_clid` sin hash solamente cuando Meta lo proporcionó en la referencia original o fue capturado manualmente. Para `business_messaging`, este módulo exige origen Click-to-WhatsApp confirmado. Meta acepta `event_time` de hasta siete días en el pasado. Consulta la [guía oficial de envío de eventos](https://developers.facebook.com/documentation/ads-commerce/conversions-api/using-the-api) y los [parámetros de eventos](https://developers.facebook.com/documentation/ads-commerce/conversions-api/parameters/server-event).
 
 Para despachar eventos pendientes, un administrador autorizado debe llamar:
 

@@ -6,6 +6,7 @@ namespace App\Modules\WhatsApp\Repositories;
 
 use App\Infrastructure\Database\IDatabaseConnection;
 use App\Modules\WhatsApp\Contracts\IWhatsAppProspectRepository;
+use App\Modules\WhatsApp\Domain\WhatsAppPhoneNumber;
 use App\Modules\WhatsApp\Domain\WhatsAppProspectStatus;
 use Throwable;
 
@@ -26,10 +27,7 @@ final readonly class WhatsAppProspectRepository implements IWhatsAppProspectRepo
         $this->database->begin();
 
         try {
-            $prospect = $this->database->fetchOne(
-                'SELECT Id FROM WhatsAppProspects WHERE WaId = ? LIMIT 1',
-                [$waId],
-            );
+            $prospect = $this->findProspectByPhone($waId);
 
             if ($prospect === null && ($message['direction'] ?? '') !== 'incoming') {
                 $this->database->commitTransaction();
@@ -37,8 +35,20 @@ final readonly class WhatsAppProspectRepository implements IWhatsAppProspectRepo
                 return null;
             }
 
-            $this->database->execute(
-                'INSERT INTO WhatsAppProspects (
+            $normalizedPhone = WhatsAppPhoneNumber::normalizeForMeta(
+                (string) ($message['phone_number'] ?? $waId),
+            );
+            $phoneNumber = $normalizedPhone ?? (string) ($message['phone_number'] ?? $waId);
+
+            if ($prospect !== null && $prospect['WaId'] !== $waId) {
+                $this->updateProspectFromAlias(
+                    (string) $prospect['Id'],
+                    $message,
+                    $phoneNumber,
+                );
+            } else {
+                $this->database->execute(
+                    'INSERT INTO WhatsAppProspects (
                     Id,
                     WaId,
                     PhoneNumber,
@@ -52,30 +62,34 @@ final readonly class WhatsAppProspectRepository implements IWhatsAppProspectRepo
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                     Name = COALESCE(NULLIF(VALUES(Name), \'\'), Name),
-                    FirstContactAt = LEAST(FirstContactAt, VALUES(FirstContactAt)),
-                    LastContactAt = GREATEST(LastContactAt, VALUES(LastContactAt)),
+                    FirstContactAt = CASE
+                        WHEN FirstContactAt IS NULL THEN VALUES(FirstContactAt)
+                        ELSE LEAST(FirstContactAt, VALUES(FirstContactAt))
+                    END,
+                    LastContactAt = CASE
+                        WHEN LastContactAt IS NULL THEN VALUES(LastContactAt)
+                        ELSE GREATEST(LastContactAt, VALUES(LastContactAt))
+                    END,
                     Origin = IF(Origin = \'unknown\', VALUES(Origin), Origin),
                     AdId = COALESCE(AdId, VALUES(AdId)),
                     CampaignId = COALESCE(CampaignId, VALUES(CampaignId)),
                     AttributionJson = COALESCE(AttributionJson, VALUES(AttributionJson))',
-                [
-                    $this->newId(),
-                    $waId,
-                    (string) ($message['phone_number'] ?? $waId),
-                    $message['name'] ?? null,
-                    $message['message_at'],
-                    $message['message_at'],
-                    $message['origin'] ?? 'unknown',
-                    $message['ad_id'] ?? null,
-                    $message['campaign_id'] ?? null,
-                    $message['attribution_json'] ?? null,
-                ],
-            );
+                    [
+                        $this->newId(),
+                        $waId,
+                        $phoneNumber,
+                        $message['name'] ?? null,
+                        $message['message_at'],
+                        $message['message_at'],
+                        $message['origin'] ?? 'unknown',
+                        $message['ad_id'] ?? null,
+                        $message['campaign_id'] ?? null,
+                        $message['attribution_json'] ?? null,
+                    ],
+                );
 
-            $prospect = $this->database->fetchOne(
-                'SELECT Id FROM WhatsAppProspects WHERE WaId = ? LIMIT 1',
-                [$waId],
-            );
+                $prospect = $this->findProspectByPhone($waId);
+            }
 
             if ($prospect === null) {
                 throw new \RuntimeException('No se pudo recuperar el prospecto después de guardarlo.');
@@ -157,6 +171,203 @@ final readonly class WhatsAppProspectRepository implements IWhatsAppProspectRepo
         }
     }
 
+    public function registerManualCustomer(array $customer): array
+    {
+        $this->database->begin();
+
+        try {
+            $existingProspect = $this->findProspectByPhone(
+                $customer['wa_id'],
+                'Id, WaId, Status, ConvertedAt, Origin, MarketingConsent',
+                true,
+            );
+            $created = $existingProspect === null;
+            $prospectId = $created
+                ? $this->newId()
+                : (string) $existingProspect['Id'];
+            $previousStatus = $created
+                ? null
+                : (string) $existingProspect['Status'];
+            $effectiveOrigin = (string) $customer['origin'];
+            $effectiveMarketingConsent = (bool) $customer['marketing_consent'];
+
+            if (!$created) {
+                if ($existingProspect['Origin'] !== 'unknown') {
+                    $effectiveOrigin = (string) $existingProspect['Origin'];
+                }
+
+                $effectiveMarketingConsent = $effectiveMarketingConsent
+                    || (bool) $existingProspect['MarketingConsent'];
+            }
+
+            $purchaseEvent = [
+                'status' => 'pending',
+                'error' => null,
+            ];
+
+            if ($created) {
+                $this->database->execute(
+                    'INSERT INTO WhatsAppProspects (
+                        Id,
+                        WaId,
+                        PhoneNumber,
+                        Name,
+                        FirstContactAt,
+                        LastContactAt,
+                        Origin,
+                        AdId,
+                        CampaignId,
+                        AttributionJson,
+                        Status,
+                        Notes,
+                        MarketingConsent,
+                        MarketingConsentAt,
+                        ConvertedAt,
+                        SaleValue
+                    ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [
+                        $prospectId,
+                        $customer['wa_id'],
+                        $customer['phone_number'],
+                        $customer['name'],
+                        $customer['contact_at'],
+                        $customer['origin'],
+                        $customer['ad_id'],
+                        $customer['campaign_id'],
+                        $customer['attribution_json'],
+                        WhatsAppProspectStatus::Customer->value,
+                        $customer['notes'],
+                        $customer['marketing_consent'] ? 1 : 0,
+                        $customer['marketing_consent'] ? gmdate('Y-m-d H:i:s') : null,
+                        $customer['converted_at'],
+                        $customer['sale_value'],
+                    ],
+                );
+
+                $purchaseEvent = $this->queuePurchaseEvent(
+                    $prospectId,
+                    $customer['converted_at'],
+                );
+            } else {
+                $this->updateManualCustomer($prospectId, $previousStatus, $customer);
+
+                if ($previousStatus !== WhatsAppProspectStatus::Customer->value) {
+                    $this->database->execute(
+                        'INSERT INTO WhatsAppProspectStatusHistory (
+                            Id,
+                            ProspectId,
+                            PreviousStatus,
+                            NewStatus,
+                            ChangedAt
+                        ) VALUES (?, ?, ?, ?, ?)',
+                        [
+                            $this->newId(),
+                            $prospectId,
+                            $previousStatus,
+                            WhatsAppProspectStatus::Customer->value,
+                            gmdate('Y-m-d H:i:s'),
+                        ],
+                    );
+                    $purchaseEvent = $this->queuePurchaseEvent(
+                        $prospectId,
+                        $customer['converted_at'],
+                    );
+                } else {
+                    $eventId = hash('sha256', $prospectId . ':Purchase');
+                    $existingEvent = $this->database->fetchOne(
+                        'SELECT DeliveryStatus, LastError
+                         FROM WhatsAppConversionEvents
+                         WHERE EventId = ?
+                         LIMIT 1',
+                        [$eventId],
+                    );
+
+                    if ($existingEvent === null) {
+                        $purchaseEvent = $this->queuePurchaseEvent(
+                            $prospectId,
+                            (string) ($existingProspect['ConvertedAt'] ?? $customer['converted_at']),
+                        );
+                    } else {
+                        $purchaseEvent = [
+                            'status' => (string) $existingEvent['DeliveryStatus'],
+                            'error' => isset($existingEvent['LastError'])
+                                ? (string) $existingEvent['LastError']
+                                : null,
+                        ];
+                    }
+                }
+            }
+
+            $this->database->commitTransaction();
+
+            return [
+                'id' => $prospectId,
+                'created' => $created,
+                'purchase_event_status' => $purchaseEvent['status'],
+                'purchase_event_error' => $purchaseEvent['error'],
+                'origin' => $effectiveOrigin,
+                'marketing_consent' => $effectiveMarketingConsent,
+            ];
+        } catch (Throwable $error) {
+            $this->database->rollbackTransaction();
+            throw $error;
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $customer
+     */
+    private function updateManualCustomer(
+        string $prospectId,
+        ?string $previousStatus,
+        array $customer,
+    ): void {
+        $setClauses = [
+            'PhoneNumber = ?',
+            'Name = COALESCE(NULLIF(?, \'\'), Name)',
+            'FirstContactAt = COALESCE(FirstContactAt, ?)',
+            'Origin = IF(Origin = \'unknown\', ?, Origin)',
+            'AdId = COALESCE(AdId, ?)',
+            'CampaignId = COALESCE(CampaignId, ?)',
+            'AttributionJson = COALESCE(AttributionJson, ?)',
+            'Notes = COALESCE(NULLIF(?, \'\'), Notes)',
+            'MarketingConsent = IF(? = 1, 1, MarketingConsent)',
+            'MarketingConsentAt = IF(? = 1, COALESCE(MarketingConsentAt, UTC_TIMESTAMP()), MarketingConsentAt)',
+        ];
+        $parameters = [
+            $customer['phone_number'],
+            $customer['name'],
+            $customer['contact_at'],
+            $customer['origin'],
+            $customer['ad_id'],
+            $customer['campaign_id'],
+            $customer['attribution_json'],
+            $customer['notes'],
+            $customer['marketing_consent'] ? 1 : 0,
+            $customer['marketing_consent'] ? 1 : 0,
+        ];
+
+        if ($previousStatus !== WhatsAppProspectStatus::Customer->value) {
+            $setClauses[] = 'Status = ?';
+            $setClauses[] = 'ConvertedAt = ?';
+            $setClauses[] = 'SaleValue = ?';
+            $parameters[] = WhatsAppProspectStatus::Customer->value;
+            $parameters[] = $customer['converted_at'];
+            $parameters[] = $customer['sale_value'];
+        } else {
+            $setClauses[] = 'SaleValue = COALESCE(SaleValue, ?)';
+            $parameters[] = $customer['sale_value'];
+        }
+
+        $parameters[] = $prospectId;
+        $this->database->execute(
+            'UPDATE WhatsAppProspects
+             SET ' . implode(', ', $setClauses) . '
+             WHERE Id = ?',
+            $parameters,
+        );
+    }
+
     public function recordMessageStatus(array $status): void
     {
         $wamid = trim((string) ($status['wamid'] ?? ''));
@@ -166,10 +377,7 @@ final readonly class WhatsAppProspectRepository implements IWhatsAppProspectRepo
             return;
         }
 
-        $prospect = $this->database->fetchOne(
-            'SELECT Id FROM WhatsAppProspects WHERE WaId = ? LIMIT 1',
-            [$waId],
-        );
+        $prospect = $this->findProspectByPhone($waId);
 
         if ($prospect === null) {
             return;
@@ -257,7 +465,7 @@ final readonly class WhatsAppProspectRepository implements IWhatsAppProspectRepo
             $parameters[] = $status;
         }
 
-        $sql .= ' ORDER BY LastContactAt DESC LIMIT ? OFFSET ?';
+        $sql .= ' ORDER BY COALESCE(LastContactAt, CreatedAt) DESC LIMIT ? OFFSET ?';
         $parameters[] = $limit;
         $parameters[] = $offset;
 
@@ -390,35 +598,8 @@ final readonly class WhatsAppProspectRepository implements IWhatsAppProspectRepo
                 $newStatus === WhatsAppProspectStatus::Customer->value
                 && $previousStatus !== WhatsAppProspectStatus::Customer->value
             ) {
-                $eventId = hash('sha256', $id . ':Purchase');
                 $eventTime = $change['converted_at'] ?? $updatedAt;
-
-                $this->database->execute(
-                    'INSERT INTO WhatsAppConversionEvents (
-                        Id,
-                        ProspectId,
-                        EventId,
-                        EventName,
-                        EventTime,
-                        EventJson
-                    ) VALUES (?, ?, ?, \'Purchase\', ?, ?)
-                    ON DUPLICATE KEY UPDATE EventId = VALUES(EventId)',
-                    [
-                        $this->newId(),
-                        $id,
-                        $eventId,
-                        $eventTime,
-                        json_encode(
-                            [
-                                'event_name' => 'Purchase',
-                                'event_id' => $eventId,
-                                'event_time' => strtotime($eventTime . ' UTC'),
-                                'action_source' => 'business_messaging',
-                            ],
-                            JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
-                        ),
-                    ],
-                );
+                $this->queuePurchaseEvent($id, $eventTime);
             }
 
             $this->database->commitTransaction();
@@ -491,6 +672,7 @@ final readonly class WhatsAppProspectRepository implements IWhatsAppProspectRepo
              INNER JOIN WhatsAppProspects p ON p.Id = e.ProspectId
              WHERE e.DeliveryStatus = \'pending\'
                AND p.MarketingConsent = 1
+               AND p.Origin = \'click_to_whatsapp\'
                AND (e.NextAttemptAt IS NULL OR e.NextAttemptAt <= UTC_TIMESTAMP())
              ORDER BY e.CreatedAt ASC
              LIMIT ?',
@@ -518,6 +700,76 @@ final readonly class WhatsAppProspectRepository implements IWhatsAppProspectRepo
         );
     }
 
+    /**
+     * @param array<string, mixed> $message
+     */
+    private function updateProspectFromAlias(
+        string $prospectId,
+        array $message,
+        string $phoneNumber,
+    ): void {
+        $this->database->execute(
+            'UPDATE WhatsAppProspects
+             SET PhoneNumber = ?,
+                 Name = COALESCE(NULLIF(?, \'\'), Name),
+                 FirstContactAt = CASE
+                     WHEN FirstContactAt IS NULL THEN ?
+                     ELSE LEAST(FirstContactAt, ?)
+                 END,
+                 LastContactAt = CASE
+                     WHEN LastContactAt IS NULL THEN ?
+                     ELSE GREATEST(LastContactAt, ?)
+                 END,
+                 Origin = IF(Origin = \'unknown\', ?, Origin),
+                 AdId = COALESCE(AdId, ?),
+                 CampaignId = COALESCE(CampaignId, ?),
+                 AttributionJson = COALESCE(AttributionJson, ?)
+             WHERE Id = ?',
+            [
+                $phoneNumber,
+                $message['name'] ?? null,
+                $message['message_at'],
+                $message['message_at'],
+                $message['message_at'],
+                $message['message_at'],
+                $message['origin'] ?? 'unknown',
+                $message['ad_id'] ?? null,
+                $message['campaign_id'] ?? null,
+                $message['attribution_json'] ?? null,
+                $prospectId,
+            ],
+        );
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function findProspectByPhone(
+        string $phoneNumber,
+        string $columns = 'Id, WaId',
+        bool $forUpdate = false,
+    ): ?array {
+        $candidates = WhatsAppPhoneNumber::identityCandidates($phoneNumber);
+
+        if ($candidates === []) {
+            return null;
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($candidates), '?'));
+        $parameters = array_merge($candidates, $candidates);
+        $sql = "SELECT {$columns}
+                FROM WhatsAppProspects
+                WHERE WaId IN ({$placeholders})
+                   OR PhoneNumber IN ({$placeholders})
+                LIMIT 1";
+
+        if ($forUpdate) {
+            $sql .= ' FOR UPDATE';
+        }
+
+        return $this->database->fetchOne($sql, $parameters);
+    }
+
     private function newId(): string
     {
         $hex = bin2hex(random_bytes(16));
@@ -530,6 +782,65 @@ final readonly class WhatsAppProspectRepository implements IWhatsAppProspectRepo
             substr($hex, 16, 4),
             substr($hex, 20, 12),
         );
+    }
+
+    /** @return array{status: string, error: ?string} */
+    private function queuePurchaseEvent(string $prospectId, string $eventTime): array
+    {
+        $eventId = hash('sha256', $prospectId . ':Purchase');
+        $eventTimestamp = strtotime($eventTime . ' UTC');
+        $isWithinMetaWindow = $eventTimestamp !== false
+            && $eventTimestamp >= time() - (7 * 24 * 60 * 60);
+        $deliveryStatus = $isWithinMetaWindow ? 'pending' : 'failed';
+        $lastError = $isWithinMetaWindow
+            ? null
+            : 'Meta solo acepta eventos de conversión ocurridos en los últimos 7 días.';
+
+        $this->database->execute(
+            'INSERT INTO WhatsAppConversionEvents (
+                Id,
+                ProspectId,
+                EventId,
+                EventName,
+                EventTime,
+                EventJson,
+                DeliveryStatus,
+                LastError
+            ) VALUES (?, ?, ?, \'Purchase\', ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE EventId = VALUES(EventId)',
+            [
+                $this->newId(),
+                $prospectId,
+                $eventId,
+                $eventTime,
+                json_encode(
+                    [
+                        'event_name' => 'Purchase',
+                        'event_id' => $eventId,
+                        'event_time' => $eventTimestamp,
+                        'action_source' => 'business_messaging',
+                    ],
+                    JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
+                ),
+                $deliveryStatus,
+                $lastError,
+            ],
+        );
+
+        $event = $this->database->fetchOne(
+            'SELECT DeliveryStatus, LastError
+             FROM WhatsAppConversionEvents
+             WHERE EventId = ?
+             LIMIT 1',
+            [$eventId],
+        );
+
+        return [
+            'status' => (string) ($event['DeliveryStatus'] ?? $deliveryStatus),
+            'error' => isset($event['LastError'])
+                ? (string) $event['LastError']
+                : $lastError,
+        ];
     }
 
     private function deliveryStatusRank(string $status): int

@@ -13,6 +13,7 @@ use App\Modules\WhatsApp\Features\DispatchConversions\Command as DispatchConvers
 use App\Modules\WhatsApp\Features\GetProspect\Query as GetProspectQuery;
 use App\Modules\WhatsApp\Features\ListProspects\Query as ListProspectsQuery;
 use App\Modules\WhatsApp\Features\RecordMarketingEvent\Command as RecordMarketingEventCommand;
+use App\Modules\WhatsApp\Features\RegisterManualCustomer\Command as RegisterManualCustomerCommand;
 use App\Modules\WhatsApp\Features\UpdateProspectStatus\Command as UpdateProspectStatusCommand;
 
 final readonly class WhatsAppProspectController
@@ -34,6 +35,15 @@ final readonly class WhatsAppProspectController
         JsonResponse::sendResult(
             $this->mediator->send(
                 new ListProspectsQuery($limit, $offset, Request::query('status')),
+            ),
+        );
+    }
+
+    public function registerManualCustomer(): never
+    {
+        JsonResponse::sendResult(
+            $this->mediator->send(
+                new RegisterManualCustomerCommand(JsonPayload::parse()),
             ),
         );
     }

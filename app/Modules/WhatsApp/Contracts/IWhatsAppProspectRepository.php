@@ -9,6 +9,19 @@ interface IWhatsAppProspectRepository
     /** @param array<string, mixed> $message */
     public function recordMessage(array $message): ?string;
 
+    /**
+     * @param array<string, mixed> $customer
+     * @return array{
+     *     id: string,
+     *     created: bool,
+     *     purchase_event_status: string,
+     *     purchase_event_error: ?string,
+     *     origin: string,
+     *     marketing_consent: bool
+     * }
+     */
+    public function registerManualCustomer(array $customer): array;
+
     /** @param array<string, mixed> $status */
     public function recordMessageStatus(array $status): void;
 
