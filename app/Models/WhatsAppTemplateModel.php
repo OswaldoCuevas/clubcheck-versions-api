@@ -3,7 +3,7 @@
 namespace Models;
 
 require_once __DIR__ . '/../Core/Model.php';
-require_once __DIR__ . '/../enums/WhatsAppEvent.php';
+require_once __DIR__ . '/../Enums/WhatsAppEvent.php';
 
 use App\Enums\WhatsAppEvent;
 use Core\Model;

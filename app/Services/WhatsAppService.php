@@ -6,7 +6,7 @@ require_once __DIR__ . '/../Models/MessageSentModel.php';
 require_once __DIR__ . '/../Models/WhatsAppConfigurationModel.php';
 require_once __DIR__ . '/../Models/WhatsAppTemplateModel.php';
 require_once __DIR__ . '/../Models/CustomerRegistryModel.php';
-require_once __DIR__ . '/../enums/WhatsAppEvent.php';
+require_once __DIR__ . '/../Enums/WhatsAppEvent.php';
 require_once __DIR__ . '/WhatsApp/WhatsAppTemplateStrategyInterface.php';
 require_once __DIR__ . '/WhatsApp/WhatsAppTemplateComponentBuilder.php';
 require_once __DIR__ . '/WhatsApp/DefaultWhatsAppTemplateStrategy.php';

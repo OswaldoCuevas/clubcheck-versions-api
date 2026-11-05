@@ -4,7 +4,7 @@ namespace App\Services;
 
 require_once __DIR__ . '/../Models/EmailCodeModel.php';
 require_once __DIR__ . '/../Models/EmailTypeModel.php';
-require_once __DIR__ . '/../enums/EmailType.php';
+require_once __DIR__ . '/../Enums/EmailType.php';
 
 use Models\EmailCodeModel;
 use Models\EmailTypeModel;
